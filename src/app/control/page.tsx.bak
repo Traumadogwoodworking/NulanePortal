@@ -1,0 +1,246 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { 
+  Activity, 
+  BarChart3, 
+  Mail, 
+  Building2, 
+  Settings2,
+  ArrowRight,
+  Database,
+  AlertTriangle,
+  Flag,
+  Webhook,
+  SlidersHorizontal,
+  Mailbox,
+  LayoutTemplate,
+  History,
+  FileSearch,
+  Eye,
+  ShieldAlert
+} from "lucide-react";
+
+type TabKey = "overview" | "reports" | "email" | "orgs" | "operations";
+
+interface TabDef {
+  id: TabKey;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const TABS: TabDef[] = [
+  { id: "overview", label: "Overview", icon: <Activity className="w-4 h-4" /> },
+  { id: "reports", label: "Reports", icon: <BarChart3 className="w-4 h-4" /> },
+  { id: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
+  { id: "orgs", label: "Organizations", icon: <Building2 className="w-4 h-4" /> },
+  { id: "operations", label: "Operations", icon: <Settings2 className="w-4 h-4" /> },
+];
+
+export default function ControlPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+
+  return (
+    <div className="flex flex-col h-full w-full max-w-7xl mx-auto py-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white">Control Center</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            System administration, global operations, and tenant oversight.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-rose-600 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-400">
+          <ShieldAlert className="w-3.5 h-3.5" />
+          Restricted Zone
+        </div>
+      </div>
+
+      <div className="mb-8 border-b border-slate-200 dark:border-slate-800">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                group inline-flex items-center gap-2 border-b-2 py-4 px-1 text-sm font-bold uppercase tracking-wider transition-colors
+                ${activeTab === tab.id 
+                  ? "border-[#064e3b] text-[#064e3b] dark:border-cyan-400 dark:text-cyan-400" 
+                  : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-300"}
+              `}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      <div className="flex-1 w-full animate-in fade-in duration-300">
+        {activeTab === "overview" && <OverviewTab />}
+        {activeTab === "reports" && <ReportsTab />}
+        {activeTab === "email" && <EmailTab />}
+        {activeTab === "orgs" && <OrganizationsTab />}
+        {activeTab === "operations" && <OperationsTab />}
+      </div>
+    </div>
+  );
+}
+
+function OverviewTab() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-start justify-between">
+          <div className="max-w-2xl">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">System Health & Live Telemetry</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              The control command center provides immediate oversight over active tenant loads, real-time error trajectories, and system constraints. This surface summarizes node statuses globally.
+            </p>
+          </div>
+          <Activity className="w-10 h-10 text-slate-200 dark:text-slate-700" />
+        </div>
+        <div className="mt-8 flex gap-4">
+          <Link
+            href="/control/overview"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border dark:border-cyan-500/30 dark:hover:bg-cyan-500/20"
+          >
+            <Eye className="w-4 h-4" />
+            Launch Deep Overview
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportsTab() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <ActionCard 
+        href="/control/audit"
+        icon={<History className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />}
+        title="System Audit Logs"
+        description="Inspect global system event streams, security access records, and platform-wide action trails."
+      />
+      <ActionCard 
+        href="/control/report-ops"
+        icon={<FileSearch className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />}
+        title="Report Operations"
+        description="Execute bulk re-indexing, manual cache busting, and system-wide report aggregations."
+      />
+    </div>
+  );
+}
+
+function EmailTab() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <ActionCard 
+        href="/control/outbox"
+        icon={<Mailbox className="w-5 h-5 text-blue-500 dark:text-blue-400" />}
+        title="SMTP Outbox & Diagnostics"
+        description="Monitor active dispatches, troubleshoot send failures, and initiate manual retry protocols for stalled mail items."
+      />
+      <ActionCard 
+        href="/control/templates"
+        icon={<LayoutTemplate className="w-5 h-5 text-rose-500 dark:text-rose-400" />}
+        title="Email Templates & Defaults"
+        description="Manage underlying HTML templates alongside recipient fallbacks and global CC/BCC structural defaults."
+      />
+    </div>
+  );
+}
+
+function OrganizationsTab() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-start justify-between">
+          <div className="max-w-2xl">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Tenant Provisioning & Global Management</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              Cross-organization administrative visibility for super-operators. Monitor tenant health metrics, adjust global module toggles, and enforce system-wide licensing limits without duplicating specific workspace functionalities.
+            </p>
+          </div>
+          <Building2 className="w-10 h-10 text-slate-200 dark:text-slate-700" />
+        </div>
+        <div className="mt-8 border-t border-slate-100 pt-6 dark:border-slate-800">
+          <Link
+            href="/control/orgs"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
+          >
+            Access Organization Master Catalog
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OperationsTab() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <ActionCard 
+        href="/control/operations"
+        icon={<Settings2 className="w-5 h-5 text-slate-600 dark:text-slate-400" />}
+        title="Manual Job Runner"
+        description="Trigger ad-hoc backend processes, clear global data caches, or force manual service synchronizations."
+      />
+      <ActionCard 
+        href="/control/backup"
+        icon={<Database className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />}
+        title="System Backups"
+        description="Review cold-storage database backup snapshots and initiate manual state archives safely."
+      />
+      <ActionCard 
+        href="/control/exceptions"
+        icon={<AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400" />}
+        title="Exception Monitors"
+        description="Triage unhandled systematic errors, panic logs, and job fault queues requiring operator intervention."
+      />
+      <ActionCard 
+        href="/control/flags"
+        icon={<Flag className="w-5 h-5 text-orange-500 dark:text-orange-400" />}
+        title="Global Feature Flags"
+        description="High-level flighting toggles, phased rollouts, and beta feature visibility switches."
+      />
+      <ActionCard 
+        href="/control/integrations"
+        icon={<Webhook className="w-5 h-5 text-fuchsia-500 dark:text-fuchsia-400" />}
+        title="Integrations & Webhooks"
+        description="Configure cross-system hooks, external API gateways, and standardized event forwarding pipelines."
+      />
+      <ActionCard 
+        href="/control/settings"
+        icon={<SlidersHorizontal className="w-5 h-5 text-slate-500 dark:text-slate-400" />}
+        title="Global Parameters"
+        description="Manage overarching system configurations, global timeout thresholds, and strict environment settings."
+      />
+    </div>
+  );
+}
+
+function ActionCard({ href, icon, title, description }: { href: string, icon: React.ReactNode, title: string, description: string }) {
+  return (
+    <Link 
+      href={href}
+      className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-[#064e3b] hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-cyan-500/50 dark:hover:bg-slate-900"
+    >
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 dark:bg-slate-800">
+            {icon}
+          </div>
+          <ArrowRight className="w-4 h-4 text-slate-300 opacity-0 transition group-hover:-translate-x-1 group-hover:opacity-100 group-hover:text-[#064e3b] dark:group-hover:text-cyan-400" />
+        </div>
+        <h4 className="text-base font-bold text-slate-900 dark:text-white">{title}</h4>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>
+      </div>
+      <div className="mt-6 flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-[#064e3b] dark:text-cyan-400">
+        Manage Surface
+      </div>
+    </Link>
+  );
+}

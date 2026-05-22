@@ -1,0 +1,91 @@
+"use client";
+
+import { PageTitle } from "@/components/ui/PageTitle";
+import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { usePortalSession } from "@/lib/portalSession";
+import { portalConfig } from "@/lib/config";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { isModuleEnabled, ModuleToggleKey } from "@/lib/modules";
+
+const modules: ModuleToggleKey[] = ["docudent", "reports"];
+
+export default function SettingsPage() {
+  const { session, organizationId, user, isAdmin, isOrgAdmin, isSuperAdmin } = usePortalSession();
+
+  const roleDescription = isSuperAdmin
+    ? "Full access to all organizations and system settings."
+    : isOrgAdmin
+    ? "Organization-level access to manage users and facilities."
+    : isAdmin
+    ? "Administrative access for your assigned scope."
+    : "Standard user access.";
+
+  const environmentTone = portalConfig.environment === "production" ? "positive" : "warning";
+
+  return (
+    <div className="space-y-6">
+      <PageTitle
+        title="Settings"
+        subtitle="Manage your workspace and session preferences."
+      />
+
+      <Card>
+        <CardHeader title="Session Summary" />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="font-semibold text-slate-600">User</div>
+            <div className="text-right font-medium text-slate-800">{user?.email}</div>
+            <div className="font-semibold text-slate-600">Role</div>
+            <div className="text-right"><StatusBadge label={user?.role || "N/A"} /></div>
+            <div className="col-span-2 mt-2 p-3 rounded-lg bg-slate-50 border border-slate-200/75">
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">{roleDescription}</p>
+            </div>
+            <div className="font-semibold text-slate-600">Organization</div>
+            <div className="text-right font-medium text-slate-800">{session?.organization?.name}</div>
+            <div className="font-semibold text-slate-600">Organization ID</div>
+            <div className="text-right font-mono text-xs text-slate-600">{organizationId}</div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Workspace" />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="font-semibold text-slate-600">Theme</div>
+            <div className="text-right text-slate-600">Light mode locked for this portal version</div>
+            <div className="font-semibold text-slate-600">Branding</div>
+            <div className="text-right"><StatusBadge label={session?.branding_snapshot ? "Configured" : "Not Configured"} tone={session?.branding_snapshot ? "positive" : "neutral"} /></div>
+            <div className="font-semibold text-slate-600">Dashboard</div>
+            <div className="text-right"><StatusBadge label={session?.branding_snapshot?.powerBiEmbedUrl ? "Configured" : "Not Configured"} tone={session?.branding_snapshot?.powerBiEmbedUrl ? "positive" : "neutral"} /></div>
+            <div className="font-semibold text-slate-600">Support Form</div>
+            <div className="text-right"><StatusBadge label={portalConfig.supportFormUrl ? "Configured" : "Not Configured"} tone={portalConfig.supportFormUrl ? "positive" : "neutral"} /></div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Enabled Modules" />
+        <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {modules.map((module) => (
+                <StatusBadge key={module} label={module} tone={isModuleEnabled(module) ? "positive" : "neutral"} />
+              ))}
+            </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Environment" />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="font-semibold text-slate-600">Environment</div>
+            <div className="text-right"><StatusBadge label={portalConfig.environment} tone={environmentTone} /></div>
+            <div className="font-semibold text-slate-600">API Base URL</div>
+            <div className="text-right font-mono text-xs text-slate-600">{portalConfig.apiBase}</div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

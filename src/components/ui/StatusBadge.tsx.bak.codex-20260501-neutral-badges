@@ -1,0 +1,19 @@
+interface StatusBadgeProps {
+  label: string;
+  tone?: "positive" | "warning" | "danger" | "neutral";
+}
+
+const toneClasses: Record<NonNullable<StatusBadgeProps["tone"]>, string> = {
+  positive: "bg-[color:var(--metric-positive-bg)] text-[color:var(--metric-positive-fg)] border border-[color:var(--metric-positive-border)]",
+  warning: "bg-[color:var(--metric-warning-bg)] text-[color:var(--metric-warning-fg)] border border-[color:var(--metric-warning-border)]",
+  danger: "bg-[color:var(--metric-danger-bg)] text-[color:var(--metric-danger-fg)] border border-[color:var(--metric-danger-border)]",
+  neutral: "bg-[color:var(--metric-neutral-bg)] text-[color:var(--metric-neutral-fg)] border border-[color:var(--metric-neutral-border)]",
+};
+
+export function StatusBadge({ label, tone = "neutral" }: StatusBadgeProps) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneClasses[tone]}`}>
+      {label}
+    </span>
+  );
+}

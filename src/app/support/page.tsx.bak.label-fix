@@ -1,0 +1,243 @@
+"use client";
+
+import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { PageTitle } from "@/components/ui/PageTitle";
+import { usePortalSession } from "@/lib/portalSession";
+import { FileText, Paperclip, Clock3, UserCircle2, Building2 } from "lucide-react";
+
+const MAX_FILES = 2;
+const ACCEPTED_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+]);
+
+function formatDateTime(value: string) {
+  try {
+    return new Date(value).toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const size = bytes / 1024 ** index;
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[index]}`;
+}
+
+export default function SupportPage() {
+  const { session, user } = usePortalSession();
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const organizationName = session?.organization?.name || "Portal organization";
+  const organizationId = session?.organization?.organization_id || "";
+  const userEmail = user?.email || session?.user?.email || "";
+  const userName = user?.display_name || [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "";
+  const submittedAt = useMemo(() => new Date().toISOString(), []);
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files ?? []);
+    const accepted = selected.filter((file) => ACCEPTED_TYPES.has(file.type));
+    const combined = [...files, ...accepted].slice(0, MAX_FILES);
+    setFiles(combined);
+    setStatusMessage(
+      selected.length && accepted.length !== selected.length
+        ? "Some files were skipped. Use images or Word documents only."
+        : null
+    );
+    event.target.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setStatusMessage("Backend action pending");
+  };
+
+  const payloadPreview = {
+    submitted_at: submittedAt,
+    organization_id: organizationId || "<organization_id>",
+    organization_name: organizationName,
+    user: {
+      name: userName || "<user_name>",
+      email: userEmail || "<user_email>",
+      role: user?.role || "<role>",
+    },
+    ticket: {
+      subject: subject || "<subject>",
+      message: message || "<message>",
+      attachments: files.map((file) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      })),
+    },
+  };
+
+  return (
+    <div className="space-y-6 pb-10">
+      <PageTitle title="Support" subtitle="Open a ticket with a short description and optional attachments." />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+        <Card>
+          <CardHeader
+            title="New Ticket"
+            subtitle="The date and time are captured automatically. Include the issue details and up to two files."
+          />
+          <CardContent>
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 md:col-span-2">
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Subject</span>
+                  <input
+                    value={subject}
+                    onChange={(event) => setSubject(event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    placeholder="Brief summary of the issue"
+                  />
+                </label>
+                <label className="space-y-2 md:col-span-2">
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Message</span>
+                  <textarea
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    rows={7}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    placeholder="Describe what happened, where it happened, and what you expected to happen."
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4 text-slate-500" />
+                  <p className="text-sm font-semibold text-slate-900">Attachments</p>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    max 2
+                  </span>
+                </div>
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center transition hover:border-brand">
+                  <FileText className="h-8 w-8 text-slate-400" />
+                  <p className="text-sm font-semibold text-slate-900">Drag files here or click to browse</p>
+                  <p className="text-xs text-slate-500">Images or Word documents only.</p>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,.doc,.docx,.rtf"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+                {files.length > 0 ? (
+                  <div className="space-y-2">
+                    {files.map((file, index) => (
+                      <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{file.name}</p>
+                          <p className="text-xs text-slate-500">{file.type || "unknown type"} · {formatBytes(file.size)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(index)}
+                          className="rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No files attached yet.</p>
+                )}
+              </div>
+
+              {statusMessage ? (
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                  {statusMessage}
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                className="rounded-2xl bg-brand px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-accent"
+              >
+                Submit Ticket
+              </button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title="Ticket Context" subtitle="Captured automatically with the request." />
+            <CardContent>
+              <div className="space-y-3 text-sm text-slate-700">
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <UserCircle2 className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">User</p>
+                    <p className="font-semibold text-slate-900">{userName || "Not set"}</p>
+                    <p className="text-xs text-slate-500">{userEmail || "No email available"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <Building2 className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Organization</p>
+                    <p className="font-semibold text-slate-900">{organizationName}</p>
+                    <p className="text-xs text-slate-500">{organizationId || "Organization ID not available"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <Clock3 className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Submitted at</p>
+                    <p className="font-semibold text-slate-900">{formatDateTime(submittedAt)}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader title="Expected Backend Shape" subtitle="Use this payload shape when you wire the ticket endpoint." />
+            <CardContent>
+              <pre className="overflow-auto rounded-2xl border border-slate-200 bg-slate-950 p-4 text-[11px] leading-5 text-slate-100">
+                {JSON.stringify(payloadPreview, null, 2)}
+              </pre>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader title="Support Notes" />
+            <CardContent>
+              <p className="text-sm text-slate-600">
+                This form is prepared for the backend ticket route, but submit handling is still pending.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,147 @@
+export interface ControlRouteDefinition {
+  href: string;
+  label: string;
+  description: string;
+  live?: boolean;
+  hideFromNav?: boolean;
+  requiresSuperAdmin?: boolean;
+}
+
+export const controlRoutes: ControlRouteDefinition[] = [
+  {
+    href: "/control",
+    label: "Control",
+    description: "Command center",
+    live: true,
+    hideFromNav: false,
+    // System control is global-only.
+    // Org admins keep tenant-scoped admin pages outside this hub.
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/overview",
+    label: "Overview",
+    description: "Health and attention",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/reports",
+    label: "Reports",
+    description: "Submission command center",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/flags",
+    label: "Flags",
+    description: "Quarantined submissions",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/entities",
+    label: "Entities",
+    description: "Search and drill-in",
+    live: true,
+    hideFromNav: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/vehicles",
+    label: "Vehicles",
+    description: "Timeline and yard state",
+    live: true,
+    hideFromNav: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/exceptions",
+    label: "Exceptions",
+    description: "Derived anomaly queue",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/email",
+    label: "Email",
+    description: "Outbox and routing",
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/report-ops",
+    label: "Report Ops",
+    description: "Report isolation and delivery",
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/templates",
+    label: "Templates",
+    description: "Template catalog and usage",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/integrations",
+    label: "Integrations",
+    description: "Trust boundaries and status",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/map",
+    label: "Map",
+    description: "Facility and yard context",
+    live: true,
+    hideFromNav: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/users",
+    label: "Users",
+    description: "Roles and memberships",
+    live: true,
+    hideFromNav: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/audit",
+    label: "Audit",
+    description: "Operator traceability",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/organizations",
+    label: "Organizations",
+    description: "Manage global organizations",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/backup",
+    label: "Backup Health",
+    description: "Config and state persistence",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+  {
+    href: "/control/settings",
+    label: "Settings",
+    description: "Layout and safe prefs",
+    live: true,
+    requiresSuperAdmin: true,
+  },
+];
+
+export function isControlRoute(pathname: string): boolean {
+  return pathname === "/control" || pathname.startsWith("/control/");
+}
+
+export function getControlRouteByPath(pathname: string): ControlRouteDefinition {
+  const route = controlRoutes
+    .slice()
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  return route ?? controlRoutes[0];
+}

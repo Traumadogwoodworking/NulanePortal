@@ -1,0 +1,256 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { fetchPortalSession } from "@/lib/services/sessionService";
+import type {
+  PortalOrganization,
+  PortalSessionLocation,
+  PortalSessionResponse,
+  PortalUserRecord,
+} from "@/lib/types";
+import type { PermissionKey } from "@/lib/access";
+import { portalConfig } from "@/lib/config";
+import {
+  AuthConfigError,
+  AuthRedirectError,
+  clearPortalAuthStorage,
+  logoutPortal,
+  persistPortalUser,
+  redirectToAuth0Login,
+} from "@/lib/portalAuth";
+
+type PortalSessionStatus =
+  | "loading"
+  | "success"
+  | "unauthenticated"
+  | "transient-error"
+  | "forbidden"
+  | "fatal";
+
+type SessionFetchError = Error & { status?: number };
+
+function isSessionFetchError(value: unknown): value is SessionFetchError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "status" in value &&
+    typeof (value as SessionFetchError).status === "number"
+  );
+}
+
+function normalizeHostname(hostname: string) {
+  return hostname.split(":")[0].toLowerCase();
+}
+
+function isLocalhostHost(value: string) {
+  const normalized = normalizeHostname(value);
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0"
+  );
+}
+
+const LOCAL_DEV_ERROR =
+  "Local portal builds must override NEXT_PUBLIC_API_BASE_URL (for example http://localhost:4000/api) before reaching the production API.";
+
+const PortalSessionContext = createContext<PortalSessionContextValue | undefined>(undefined);
+
+interface PortalSessionContextValue {
+  status: PortalSessionStatus;
+  session: PortalSessionResponse | null;
+  user: PortalUserRecord | null;
+  error: Error | null;
+  refetch: () => void;
+  logout: () => Promise<void>;
+  hasPermission: (key: PermissionKey) => boolean;
+  isAdmin: boolean;
+  isOrgAdmin: boolean;
+  organizationId: string | null;
+  isPortalAccessAllowed: boolean;
+  portalAccess: boolean;
+  planTier: string | null;
+  requiresAds: boolean;
+  locations: PortalSessionLocation[];
+  selectedLocation: PortalSessionLocation | null;
+  selectedLocationId: string | null;
+  selectedLocationLabel: string | null;
+  locationLocked: boolean;
+}
+
+export function PortalSessionProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<PortalSessionStatus>("loading");
+  const [session, setSession] = useState<PortalSessionResponse | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  const loadSession = useCallback(async () => {
+    // Only run initialization and environment checks on the client to avoid hydration mismatch
+    if (typeof window === "undefined") return;
+
+    if (
+      portalConfig.environment !== "production" &&
+      portalConfig.usesDefaultApiBase &&
+      isLocalhostHost(window.location.hostname)
+    ) {
+      setError(new Error(LOCAL_DEV_ERROR));
+      setStatus("fatal");
+      return;
+    }
+
+    setStatus("loading");
+    setError(null);
+    setSession(null);
+    // ... rest of existing logic unchanged
+
+    // Guest Mode / Dev Bypass for rapid demonstration
+    if (process.env.NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS === "1") {
+      console.warn("🔐 PORTAL: Guest Mode Active (Bypassing Auth0)");
+      const mockSession: PortalSessionResponse = {
+        user: {
+          id: "guest-user",
+          email: "guest@nulanesystems.com",
+          name: "Guest Operator",
+          display_name: "Guest Operator",
+          role: "admin",
+          permissions: ["*"],
+          isActive: true,
+          lastUpdated: new Date().toISOString(),
+          facilityIds: ["fac-001", "fac-002"],
+          organization_id: "org-guest"
+        } as unknown as PortalUserRecord,
+        organization: {
+          organization_id: "org-guest",
+          name: "Nulane Systems Demo",
+          slug: "nulane-demo"
+        } as unknown as PortalOrganization,
+        portal_access: true,
+        plan_tier: "enterprise",
+        requires_ads: false,
+        locations: [
+           { location_id: "fac-001", location_name: "Western Hub", location_label: "A-Peak", region: "West" } as unknown as PortalSessionLocation,
+           { location_id: "fac-002", location_name: "Eastern Yard", location_label: "B-Zone", region: "East" } as unknown as PortalSessionLocation
+        ],
+        selected_location: { location_id: "fac-001", location_label: "A-Peak" } as unknown as PortalSessionLocation,
+        is_admin: true
+      };
+      setSession(mockSession);
+      setStatus("success");
+      return;
+    }
+
+    try {
+      const payload = await fetchPortalSession();
+      persistPortalUser(payload.user);
+      setSession(payload);
+      setStatus("success");
+    } catch (err: unknown) {
+      if (err instanceof AuthRedirectError) {
+        setStatus("unauthenticated");
+        return;
+      }
+      if (err instanceof AuthConfigError) {
+        setError(err);
+        setStatus("fatal");
+        return;
+      }
+      const statusCode = isSessionFetchError(err) ? err.status : undefined;
+      if (statusCode === 403) {
+        const forbiddenError =
+          err instanceof Error
+            ? err
+            : new Error("Your account is not authorized for this portal.");
+        setError(forbiddenError);
+        setStatus("forbidden");
+        return;
+      }
+      if (statusCode === 401) {
+        clearPortalAuthStorage();
+        await redirectToAuth0Login();
+        return;
+      }
+      const normalizedError =
+        err instanceof Error ? err : new Error("Unable to load your session.");
+      setError(normalizedError);
+      setStatus("transient-error");
+    }
+  }, []);
+
+  useEffect(() => {
+    // Avoid synchronous setState during mount to prevent cascading renders
+    const t = setTimeout(() => {
+      void loadSession();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [loadSession]);
+
+
+  const value = useMemo(() => {
+    const userRole = session?.user?.role?.toString().trim().toLowerCase();
+    const isAdmin = session?.is_admin === true || userRole === "admin";
+    const isOrgAdmin = isAdmin || userRole === "org_admin";
+    const permissions: string[] = Array.isArray(session?.user?.permissions)
+      ? session.user.permissions.map((permission) => permission.toString())
+      : [];
+    const organizationId =
+      session?.organization?.organization_id ||
+      session?.user?.organization_id ||
+      null;
+    const sessionLocations = Array.isArray(session?.locations) ? session.locations : [];
+    const selectedLocation = session?.selected_location ?? null;
+    const selectedLocationId = selectedLocation?.location_id
+      ? selectedLocation.location_id.toString()
+      : null;
+    const selectedLocationLabel =
+      selectedLocation?.location_label ||
+      selectedLocation?.display_name ||
+      selectedLocation?.location_name ||
+      null;
+    const locationLocked = Boolean(session?.location_locked);
+    const planTier = session?.plan_tier ?? null;
+    const requiresAds = Boolean(session?.requires_ads);
+    const portalAccess = session?.portal_access ?? true;
+    const hasPermission = (key: PermissionKey) => {
+      if (isAdmin) {
+        return true;
+      }
+      return permissions.includes(key);
+    };
+    return {
+      status,
+      session,
+      user: session?.user ?? null,
+      error,
+      refetch: loadSession,
+      logout: logoutPortal,
+      hasPermission,
+      isAdmin,
+      isOrgAdmin,
+      organizationId,
+      isPortalAccessAllowed: portalAccess,
+      portalAccess,
+      planTier,
+      requiresAds,
+      locations: sessionLocations,
+      selectedLocation,
+      selectedLocationId,
+      selectedLocationLabel,
+      locationLocked,
+    };
+  }, [status, session, error, loadSession]);
+
+  return (
+    <PortalSessionContext.Provider value={value}>
+      {children}
+    </PortalSessionContext.Provider>
+  );
+}
+
+export function usePortalSession() {
+  const context = useContext(PortalSessionContext);
+  if (!context) {
+    throw new Error("usePortalSession must be used within a PortalSessionProvider");
+  }
+  return context;
+}

@@ -1,0 +1,43 @@
+import { ReactNode } from "react";
+
+interface ControlMetricTileProps {
+  label: string;
+  value: string | number;
+  detail?: string;
+  tone?: "neutral" | "positive" | "warning" | "danger";
+  icon?: ReactNode;
+}
+
+const toneStyles: Record<NonNullable<ControlMetricTileProps["tone"]>, string> = {
+  neutral: "border-[color:var(--metric-neutral-border)] bg-[color:var(--metric-neutral-bg)] text-[color:var(--metric-neutral-fg)]",
+  positive: "border-[color:var(--metric-positive-border)] bg-[color:var(--metric-positive-bg)] text-[color:var(--metric-positive-fg)]",
+  warning: "border-[color:var(--metric-warning-border)] bg-[color:var(--metric-warning-bg)] text-[color:var(--metric-warning-fg)]",
+  danger: "border-[color:var(--metric-danger-border)] bg-[color:var(--metric-danger-bg)] text-[color:var(--metric-danger-fg)]",
+};
+
+export function ControlMetricTile({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+  icon,
+}: ControlMetricTileProps) {
+  return (
+    <article className={`flex h-full min-h-[7.25rem] flex-col rounded-[1.35rem] border p-4 shadow-[0_18px_45px_rgba(0,0,0,0.12)] ${toneStyles[tone]}`}>
+      <div className="flex items-center gap-2">
+        {icon && <span className="opacity-80">{icon}</span>}
+        <p className="text-[10px] font-semibold uppercase tracking-[0.36em] opacity-100">
+          {label}
+        </p>
+      </div>
+      <div className="mt-3 flex flex-1 flex-col justify-between gap-3">
+        <p className="text-3xl font-semibold tracking-tight leading-none">{value}</p>
+        {detail ? (
+          <p className="self-end text-right text-xs leading-5 opacity-95">
+            {detail}
+          </p>
+        ) : null}
+      </div>
+    </article>
+  );
+}

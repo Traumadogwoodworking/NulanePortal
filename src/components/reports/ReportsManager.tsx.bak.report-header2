@@ -1,0 +1,872 @@
+"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @next/next/no-img-element */
+
+import Image from "next/image";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { PageTitle } from "@/components/ui/PageTitle";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { EmptySelectionPanel } from "@/components/ui/EmptySelectionPanel";
+import { FacilitySelector } from "@/components/ui/FacilitySelector";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { DamageMapCard } from "@/components/reports/DamageMapCard";
+import { ReportActions } from "@/components/reports/ReportActions";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { buildReportGallery } from "@/lib/reportGallery";
+import { normalizeMediaUrl } from "@/lib/config";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import { AuthRedirectError } from "@/lib/portalAuth";
+import { saveAs } from "file-saver";
+import { 
+  ChevronRight, 
+  Download, 
+  FileEdit, 
+  FileSpreadsheet, 
+  FileText, 
+  Image as ImageIcon, 
+  Info, 
+  AlertTriangle,
+  CheckCircle2,
+  Maximize2,
+  Calendar,
+  User,
+  MapPin,
+  RefreshCw,
+  Search,
+  FilterX,
+} from "lucide-react";
+import {
+  getUserColor,
+  resolveDamageReportLocationName,
+  resolveRsaFacilityLabel,
+  slugForFacilityLabel,
+} from "@/lib/reportUtils";
+import { severityLabel, severityTone } from "@/lib/severityUtils";
+import { getPortalBranding } from "@/lib/branding";
+import { usePortalSession } from "@/lib/portalSession";
+import {
+  DAMAGE_AREAS,
+  DAMAGE_SEVERITIES,
+  getDamageTypeOptionsForArea,
+  type DamageAreaOption,
+  type DamageTypeOption,
+} from "@/lib/docudent/damageTaxonomy";
+import { toneForReportStatus } from "@/lib/status";
+import type {
+  FacilitySummary,
+  ReportDamageApiRow,
+  ReportFilterKey,
+  ReportFilters,
+  ReportStatus,
+  RsaReportApiRow,
+  ReportSummary,
+} from "@/lib/types";
+
+// ... (constants and UserLegend remain the same)
+
+interface ReportsManagerProps {
+  mode: string;
+}
+
+function getDamageReportGalleryUrls(report: ReportDamageApiRow | null): string[] {
+  return report ? buildReportGallery(report).galleryUrls.filter(Boolean) : [];
+}
+
+function getDamageReportPhotoUrls(report: ReportDamageApiRow | null): string[] {
+  return report ? buildReportGallery(report).photoUrls.filter(Boolean) : [];
+}
+
+type DamageReportEditEntryDraft = {
+  entryId: string;
+  damageSequence: number;
+  damageAreaCode: string;
+  damageTypeCode: string;
+  severityLevel: string;
+  comments: string;
+};
+
+type DamageReportEditDraft = {
+  reportId: string;
+  facilityLabel: string;
+  vin: string;
+  makeModelYear: string;
+  comments: string;
+  bayLocation: string;
+  navigation: string;
+  entries: DamageReportEditEntryDraft[];
+};
+
+function normalizeEntryText(value: unknown): string {
+  return value === null || value === undefined ? "" : String(value).trim();
+}
+
+function toEditSeverityValue(value: unknown): string {
+  const normalized = normalizeEntryText(value);
+  return normalized || "1";
+}
+
+function buildDamageReportEditDraft(report: ReportDamageApiRow | null): DamageReportEditDraft | null {
+  if (!report) {
+    return null;
+  }
+  const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+  const overview = report.overview || {};
+  const overviewRecord = overview as unknown as Record<string, unknown>;
+  return {
+    reportId: report.report_id || report.report_id?.trim() || "",
+    facilityLabel: resolveDamageReportLocationName(report) || "Unknown Facility",
+    vin: report.vin || "",
+    makeModelYear: `${report.make || ""} ${report.model || ""} ${report.year ? `(${report.year})` : ""}`.trim(),
+    comments: normalizeEntryText(overview.comments || report.comments || report.overview?.comments || ""),
+    bayLocation: normalizeEntryText(overviewRecord.bay_location || overviewRecord.bayLocation || ""),
+    navigation: normalizeEntryText(
+      overview.navigation ||
+        overview.navigation_text ||
+        overview.navigationText ||
+        overview.navigationInstructions ||
+        ""
+    ),
+    entries: entries.map((entry, index) => {
+      const entryRecord = entry as unknown as Record<string, unknown>;
+      return {
+        entryId: normalizeEntryText(
+          entryRecord.damage_entry_id || entryRecord.entry_id || entryRecord.id || `entry-${index + 1}`
+        ),
+        damageSequence: Number.isFinite(Number(entryRecord.damage_sequence)) ? Number(entryRecord.damage_sequence) : index + 1,
+        damageAreaCode: normalizeEntryText(entryRecord.damage_area_code || entryRecord.area_code || entryRecord.damage_area || ""),
+        damageTypeCode: normalizeEntryText(entryRecord.damage_type_code || entryRecord.type_code || entryRecord.damage_type || ""),
+        severityLevel: toEditSeverityValue(entryRecord.severity ?? entryRecord.severity_level ?? entryRecord.severityLevel),
+        comments: normalizeEntryText(entryRecord.comments || entryRecord.notes || ""),
+      };
+    }),
+  };
+}
+
+function getDamageTypesForArea(areaCode: string): DamageTypeOption[] {
+  return areaCode ? getDamageTypeOptionsForArea(areaCode) : [];
+}
+
+function findDamageAreaByCode(code: string): DamageAreaOption | null {
+  return DAMAGE_AREAS.find((area) => area.code === code) ?? null;
+}
+
+function resolveBackendDamageSeverity(report: ReportDamageApiRow): string | null {
+  const reportRecord = report as unknown as Record<string, unknown>;
+  const candidates = [
+    reportRecord.severity,
+    report.overview && typeof report.overview === "object"
+      ? (report.overview as Record<string, unknown>).severity
+      : null,
+    report.metadata && typeof report.metadata === "object"
+      ? (report.metadata as Record<string, unknown>).severity
+      : null,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+  return null;
+}
+
+export function ReportsManager({ mode }: ReportsManagerProps) {
+  const { organizationId, status: sessionStatus, isPortalAccessAllowed } = usePortalSession();
+  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
+  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
+  const [statusFilter, setStatusFilter] = useState<ReportStatus | "">("");
+  const [facilityFilter, setFacilityFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [vinFilter, setVinFilter] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [selectedDamageReportId, setSelectedDamageReportId] = useState<string | null>(null);
+  const [isDamageEditOpen, setIsDamageEditOpen] = useState(false);
+  const [damageEditDraft, setDamageEditDraft] = useState<DamageReportEditDraft | null>(null);
+  const [damageEditStatus, setDamageEditStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isMounted = useRef(true);
+  const fetchReports = useCallback(async () => {
+    if (!organizationId) {
+      setError("No organization selected. Please select an organization to view reports.");
+      setDamageReports([]);
+      return;
+    }
+    if (sessionStatus !== "success") {
+      setError("Authentication required to fetch reports.");
+      setDamageReports([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      if (mode === "damage") {
+        const response = await ReportsAdapter.fetchDamageReports({ organization_id: organizationId });
+        if (isMounted.current) {
+          setDamageReports(response);
+        }
+      }
+      // Add other modes if needed
+    } catch (err: any) {
+      console.error("Failed to fetch reports:", err);
+      if (isMounted.current) {
+        setError(err?.message || "Failed to load reports.");
+        setDamageReports([]);
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+      }
+    }
+  }, [organizationId, sessionStatus, mode]);
+
+  useEffect(() => {
+    isMounted.current = true;
+    void fetchReports();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [fetchReports]);
+
+  const damageSummaries = useMemo<ReportSummary[]>(() => {
+    return damageReports.map((report) => {
+      const locationName = resolveDamageReportLocationName(report);
+      const severity = resolveBackendDamageSeverity(report);
+      const normalizedStatus = (report.status as ReportStatus) || "open";
+      return {
+        id: report.report_id,
+        type: "damage",
+        status: normalizedStatus,
+        title: `${report.make || ""} ${report.model || ""}`.trim() || report.report_id,
+        vin: report.vin || "",
+        make: report.make,
+        model: report.model,
+        year: report.year,
+        inspectorEmail: report.inspector_email,
+        locationName,
+        facilityName: locationName,
+        createdAt: report.created_at,
+        updatedAt: report.updated_at,
+        severity: severity ?? "n/a",
+      };
+    });
+  }, [damageReports]);
+
+  const filteredDamageSummaries = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return damageSummaries.filter((summary) => {
+      if (facilityFilter !== "all") {
+        const slug = slugForFacilityLabel(summary.locationName || summary.facilityName || "Unknown facility");
+        if (slug !== facilityFilter) return false;
+      }
+      if (statusFilter && summary.status !== statusFilter) return false;
+      if (vinFilter.trim()) {
+        if (!summary.vin?.toLowerCase().includes(vinFilter.trim().toLowerCase())) {
+          return false;
+        }
+      }
+      if (createdFrom && summary.createdAt) {
+        const createdAt = new Date(summary.createdAt);
+        const fromDate = new Date(createdFrom);
+        if (createdAt < fromDate) return false;
+      }
+      if (createdTo && summary.createdAt) {
+        const createdAt = new Date(summary.createdAt);
+        const toDate = new Date(createdTo);
+        toDate.setHours(23, 59, 59, 999);
+        if (createdAt > toDate) return false;
+      }
+      if (query) {
+        const haystack = [summary.id, summary.vin, summary.make, summary.model, summary.inspectorEmail].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [damageSummaries, facilityFilter, searchTerm, statusFilter, vinFilter, createdFrom, createdTo]);
+
+  const selectedDamageFullRow = useMemo(() => damageReports.find(r => r.report_id === selectedDamageReportId) ?? null, [damageReports, selectedDamageReportId]);
+  const selectedDamageGallery = useMemo(() => getDamageReportGalleryUrls(selectedDamageFullRow), [selectedDamageFullRow]);
+  const selectedDamagePhotos = useMemo(() => getDamageReportPhotoUrls(selectedDamageFullRow), [selectedDamageFullRow]);
+  const selectedDamagePdfUrl = useMemo(
+    () => (selectedDamageFullRow ? ReportsAdapter.resolveDamageReportPdfUrl(selectedDamageFullRow) : null),
+    [selectedDamageFullRow]
+  );
+  const selectedDamageEntries = useMemo(
+    () => (selectedDamageFullRow && Array.isArray(selectedDamageFullRow.damage_entries) ? selectedDamageFullRow.damage_entries : []),
+    [selectedDamageFullRow]
+  );
+  const selectedDamageReportComment = useMemo(() => {
+    if (!selectedDamageFullRow) {
+      return "";
+    }
+    const overviewComment = selectedDamageFullRow.overview?.comments?.trim();
+    const reportComment = selectedDamageFullRow.comments?.trim();
+    return overviewComment || reportComment || "";
+  }, [selectedDamageFullRow]);
+
+  useEffect(() => {
+    if (!isDamageEditOpen || !selectedDamageFullRow) {
+      return;
+    }
+    setDamageEditDraft(buildDamageReportEditDraft(selectedDamageFullRow));
+    setDamageEditStatus("Edit the report details and save changes when ready.");
+  }, [isDamageEditOpen, selectedDamageFullRow]);
+
+  const openDamageReportEditor = useCallback(() => {
+    if (!selectedDamageFullRow) {
+      return;
+    }
+    setDamageEditDraft(buildDamageReportEditDraft(selectedDamageFullRow));
+    setDamageEditStatus(null);
+    setIsDamageEditOpen(true);
+  }, [selectedDamageFullRow]);
+
+  const closeDamageReportEditor = useCallback(() => {
+    setIsDamageEditOpen(false);
+    setDamageEditDraft(null);
+    setDamageEditStatus(null);
+  }, []);
+
+  const updateDamageEditEntry = useCallback(
+    (entryId: string, patch: Partial<DamageReportEditEntryDraft>) => {
+      setDamageEditDraft((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          entries: current.entries.map((entry) =>
+            entry.entryId === entryId ? { ...entry, ...patch } : entry
+          ),
+        };
+      });
+    },
+    []
+  );
+
+  const updateDamageEditField = useCallback(
+    (field: keyof Omit<DamageReportEditDraft, "entries">, value: string) => {
+      setDamageEditDraft((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          [field]: value,
+        };
+      });
+    },
+    []
+  );
+
+  const saveDamageReportEditor = useCallback(async () => {
+    if (!selectedDamageFullRow || !damageEditDraft) {
+      return;
+    }
+    setDamageEditStatus("Saving changes...");
+    try {
+      const payload = {
+        report_id: damageEditDraft.reportId || selectedDamageFullRow.report_id,
+        vin: damageEditDraft.vin || selectedDamageFullRow.vin || "",
+        make: selectedDamageFullRow.make || "",
+        model: selectedDamageFullRow.model || "",
+        year: selectedDamageFullRow.year || null,
+        comments: damageEditDraft.comments,
+        bay_location: damageEditDraft.bayLocation,
+        navigation: damageEditDraft.navigation,
+        damage_entries: damageEditDraft.entries.map((entry) => ({
+          damage_entry_id: entry.entryId,
+          damage_sequence: entry.damageSequence,
+          damage_area_code: entry.damageAreaCode,
+          damage_type_code: entry.damageTypeCode,
+          severity: entry.severityLevel,
+          comments: entry.comments,
+        })),
+        damage_summary: selectedDamageFullRow.damage_summary ?? [],
+        photo_urls: selectedDamageFullRow.photo_urls ?? [],
+        splat_urls: selectedDamageFullRow.splat_urls ?? [],
+        pdf_url: selectedDamageFullRow.pdf_url ?? selectedDamageFullRow.overview?.pdf_url ?? "",
+        status: selectedDamageFullRow.status ?? "open",
+      };
+      await ReportsAdapter.updateDamageReport(selectedDamageFullRow.report_id, payload);
+      setDamageEditStatus("Report saved successfully.");
+      await fetchReports();
+      setIsDamageEditOpen(false);
+      setDamageEditDraft(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save damage report.";
+      setDamageEditStatus(message);
+    }
+  }, [damageEditDraft, fetchReports, selectedDamageFullRow]);
+
+  const damageColumns = ["VIN", "Location", "Severity", "Status", "Created"];
+
+  if (sessionStatus === "unauthenticated") {
+    return (
+      <EmptyState
+        title="Authentication Required"
+        description="Please log in to view damage reports."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageTitle
+        title={mode === "damage" ? "Reports" : "Operations Reports"}
+        subtitle="Analyze vehicle inspection activity across all facilities."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3">
+          <DataTableShell
+            columns={damageColumns}
+            title="Inspection Reports"
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="search"
+                    placeholder="Search VIN, make, model..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand/40 shadow-sm"
+                  />
+                </div>
+                <input
+                  type="search"
+                  placeholder="VIN filter"
+                  value={vinFilter}
+                  onChange={(e) => setVinFilter(e.target.value)}
+                  className="w-36 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand/40 shadow-sm"
+                />
+                <input
+                  type="date"
+                  value={createdFrom}
+                  onChange={(e) => setCreatedFrom(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand/40 shadow-sm"
+                  title="Created from"
+                />
+                <input
+                  type="date"
+                  value={createdTo}
+                  onChange={(e) => setCreatedTo(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand/40 shadow-sm"
+                  title="Created to"
+                />
+                <button
+                  onClick={() => void fetchReports()}
+                  disabled={loading}
+                  title={loading ? "Refresh in progress" : "Refresh reports"}
+                  className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-brand transition-all shadow-sm disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            }
+          >
+            {loading ? (
+              <tr className="text-center">
+                <td colSpan={damageColumns.length} className="p-6">
+                  <div className="flex items-center justify-center text-sm text-slate-500">
+                    <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading reports...
+                  </div>
+                </td>
+              </tr>
+            ) : error ? (
+              <tr className="text-center">
+                <td colSpan={damageColumns.length} className="p-6 text-sm text-rose-500">
+                  <div className="space-y-2">
+                    <div className="font-medium text-rose-600">Damage reports could not be loaded.</div>
+                    <div className="text-xs text-rose-500 break-all whitespace-normal">{error}</div>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredDamageSummaries.length === 0 ? (
+              <tr className="text-center">
+                <td colSpan={damageColumns.length} className="p-6">
+                  <EmptyState title="No Reports Found" description="No matching reports for your criteria." />
+                </td>
+              </tr>
+            ) : (
+              filteredDamageSummaries.map((entry) => (
+                <tr
+                  key={entry.id}
+                  className={`cursor-pointer transition-colors hover:bg-slate-50 ${
+                    entry.id === selectedDamageReportId ? "!bg-blue-50/75 border-l-4 border-l-blue-500" : ""
+                  }`}
+                  onClick={() => setSelectedDamageReportId(entry.id)}
+                >
+                  <td className="px-4 py-3 text-sm text-slate-600 font-mono">{entry.vin}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 break-all">{entry.locationName}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge
+                      label={entry.severity && entry.severity !== "n/a" ? severityLabel(entry.severity) : "N/A"}
+                      tone={entry.severity && entry.severity !== "n/a" ? severityTone(entry.severity) : "neutral"}
+                    />
+                  </td>
+                  <td className="px-4 py-3"><StatusBadge label={entry.status} tone={toneForReportStatus(entry.status)} /></td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : "N/A"}</td>
+                </tr>
+              ))
+            )}
+          </DataTableShell>
+        </div>
+        <div className="lg:col-span-2">
+          <div className="sticky top-24">
+            {selectedDamageFullRow ? (
+              <Card>
+                <CardHeader
+                  title="Report Details"
+                  subtitle={selectedDamageFullRow.vin || undefined}
+                  actions={
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="text-right">
+                        <p className="text-lg font-black leading-tight text-slate-900">
+                          {selectedDamageFullRow.make} {selectedDamageFullRow.model} {selectedDamageFullRow.year ? `(${selectedDamageFullRow.year})` : ""}
+                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                          {selectedDamageFullRow.created_at ? new Date(selectedDamageFullRow.created_at).toLocaleDateString() : "Date unavailable"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <StatusBadge label={selectedDamageFullRow.status ?? "N/A"} tone={toneForReportStatus(selectedDamageFullRow.status as ReportStatus)} />
+                        <StatusBadge
+                          label={resolveBackendDamageSeverity(selectedDamageFullRow) ? severityLabel(resolveBackendDamageSeverity(selectedDamageFullRow) as string) : "N/A"}
+                          tone={resolveBackendDamageSeverity(selectedDamageFullRow) ? severityTone(resolveBackendDamageSeverity(selectedDamageFullRow) as string) : "neutral"}
+                        />
+                      </div>
+                      <ReportActions
+                        className="min-w-[11rem]"
+                        onEdit={openDamageReportEditor}
+                        photosDisabledReason={
+                          !selectedDamageFullRow.report_id
+                            ? "Backend action pending"
+                            : !selectedDamagePhotos.length
+                              ? "This report does not have any photos to download."
+                              : undefined
+                        }
+                        pdfDisabledReason={!selectedDamagePdfUrl ? "Backend action pending" : undefined}
+                        onDownloadPhotos={async () => {
+                          if (!selectedDamageFullRow.report_id) return;
+                          await ReportsAdapter.downloadDamageReportPhotosZip(selectedDamageFullRow);
+                        }}
+                        onDownloadPdf={() => {
+                          if (!selectedDamagePdfUrl) return;
+                          window.open(selectedDamagePdfUrl, "_blank", "noopener,noreferrer");
+                        }}
+                        photosDisabled={!selectedDamageFullRow.report_id || !selectedDamagePhotos.length}
+                        pdfDisabled={!selectedDamagePdfUrl}
+                      />
+                    </div>
+                  }
+                />
+                <CardContent className="space-y-5">
+                  <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Damage descriptions</p>
+                          <p className="text-sm font-semibold text-slate-900">Overview notes and entry comments</p>
+                        </div>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+                          {selectedDamageEntries.length} entry{selectedDamageEntries.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      {selectedDamageReportComment ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Report comment</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-700">{selectedDamageReportComment}</p>
+                        </div>
+                      ) : null}
+                      {selectedDamageEntries.length > 0 ? (
+                        <div className="space-y-3">
+                          {selectedDamageEntries.map((entry, index) => {
+                            const area = entry.damage_area || entry.damage_area_code || `Damage area ${index + 1}`;
+                            const type = entry.damage_type || entry.damage_type_code || "Damage type not provided";
+                            const entryComment = (entry.comments || "").trim();
+                            return (
+                              <div key={`${entry.damage_entry_id || index}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-bold text-slate-900">{area}</p>
+                                    <p className="text-sm text-slate-600">{type}</p>
+                                  </div>
+                                </div>
+                                {entryComment ? (
+                                  <p className="mt-2 text-sm leading-6 text-slate-600">{entryComment}</p>
+                                ) : (
+                                  <p className="mt-2 text-sm leading-6 text-slate-500">No description added for this entry.</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center">
+                          <p className="text-sm font-medium text-slate-600">No damage descriptions captured.</p>
+                        </div>
+                      )}
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Damage photos</p>
+                          <p className="text-sm font-semibold text-slate-900">Attached media</p>
+                        </div>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+                          {selectedDamagePhotos.length} item{selectedDamagePhotos.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      {selectedDamageGallery.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {selectedDamageGallery.map((url, index) => (
+                            <div key={`${url}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                              <img src={url} alt={`Damage photo ${index + 1}`} className="h-48 w-full bg-white object-contain" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+                          <p className="text-sm font-medium text-slate-600">No damage photos attached.</p>
+                        </div>
+                      )}
+                    </div>
+                    <DamageMapCard report={selectedDamageFullRow} />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <EmptySelectionPanel 
+                title="No Report Selected"
+                description="Select a report from the list to view details."
+                icon={<FileText className="w-8 h-8" />}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+      <Dialog open={isDamageEditOpen} onOpenChange={(open) => {
+        if (open) {
+          openDamageReportEditor();
+        } else {
+          closeDamageReportEditor();
+        }
+      }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit Damage Report</DialogTitle>
+            <DialogDescription>
+              Adjust the report details locally for now. Backend save wiring will be added after the shape is confirmed.
+            </DialogDescription>
+          </DialogHeader>
+
+          {damageEditDraft ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Facility</span>
+                  <input
+                    type="text"
+                    value={damageEditDraft.facilityLabel}
+                    readOnly
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">VIN</span>
+                  <input
+                    type="text"
+                    value={damageEditDraft.vin}
+                    readOnly
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Report Comments</span>
+                  <textarea
+                    value={damageEditDraft.comments}
+                    onChange={(event) => updateDamageEditField("comments", event.target.value)}
+                    rows={3}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none"
+                    placeholder="Add report comments"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Bay Location</span>
+                  <input
+                    type="text"
+                    value={damageEditDraft.bayLocation}
+                    onChange={(event) => updateDamageEditField("bayLocation", event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none"
+                    placeholder="Bay location"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Entry Notes</span>
+                  <input
+                    type="text"
+                    value={damageEditDraft.navigation}
+                    onChange={(event) => updateDamageEditField("navigation", event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none"
+                    placeholder="Entry notes"
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Damage Entries</p>
+                    <p className="text-xs text-slate-500">Edit type zone and severity for each entry.</p>
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    {damageEditDraft.entries.length} entries
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {damageEditDraft.entries.map((entry) => {
+                    const selectedArea = findDamageAreaByCode(entry.damageAreaCode);
+                    const typeOptions = getDamageTypesForArea(entry.damageAreaCode);
+                    return (
+                      <div key={entry.entryId} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Entry {entry.damageSequence}</p>
+                            <p className="text-xs text-slate-500">
+                              {selectedArea ? selectedArea.name : "Type zone and severity"}
+                            </p>
+                          </div>
+                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                            {entry.entryId}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <label className="space-y-1">
+                            <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Type Zone</span>
+                            <select
+                              value={entry.damageAreaCode}
+                              onChange={(event) =>
+                                updateDamageEditEntry(entry.entryId, {
+                                  damageAreaCode: event.target.value,
+                                  damageTypeCode: "",
+                                })
+                              }
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none"
+                            >
+                              <option value="">Select area</option>
+                              {DAMAGE_AREAS.map((area) => (
+                                <option key={area.code} value={area.code}>
+                                  {area.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="space-y-1">
+                            <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Damage Type</span>
+                            <select
+                              value={entry.damageTypeCode}
+                              onChange={(event) =>
+                                updateDamageEditEntry(entry.entryId, {
+                                  damageTypeCode: event.target.value,
+                                })
+                              }
+                              disabled={!typeOptions.length}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                            >
+                              <option value="">Select damage type</option>
+                              {typeOptions.map((typeOption) => (
+                                <option key={typeOption.code} value={typeOption.code}>
+                                  {typeOption.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="space-y-1">
+                            <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Severity</span>
+                            <select
+                              value={entry.severityLevel}
+                              onChange={(event) =>
+                                updateDamageEditEntry(entry.entryId, {
+                                  severityLevel: event.target.value,
+                                })
+                              }
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none"
+                            >
+                              {DAMAGE_SEVERITIES.map((severityOption) => (
+                                <option key={severityOption.value} value={severityOption.value}>
+                                  {severityOption.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <label className="space-y-1">
+                          <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Entry Notes</span>
+                          <textarea
+                            value={entry.comments}
+                            onChange={(event) =>
+                              updateDamageEditEntry(entry.entryId, {
+                                comments: event.target.value,
+                              })
+                            }
+                            rows={3}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand/40 focus:outline-none"
+                            placeholder="Add entry notes"
+                          />
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {damageEditStatus ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  {damageEditStatus}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              No damage report selected.
+            </div>
+          )}
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeDamageReportEditor}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveDamageReportEditor()}
+              disabled={!damageEditDraft || !selectedDamageFullRow}
+              className="rounded-xl border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save changes
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -1,0 +1,428 @@
+import { buildApiUrl } from "@/lib/config";
+import { apiFetch } from "@/lib/apiClient";
+import type { BrandingSnapshot } from "@/lib/types";
+
+export interface ControlOperationsStatus {
+  service: string;
+  environment: string;
+  service_identifier?: string;
+  time: string;
+  status: string;
+  ready: boolean;
+  summary: string;
+  phase?: string;
+  error?: string;
+  checks: Record<string, string>;
+  failedDependencies: string[];
+  warnings: string[];
+  lastCheckedAt: string;
+  alerting?: {
+    enabled: boolean;
+    summaryEnabled: boolean;
+    envLabel: string;
+    alertOpen: boolean;
+    lastStatus: string;
+    lastNotificationKind?: string | null;
+    lastNotificationAt?: string | null;
+    lastFailureAt?: string | null;
+    lastRecoveryAt?: string | null;
+    lastSummaryAt?: string | null;
+    checkIntervalMs: number | null;
+    dedupeMs: number | null;
+    summaryIntervalMs: number | null;
+  };
+}
+
+export interface ControlReadyzStatus {
+  status: string;
+  time: string;
+  checks: Record<string, string>;
+  error?: string;
+  phase?: string;
+}
+
+export interface YmsVehicleSummary {
+  vehicleId: string;
+  vin: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  status: string;
+  lastSeen: string | null;
+  yardId: string;
+  yardName: string;
+  slotId: string | null;
+  slotLabel: string | null;
+}
+
+export interface YmsYardSummary {
+  yardId: string;
+  code: string | null;
+  name: string;
+}
+
+export interface YmsYardStateSummary {
+  yards: number;
+  zones: number;
+  slots: number;
+  occupiedSlots: number;
+}
+
+export interface YmsYardStateResponse {
+  scope?: Record<string, unknown>;
+  data_source?: string;
+  summary: YmsYardStateSummary;
+  yards: YmsYardSummary[];
+}
+
+export interface YmsAssignmentSummary {
+  assignmentId: string;
+  vin: string;
+  reason: string | null;
+  moveTime: string | null;
+  fromSlotId: string | null;
+  toSlotId: string | null;
+  yardId: string;
+  yardName: string;
+}
+
+export interface YmsVehicleDetailDeck {
+  id?: string;
+  deck?: string;
+  vins?: string[];
+  [key: string]: unknown;
+}
+
+export interface YmsVehicleDetail {
+  success?: boolean;
+  vehicle?: {
+    vin?: string;
+    vehicleId?: string;
+    make?: string | null;
+    model?: string | null;
+    year?: number | null;
+    status?: string;
+    current?: Record<string, unknown>;
+    history?: Array<Record<string, unknown>>;
+    assignments?: Array<Record<string, unknown>>;
+    exceptions?: Array<Record<string, unknown>>;
+  };
+}
+
+export interface YmsMapResponse {
+  success?: boolean;
+  map?: Record<string, unknown>;
+}
+
+export interface YmsRevisionSummary {
+  revisionId: string;
+  createdAt?: string | null;
+  createdBy?: string | null;
+  label?: string | null;
+}
+
+export interface ControlSettingRecord {
+  key?: string;
+  scope_type?: string;
+  scope_id?: string;
+  value?: unknown;
+  updated_at?: string;
+}
+
+export interface ControlIntegrationSignal {
+  key: string;
+  scope: string;
+  value: string;
+  updatedAt?: string;
+}
+
+export interface ControlOutboxItem {
+  id: string;
+  organization_id?: string | null;
+  template_key?: string | null;
+  subject?: string | null;
+  recipient_list: string[];
+  recipient_count: number;
+  recipients?: string[];
+  status: string;
+  attempt_count: number;
+  last_attempt_at: string | null;
+  next_retry_at: string | null;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  last_error_retryable?: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  sent_at?: string | null;
+  source_record_type?: string | null;
+  source_record_id?: string | null;
+  email_type?: string | null;
+  payload_preview?: Record<string, unknown>;
+}
+
+export interface ControlOutboxHistoryItem {
+  id: string;
+  outbox_id: string;
+  organization_id?: string | null;
+  attempt_number: number;
+  action: string;
+  status: string;
+  actor_user_id?: string | null;
+  actor_email?: string | null;
+  request_id?: string | null;
+  provider_message_id?: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string | null;
+}
+
+export interface ControlOutboxListResponse {
+  items: ControlOutboxItem[];
+  total: number;
+}
+
+function toIsoString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+}
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const response = await fetch(buildApiUrl(path), {
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const payload = (await response.json().catch(() => null)) as T | null;
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === "object" && "error" in payload && typeof (payload as { error?: unknown }).error === "string"
+        ? (payload as { error: string }).error
+        : `Request failed with ${response.status}`;
+    throw new Error(message);
+  }
+  if (!payload) {
+    throw new Error("Empty response from control-plane endpoint");
+  }
+  return payload;
+}
+
+async function fetchControlJson<T>(path: string): Promise<T> {
+  return fetchJson<T>(path);
+}
+
+export async function fetchOperationsStatus(): Promise<ControlOperationsStatus> {
+  return fetchControlJson<ControlOperationsStatus>("/status");
+}
+
+export async function fetchReadinessStatus(): Promise<ControlReadyzStatus> {
+  return fetchControlJson<ControlReadyzStatus>("/readyz");
+}
+
+export async function fetchYmsVehicles(): Promise<YmsVehicleSummary[]> {
+  const payload = await apiFetch<{ vehicles: YmsVehicleSummary[] }>("/yms/vehicles");
+  return Array.isArray(payload?.vehicles) ? payload.vehicles : [];
+}
+
+export async function fetchYmsYardState(): Promise<YmsYardStateResponse> {
+  const payload = await apiFetch<YmsYardStateResponse>("/yms/yard-state");
+  return {
+    summary: payload?.summary ?? { yards: 0, zones: 0, slots: 0, occupiedSlots: 0 },
+    yards: Array.isArray(payload?.yards) ? payload.yards : [],
+    scope: payload?.scope,
+    data_source: payload?.data_source,
+  };
+}
+
+export async function fetchYmsAssignments(): Promise<YmsAssignmentSummary[]> {
+  const payload = await apiFetch<{ assignments: YmsAssignmentSummary[] }>("/yms/assignments");
+  return Array.isArray(payload?.assignments) ? payload.assignments : [];
+}
+
+export async function fetchYmsVehicleDetail(vin: string): Promise<YmsVehicleDetail | null> {
+  if (!vin) {
+    return null;
+  }
+  const payload = await apiFetch<YmsVehicleDetail>(`/yms/vin/${encodeURIComponent(vin)}`);
+  return payload ?? null;
+}
+
+export async function fetchYmsMapForYard(
+  yardId: string,
+  zoneId?: string | null
+): Promise<YmsMapResponse | null> {
+  if (!yardId) {
+    return null;
+  }
+  const query = new URLSearchParams({ yard_id: yardId });
+  if (zoneId) {
+    query.set("zone_id", zoneId);
+  }
+  const payload = await apiFetch<YmsMapResponse>(`/yms/map?${query.toString()}`);
+  return payload ?? null;
+}
+
+export async function fetchYmsMapZones(yardId: string): Promise<Record<string, unknown>[]> {
+  if (!yardId) {
+    return [];
+  }
+  const payload = await apiFetch<{ map: Record<string, unknown>[] }>(`/yms/map/zones?yard_id=${encodeURIComponent(yardId)}`);
+  return Array.isArray(payload?.map) ? payload.map : [];
+}
+
+export async function fetchYmsMapLanes(zoneId: string): Promise<Record<string, unknown>[]> {
+  if (!zoneId) {
+    return [];
+  }
+  const payload = await apiFetch<{ map: Record<string, unknown>[] }>(`/yms/map/lanes?zone_id=${encodeURIComponent(zoneId)}`);
+  return Array.isArray(payload?.map) ? payload.map : [];
+}
+
+export async function fetchYmsMapRevisions(yardId: string): Promise<YmsRevisionSummary[]> {
+  if (!yardId) {
+    return [];
+  }
+  const payload = await apiFetch<{ revisions: YmsRevisionSummary[] }>(
+    `/yms/map/revisions?yard_id=${encodeURIComponent(yardId)}`
+  );
+  return Array.isArray(payload?.revisions) ? payload.revisions : [];
+}
+
+export async function fetchYmsMapRevisionDetail(
+  revisionId: string
+): Promise<Record<string, unknown> | null> {
+  if (!revisionId) {
+    return null;
+  }
+  const payload = await apiFetch<{ revision: Record<string, unknown> }>(
+    `/yms/map/revisions/${encodeURIComponent(revisionId)}`
+  );
+  return payload?.revision ?? null;
+}
+
+export async function fetchOrganizationBranding(organizationId: string): Promise<BrandingSnapshot> {
+  if (!organizationId) {
+    return {};
+  }
+  return apiFetch<BrandingSnapshot>(`/organizations/${encodeURIComponent(organizationId)}/branding`);
+}
+
+export async function fetchAdminSettings(): Promise<ControlSettingRecord[]> {
+  const payload = await apiFetch<{ settings: ControlSettingRecord[] }>("/admin/settings");
+  return Array.isArray(payload?.settings) ? payload.settings : [];
+}
+
+function buildAdminOutboxQuery(params: Record<string, string | number | boolean | undefined | null>) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+    query.set(key, String(value));
+  });
+  const suffix = query.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+export async function fetchAdminOutbox(
+  organizationId?: string,
+  filters: {
+    status?: string;
+    templateKey?: string;
+    failedOnly?: boolean;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<ControlOutboxListResponse> {
+  const path = `/admin/outbox${buildAdminOutboxQuery({
+    organizationId,
+    status: filters.status,
+    template_key: filters.templateKey,
+    failedOnly: filters.failedOnly,
+    q: filters.search,
+    limit: filters.limit,
+    offset: filters.offset,
+  })}`;
+  return apiFetch<ControlOutboxListResponse>(path);
+}
+
+export async function fetchAdminOutboxItem(
+  id: string,
+  organizationId?: string,
+): Promise<ControlOutboxItem | null> {
+  if (!id) {
+    return null;
+  }
+  const path = `/admin/outbox/${encodeURIComponent(id)}${buildAdminOutboxQuery({ organizationId })}`;
+  const payload = await apiFetch<{ outbox: ControlOutboxItem }>(path);
+  return payload?.outbox ?? null;
+}
+
+export async function fetchAdminOutboxHistory(
+  id: string,
+  organizationId?: string,
+): Promise<ControlOutboxHistoryItem[]> {
+  if (!id) {
+    return [];
+  }
+  const path = `/admin/outbox/${encodeURIComponent(id)}/history${buildAdminOutboxQuery({ organizationId })}`;
+  const payload = await apiFetch<{ history: ControlOutboxHistoryItem[] }>(path);
+  return Array.isArray(payload?.history) ? payload.history : [];
+}
+
+export async function retryAdminOutbox(
+  id: string,
+  organizationId?: string,
+  reason?: string,
+): Promise<ControlOutboxItem | null> {
+  if (!id) {
+    return null;
+  }
+  const path = `/admin/outbox/${encodeURIComponent(id)}/retry${buildAdminOutboxQuery({ organizationId })}`;
+  const payload = await apiFetch<{ outbox: ControlOutboxItem }>(path, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+  return payload?.outbox ?? null;
+}
+
+export async function resendAdminOutbox(
+  id: string,
+  organizationId?: string,
+  reason?: string,
+): Promise<ControlOutboxItem | null> {
+  if (!id) {
+    return null;
+  }
+  const path = `/admin/outbox/${encodeURIComponent(id)}/resend${buildAdminOutboxQuery({ organizationId })}`;
+  const payload = await apiFetch<{ outbox: ControlOutboxItem }>(path, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+  return payload?.outbox ?? null;
+}
+
+export function normalizeControlTimestamp(value?: string | null): string {
+  const iso = toIsoString(value);
+  if (!iso) {
+    return "Unknown";
+  }
+  return new Date(iso).toLocaleString();
+}
+
+export function isOlderThanHours(value?: string | null, hours = 2): boolean {
+  if (!value) {
+    return true;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return true;
+  }
+  const elapsedMs = Date.now() - parsed;
+  return elapsedMs > hours * 60 * 60 * 1000;
+}

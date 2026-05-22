@@ -1,0 +1,333 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Timer, TriangleAlert } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import {
+  fetchOperationsStatus,
+  fetchYmsVehicles,
+  fetchYmsYardState,
+  isOlderThanHours,
+  normalizeControlTimestamp,
+  type ControlOperationsStatus,
+  type YmsVehicleSummary,
+  type YmsYardStateResponse,
+} from "@/lib/services/controlPlaneService";
+import { ControlDetailPanel, type ControlDetailField } from "@/components/control/ControlDetailPanel";
+import { ControlFilterBar } from "@/components/control/ControlFilterBar";
+import { ControlMetricTile } from "@/components/control/ControlMetricTile";
+import { ControlTableShell } from "@/components/control/ControlTableShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import type { ReportDamageApiRow, RsaReportApiRow } from "@/lib/types";
+
+type ExceptionSource = "backend" | "damage" | "rsa" | "vehicle" | "yard";
+
+interface ExceptionRow {
+  id: string;
+  severity: "warning" | "danger" | "neutral";
+  title: string;
+  source: ExceptionSource;
+  entity: string;
+  updatedAt: string | null;
+  summary: string;
+  fields: ControlDetailField[];
+}
+
+function toneForSeverity(severity: ExceptionRow["severity"]): "positive" | "warning" | "danger" | "neutral" {
+  if (severity === "danger") return "danger";
+  if (severity === "warning") return "warning";
+  return "neutral";
+}
+
+export default function ControlExceptionsPage() {
+  const { organizationId } = usePortalSession();
+  const [status, setStatus] = useState<ControlOperationsStatus | null>(null);
+  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
+  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
+  const [vehicles, setVehicles] = useState<YmsVehicleSummary[]>([]);
+  const [yardState, setYardState] = useState<YmsYardStateResponse | null>(null);
+  const [rows, setRows] = useState<ExceptionRow[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "warning" | "danger">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    void (async () => {
+      try {
+        const [statusResult, damageList, rsaList, vehicleList, yard] = await Promise.all([
+          fetchOperationsStatus(),
+          ReportsAdapter.fetchDamageReports({ organization_id: organizationId }),
+          ReportsAdapter.fetchRsaReports(),
+          fetchYmsVehicles(),
+          fetchYmsYardState(),
+        ]);
+
+        if (!active) return;
+        setStatus(statusResult);
+        setDamageReports(damageList);
+        setRsaReports(rsaList);
+        setVehicles(vehicleList);
+        setYardState(yard);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Unable to load exceptions.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [organizationId]);
+
+  useEffect(() => {
+    const nextRows: ExceptionRow[] = [];
+
+    if (status && !status.ready) {
+      nextRows.push({
+        id: "backend-status",
+        severity: "warning",
+        title: "Backend readiness signal",
+        source: "backend",
+        entity: status.service,
+        updatedAt: status.lastCheckedAt,
+        summary: status.summary,
+        fields: [
+          { label: "Environment", value: status.environment },
+          { label: "Failed dependencies", value: status.failedDependencies.length || "None" },
+          { label: "Warnings", value: status.warnings.length || "None" },
+        ],
+      });
+    }
+
+    damageReports
+      .filter((report) => {
+        const normalized = (report.status || "").toLowerCase();
+        return normalized === "open" || normalized === "review";
+      })
+      .forEach((report) => {
+        nextRows.push({
+          id: `damage:${report.report_id}`,
+          severity: "warning",
+          title: "Damage report awaiting operator review",
+          source: "damage",
+          entity: report.vin || report.report_id,
+          updatedAt: report.updated_at || report.created_at || null,
+          summary: `${report.damage_entries?.length || 0} damage entry(s) still live.`,
+          fields: [
+            { label: "VIN", value: report.vin || "Unknown" },
+            { label: "Location", value: report.location?.location_label || report.location?.facility || "Unattributed" },
+            { label: "Status", value: report.status || "open" },
+          ],
+        });
+      });
+
+    rsaReports
+      .filter((report) => !report.track || !report.spot)
+      .forEach((report) => {
+        nextRows.push({
+          id: `rsa:${report.report_id}`,
+          severity: "warning",
+          title: "RSA report missing track or spot",
+          source: "rsa",
+          entity: report.rail_car_number || report.report_id,
+          updatedAt: report.updated_at || report.created_at || null,
+          summary: "The route context is incomplete, so the operator needs to finish routing metadata.",
+          fields: [
+            { label: "Track", value: report.track || "Missing" },
+            { label: "Spot", value: report.spot || "Missing" },
+            { label: "Template", value: report.template_key || "Unknown" },
+          ],
+        });
+      });
+
+    const staleVehicles = vehicles.filter((vehicle) => isOlderThanHours(vehicle.lastSeen, 2));
+    staleVehicles.forEach((vehicle) => {
+      nextRows.push({
+        id: `vehicle:${vehicle.vehicleId}`,
+        severity: "danger",
+        title: "Vehicle not recently observed",
+        source: "vehicle",
+        entity: vehicle.vin,
+        updatedAt: vehicle.lastSeen,
+        summary: `${vehicle.yardName || "Unknown yard"} · ${vehicle.status}`,
+        fields: [
+          { label: "VIN", value: vehicle.vin },
+          { label: "Yard", value: vehicle.yardName || "Unknown" },
+          { label: "Slot", value: vehicle.slotLabel || "Not assigned" },
+        ],
+      });
+    });
+
+    if (yardState && yardState.summary.slots > 0 && yardState.summary.occupiedSlots / yardState.summary.slots >= 0.85) {
+      nextRows.push({
+        id: "yard:occupancy",
+        severity: "danger",
+        title: "Yard occupancy threshold exceeded",
+        source: "yard",
+        entity: yardState.yards[0]?.name || "yard state",
+        updatedAt: null,
+        summary: `${yardState.summary.occupiedSlots}/${yardState.summary.slots} slots occupied`,
+        fields: [
+          { label: "Yards", value: yardState.summary.yards },
+          { label: "Zones", value: yardState.summary.zones },
+          { label: "Slots", value: yardState.summary.slots },
+        ],
+      });
+    }
+
+    setRows(nextRows);
+    setSelectedId((current) => current ?? nextRows[0]?.id ?? null);
+  }, [damageReports, rsaReports, status, vehicles, yardState]);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => filter === "all" || row.severity === filter);
+  }, [filter, rows]);
+
+  const selectedRow = filteredRows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
+
+  useEffect(() => {
+    if (filteredRows.length && !filteredRows.some((row) => row.id === selectedId)) {
+      setSelectedId(filteredRows[0].id);
+    }
+  }, [filteredRows, selectedId]);
+
+  if (!organizationId) {
+    return <div className="rounded-[1.75rem] border border-amber-400/20 bg-amber-500/10 p-6 text-amber-100">Exception queue requires an organization session.</div>;
+  }
+
+  if (loading) {
+    return <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 text-slate-300">Loading exceptions...</div>;
+  }
+
+  if (error) {
+    return <div className="rounded-[1.75rem] border border-rose-400/20 bg-rose-500/10 p-6 text-rose-100">{error}</div>;
+  }
+
+  const staleVehicleCount = vehicles.filter((vehicle) => isOlderThanHours(vehicle.lastSeen, 2)).length;
+  const openDamageCount = damageReports.filter((report) => {
+    const normalized = (report.status || "").toLowerCase();
+    return normalized === "open" || normalized === "review";
+  }).length;
+  const unresolvedRsaCount = rsaReports.filter((report) => !report.track || !report.spot).length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <ControlMetricTile label="Exceptions" value={rows.length} detail="Derived live signals" tone={rows.length ? "warning" : "positive"} />
+        <ControlMetricTile label="Damage" value={openDamageCount} detail="Open or under review" tone={openDamageCount ? "warning" : "positive"} />
+        <ControlMetricTile label="RSA" value={unresolvedRsaCount} detail="Missing track or spot" tone={unresolvedRsaCount ? "warning" : "positive"} />
+        <ControlMetricTile label="Stale vehicles" value={staleVehicleCount} detail="Not observed in two hours" tone={staleVehicleCount ? "danger" : "positive"} />
+      </div>
+
+      <ControlFilterBar
+        search={""}
+        onSearch={() => undefined}
+        placeholder="Filtering is severity-based on this surface"
+        filters={
+          <div className="flex flex-wrap gap-2">
+            {(["all", "warning", "danger"] as const).map((severity) => (
+              <button
+                key={severity}
+                type="button"
+                onClick={() => setFilter(severity)}
+                className={`rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] transition ${
+                  filter === severity
+                    ? "border-cyan-400/30 bg-cyan-400/15 text-cyan-100"
+                    : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10"
+                }`}
+              >
+                {severity === "all" ? "All" : severity}
+              </button>
+            ))}
+          </div>
+        }
+        summary={<StatusBadge label={`${filteredRows.length} matches`} tone="neutral" />}
+      />
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.55fr)]">
+        <ControlTableShell
+          title="Exception queue"
+          description="The queue is derived from current backend data, not a fake exception table."
+          density="compact"
+          columns={[
+            { id: "severity", label: "Severity" },
+            { id: "title", label: "Signal" },
+            { id: "entity", label: "Entity" },
+            { id: "updated", label: "Updated" },
+          ]}
+          rowsCount={filteredRows.length}
+          emptyState={<div className="py-8 text-sm text-slate-400">No exceptions matched the current filter.</div>}
+        >
+          {filteredRows.map((row) => {
+            const active = row.id === selectedRow?.id;
+            return (
+              <tr
+                key={row.id}
+                data-row-key={row.id}
+                className={`cursor-pointer transition ${active ? "bg-cyan-400/10" : "hover:bg-white/5"}`}
+                onClick={() => setSelectedId(row.id)}
+              >
+                <td className="px-3 py-3">
+                  <StatusBadge label={row.severity} tone={toneForSeverity(row.severity)} />
+                </td>
+                <td className="px-3 py-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-white">{row.title}</p>
+                    <p className="text-xs text-slate-400">{row.summary}</p>
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-sm text-slate-300">{row.entity}</td>
+                <td className="px-3 py-3 text-sm text-slate-300">{normalizeControlTimestamp(row.updatedAt)}</td>
+              </tr>
+            );
+          })}
+        </ControlTableShell>
+
+        <ControlDetailPanel
+          title={selectedRow?.title || "Exception detail"}
+          eyebrow={selectedRow ? selectedRow.source.toUpperCase() : "Exceptions"}
+          subtitle={selectedRow?.summary}
+          fields={selectedRow?.fields}
+          footer={
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/control/vehicles"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+              >
+                Vehicle timeline
+                <Timer className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/control/map"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+              >
+                Map context
+                <MapPlaceholderIcon />
+              </Link>
+            </div>
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function MapPlaceholderIcon() {
+  return <TriangleAlert className="h-4 w-4" />;
+}

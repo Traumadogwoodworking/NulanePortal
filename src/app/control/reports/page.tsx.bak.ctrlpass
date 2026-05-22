@@ -1,0 +1,7 @@
+"use client";
+
+import { ReportOpsSurface } from "@/components/report-ops/ReportOpsSurface";
+
+export default function ControlReportsPage() {
+  return <ReportOpsSurface />;
+}

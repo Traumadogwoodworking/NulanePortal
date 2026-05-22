@@ -1,0 +1,34 @@
+"use client";
+
+import { normalizeMediaUrl } from "@/lib/config";
+import type { ReportDamageApiRow } from "@/lib/types";
+
+export function DamageMapCard({ report }: { report?: ReportDamageApiRow | null }) {
+  const splatUrl = report?.splat_urls?.[0] ? normalizeMediaUrl(report.splat_urls[0]) : null;
+
+  return (
+    <div className="rounded-3xl border border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-950/60 shadow-lg overflow-hidden">
+      <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/40">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-600 dark:text-slate-300">Damage map</p>
+            <p className="text-lg font-black text-slate-950 dark:text-white tracking-tight">Splat</p>
+          </div>
+          <span className="text-[8px] font-black uppercase tracking-[0.4em] text-slate-600 dark:text-slate-300">Live</span>
+        </div>
+      </div>
+      <div className="p-4">
+        {splatUrl ? (
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={splatUrl} alt="Damage splat" className="h-[32rem] w-full object-cover sm:h-[38rem]" />
+          </div>
+        ) : (
+          <div className="flex min-h-[20rem] items-center justify-center rounded-[2rem] border border-dashed border-slate-200 bg-white px-4 py-10 text-center dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Splat unavailable</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

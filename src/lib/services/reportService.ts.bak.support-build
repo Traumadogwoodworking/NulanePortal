@@ -1,0 +1,421 @@
+import { apiFetch } from "@/lib/apiClient";
+import { isDevMockEnabled } from "@/lib/devMockApi";
+import { buildApiUrl, normalizeMediaUrl } from "@/lib/config";
+import { getPortalAccessToken } from "@/lib/portalAuth";
+import type {
+  ReportDamageApiRow,
+  ReportFilters,
+  RsaReportApiRow,
+} from "@/lib/types";
+
+const REPORTS_ENDPOINT = "/report/pull";
+const REPORT_MUTATIONS_ENDPOINT = "/reports";
+const RSA_REPORTS_ENDPOINT = "/reports/rsa";
+const MILESTONE_FETCH_ENDPOINT = "/reports/milestones";
+const MILESTONE_SUBMIT_ENDPOINT = "/milestones/reports";
+
+type DamageReportOrgFields = {
+  organization_id?: unknown;
+  organizationId?: unknown;
+  org_id?: unknown;
+  orgId?: unknown;
+  organization?: unknown;
+  org?: unknown;
+  tenant_id?: unknown;
+  tenantId?: unknown;
+};
+
+function extractReportsArray<T>(response: unknown): T[] {
+  if (Array.isArray(response)) {
+    return response;
+  }
+  if (response && typeof response === "object" && response !== null) {
+    const typedResponse = response as Record<string, unknown>;
+    if (Array.isArray(typedResponse.reports)) return typedResponse.reports as T[];
+    if (typedResponse.data && typeof typedResponse.data === "object") {
+      const nestedData = typedResponse.data as Record<string, unknown>;
+      if (Array.isArray(nestedData.reports)) return nestedData.reports as T[];
+      if (Array.isArray(typedResponse.data)) return typedResponse.data as T[];
+    }
+    if (Array.isArray(typedResponse.data)) return typedResponse.data as T[];
+    if (Array.isArray(typedResponse.rows)) return typedResponse.rows as T[];
+    if (Array.isArray(typedResponse.results)) return typedResponse.results as T[];
+    if (Array.isArray(typedResponse.report_metadata)) return typedResponse.report_metadata as T[];
+    if (Array.isArray(typedResponse.payload)) return typedResponse.payload as T[];
+  }
+  if (process.env.NODE_ENV !== "production") {
+    console.warn("Unknown report response shape:", response);
+  }
+  return []; // Default to empty array if shape is unknown
+}
+
+function extractDamageReportsArray(response: unknown): ReportDamageApiRow[] {
+  if (Array.isArray(response)) {
+    return response as ReportDamageApiRow[];
+  }
+  if (response && typeof response === "object") {
+    const typedResponse = response as Record<string, unknown>;
+    if (Array.isArray(typedResponse.reports)) {
+      return typedResponse.reports as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.data)) {
+      return typedResponse.data as ReportDamageApiRow[];
+    }
+    if (typedResponse.data && typeof typedResponse.data === "object") {
+      const nestedData = typedResponse.data as Record<string, unknown>;
+      if (Array.isArray(nestedData.reports)) {
+        return nestedData.reports as ReportDamageApiRow[];
+      }
+    }
+    if (Array.isArray(typedResponse.rows)) {
+      return typedResponse.rows as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.results)) {
+      return typedResponse.results as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.payload)) {
+      return typedResponse.payload as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.report_metadata)) {
+      return typedResponse.report_metadata as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.reportMetadata)) {
+      return typedResponse.reportMetadata as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.reports_metadata)) {
+      return typedResponse.reports_metadata as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.items)) {
+      return typedResponse.items as ReportDamageApiRow[];
+    }
+    if (Array.isArray(typedResponse.records)) {
+      return typedResponse.records as ReportDamageApiRow[];
+    }
+  }
+  if (process.env.NODE_ENV === "development") {
+    const rootRecord =
+      response && typeof response === "object" && !Array.isArray(response)
+        ? (response as Record<string, unknown>)
+        : null;
+    const dataRecord =
+      rootRecord?.data && typeof rootRecord.data === "object" && !Array.isArray(rootRecord.data)
+        ? (rootRecord.data as Record<string, unknown>)
+        : null;
+    const candidates = {
+      rootArray: Array.isArray(response) ? (response as unknown[]).length : null,
+      reports: Array.isArray(rootRecord?.reports) ? (rootRecord.reports as unknown[]).length : null,
+      dataArray: Array.isArray(rootRecord?.data) ? (rootRecord.data as unknown[]).length : null,
+      dataReports: Array.isArray(dataRecord?.reports) ? (dataRecord.reports as unknown[]).length : null,
+      rows: Array.isArray(rootRecord?.rows) ? (rootRecord.rows as unknown[]).length : null,
+      results: Array.isArray(rootRecord?.results) ? (rootRecord.results as unknown[]).length : null,
+      report_metadata: Array.isArray(rootRecord?.report_metadata)
+        ? (rootRecord.report_metadata as unknown[]).length
+        : null,
+      payload: Array.isArray(rootRecord?.payload) ? (rootRecord.payload as unknown[]).length : null,
+    };
+    console.warn(
+      "[damage-reports] unrecognized response shape",
+      JSON.stringify(
+        {
+          isArray: Array.isArray(response),
+          topLevelKeys: rootRecord ? Object.keys(rootRecord) : [],
+          dataType: rootRecord?.data === null ? "null" : typeof rootRecord?.data,
+          dataKeys: dataRecord ? Object.keys(dataRecord) : [],
+          candidates,
+          firstItemKeys: (() => {
+            const firstCandidate =
+              Array.isArray(response)
+                ? response[0]
+                : Array.isArray(rootRecord?.reports)
+                  ? rootRecord.reports[0]
+                  : Array.isArray(rootRecord?.data)
+                    ? rootRecord.data[0]
+                    : Array.isArray(dataRecord?.reports)
+                      ? dataRecord.reports[0]
+                      : Array.isArray(rootRecord?.rows)
+                        ? rootRecord.rows[0]
+                        : Array.isArray(rootRecord?.results)
+                          ? rootRecord.results[0]
+                          : Array.isArray(rootRecord?.report_metadata)
+                            ? rootRecord.report_metadata[0]
+                            : Array.isArray(rootRecord?.reportMetadata)
+                              ? rootRecord.reportMetadata[0]
+                              : Array.isArray(rootRecord?.reports_metadata)
+                                ? rootRecord.reports_metadata[0]
+                                : Array.isArray(rootRecord?.items)
+                                  ? rootRecord.items[0]
+                                  : Array.isArray(rootRecord?.records)
+                                    ? rootRecord.records[0]
+                                    : Array.isArray(rootRecord?.payload)
+                                      ? rootRecord.payload[0]
+                                      : null;
+
+            return firstCandidate && typeof firstCandidate === "object" && !Array.isArray(firstCandidate)
+              ? Object.keys(firstCandidate as Record<string, unknown>)
+              : [];
+          })(),
+        },
+        null,
+        2
+      )
+    );
+  }
+  throw new Error("Damage reports response shape was not recognized.");
+}
+
+function buildReportQueryString(filters: ReportFilters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    const candidate = value?.toString().trim();
+    if (candidate) {
+      params.set(key, candidate);
+    }
+  });
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
+function getDamageReportOrganizationId(filters: ReportFilters = {}): string | null {
+  const candidate = filters.organization_id ?? filters.org_id;
+  const normalized = candidate?.toString().trim();
+  return normalized ? normalized : null;
+}
+
+function getReportOrgFields(report: ReportDamageApiRow): DamageReportOrgFields {
+  const payload = report as Record<string, unknown>;
+  return {
+    organization_id: payload.organization_id,
+    organizationId: payload.organizationId,
+    org_id: payload.org_id,
+    orgId: payload.orgId,
+    organization: payload.organization,
+    org: payload.org,
+    tenant_id: payload.tenant_id,
+    tenantId: payload.tenantId,
+  };
+}
+
+function resolveOrgFieldString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized ? normalized : null;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const nestedCandidates = [
+      record.organization_id,
+      record.organizationId,
+      record.org_id,
+      record.orgId,
+      record.id,
+    ];
+    for (const nested of nestedCandidates) {
+      const normalized = resolveOrgFieldString(nested);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return null;
+}
+
+function matchesDamageReportOrganization(report: ReportDamageApiRow, currentOrganizationId: string): boolean {
+  const fields = getReportOrgFields(report);
+  const candidates = [
+    fields.organization_id,
+    fields.organizationId,
+    fields.org_id,
+    fields.orgId,
+    fields.organization,
+    fields.org,
+    fields.tenant_id,
+    fields.tenantId,
+    report.metadata,
+    report.payload,
+    report.report,
+    report.overview,
+  ];
+  return candidates.some((candidate) => resolveOrgFieldString(candidate) === currentOrganizationId);
+}
+
+const CACHE_TTL = 300000; // 5 minutes
+const reportCache = new Map<string, { data: unknown; timestamp: number }>();
+
+function getCached(key: string) {
+  const entry = reportCache.get(key);
+  if (entry && (Date.now() - entry.timestamp < CACHE_TTL)) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setCache(key: string, data: unknown) {
+  reportCache.set(key, { data, timestamp: Date.now() });
+}
+
+export class ReportsAdapter {
+  static clearCache() {
+    reportCache.clear();
+  }
+
+  static async fetchDamageReports(filters: ReportFilters = {}): Promise<ReportDamageApiRow[]> {
+    const damageFilters = { ...filters };
+    const currentOrganizationId = getDamageReportOrganizationId(damageFilters);
+    delete damageFilters.organization_id;
+    delete damageFilters.org_id;
+    const queryString = buildReportQueryString(damageFilters);
+    const cacheKey = `damage_${currentOrganizationId ?? "no-org"}_${queryString}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached as ReportDamageApiRow[];
+
+    try {
+      const resolvedUrl = buildApiUrl(`${REPORTS_ENDPOINT}${queryString}`);
+      const authToken = await getPortalAccessToken();
+      if (process.env.NODE_ENV === "development") {
+        console.info("[damage-reports] request", {
+          endpoint: REPORTS_ENDPOINT,
+          queryString,
+          resolvedUrl,
+          requestHasOrgQuery: queryString.includes("organization_id=") || queryString.includes("org_id="),
+          currentOrganizationId,
+          filters: damageFilters,
+          authorizationPresent: Boolean(authToken),
+        });
+      }
+      const response = await apiFetch<unknown>(`${REPORTS_ENDPOINT}${queryString}`);
+      const parsedReports = extractDamageReportsArray(response);
+      const results = currentOrganizationId
+        ? parsedReports.filter((report) => matchesDamageReportOrganization(report, currentOrganizationId))
+        : parsedReports;
+      if (process.env.NODE_ENV === "development") {
+        console.info("[damage-reports] parsed reports", {
+          rawCount: parsedReports.length,
+          count: results.length,
+          firstKeys:
+            results[0] && typeof results[0] === "object"
+              ? Object.keys(results[0] as Record<string, unknown>)
+              : [],
+        });
+        if (parsedReports.length > 0 && results.length === 0) {
+          console.warn("Backend returned reports, but none matched current organization ID", {
+            currentOrganizationId,
+            firstReportOrgFields:
+              parsedReports[0] && typeof parsedReports[0] === "object"
+                ? getReportOrgFields(parsedReports[0] as ReportDamageApiRow)
+                : {},
+          });
+        }
+      }
+      setCache(cacheKey, results);
+      return results;
+    } catch (err) {
+      const responseError = err as { status?: number };
+      if (responseError.status === 404) {
+        console.error("Damage reports endpoint missing.", err);
+      }
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[damage-reports] fetch failed", {
+          status: responseError.status ?? null,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      throw err;
+    }
+  }
+
+  static async fetchRsaReports(): Promise<RsaReportApiRow[]> {
+    const cacheKey = "rsa_reports";
+    const cached = getCached(cacheKey);
+    if (cached) return cached as RsaReportApiRow[];
+
+    try {
+      const response = await apiFetch<unknown>(RSA_REPORTS_ENDPOINT);
+      const results = extractReportsArray<RsaReportApiRow>(response);
+      setCache(cacheKey, results);
+      return results;
+    } catch (err) {
+      const responseError = err as { status?: number };
+      if (responseError.status === 404) {
+        console.error("RSA reports endpoint missing.", err);
+        throw new Error(`Failed to fetch RSA reports: ${responseError.message}`);
+      }
+      throw err;
+    }
+  }
+
+  static async fetchMilestones(): Promise<unknown[]> {
+    if (isDevMockEnabled()) {
+      return [];
+    }
+    const cacheKey = "milestones";
+    const cached = getCached(cacheKey);
+    if (cached) return cached as unknown[];
+
+    const response = await apiFetch<unknown>(MILESTONE_FETCH_ENDPOINT);
+    const results = extractReportsArray<unknown>(response);
+    setCache(cacheKey, results);
+    return results;
+  }
+
+  static async submitMilestone(payload: Record<string, unknown>): Promise<unknown> {
+    if (isDevMockEnabled()) {
+      return { ok: true, submitted: payload };
+    }
+    const result = await apiFetch<unknown>(MILESTONE_SUBMIT_ENDPOINT, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    // Invalidate milestones cache on submit
+    reportCache.delete("milestones");
+    return result;
+  }
+ 
+  static async deleteReport(reportId: string): Promise<boolean> {
+    if (isDevMockEnabled()) {
+      return true;
+    }
+    await apiFetch(`${REPORT_MUTATIONS_ENDPOINT}/${reportId}`, {
+      method: "DELETE",
+    });
+    // Clear cache to ensure the report vanishes from lists on next fetch
+    this.clearCache();
+    return true;
+  }
+
+  static resolveDamageReportPdfUrl(report: ReportDamageApiRow): string | null {
+    const candidates = [
+      report.pdf_url,
+      (report as { pdfUrl?: unknown }).pdfUrl,
+      (report as { report_pdf_url?: unknown }).report_pdf_url,
+      (report as { pdf_url_original?: unknown }).pdf_url_original,
+      report.overview?.pdf_url,
+      report.overview?.pdfUrl,
+    ]
+      .map((value) => value?.toString().trim())
+      .filter(Boolean) as string[];
+    return candidates.length > 0 ? normalizeMediaUrl(candidates[0]) : null;
+  }
+
+  static async downloadDamageReportPhotosZip(report: ReportDamageApiRow): Promise<void> {
+    if (isDevMockEnabled()) {
+      return;
+    }
+    const reportId = report.report_id?.toString().trim();
+    if (!reportId) {
+      throw new Error("This report does not have a valid report id.");
+    }
+    const response = (await apiFetch(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(reportId)}/photos/archive`)) as Response;
+    if (!response.ok) {
+      throw new Error(`Unable to download report photos (${response.status}).`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${report.vin || report.report_id || "report"}_photos.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+}

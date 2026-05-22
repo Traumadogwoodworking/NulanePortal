@@ -1,0 +1,481 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { PageSection } from "@/components/ui/PageSection";
+import { StatCard } from "@/components/ui/StatCard";
+import { FacilitySelector } from "@/components/ui/FacilitySelector";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorPanel } from "@/components/ui/ErrorPanel";
+import { UsersAdapter } from "@/lib/services/usersService";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalDirectorySnapshot } from "@/lib/portalData";
+import { RefreshCw, UserPlus, Search, Shield, ChevronDown, User } from "lucide-react";
+import type { ChangeEvent } from "react";
+import type { FacilitySummary } from "@/lib/types";
+
+const columns = ["User Identity", "Security Role", "Status", "Last Login"];
+const FACILITY_ALL = "all";
+
+export default function UsersPage() {
+  const { organizationId, isOrgAdmin } = usePortalSession();
+  const searchParams = useSearchParams();
+  const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const [facilityFilter, setFacilityFilter] = useState<string>(FACILITY_ALL);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(searchParams.get("user"));
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"invite" | "identity" | "status" | null>(null);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const users = useMemo(() => directory?.users ?? [], [directory]);
+  const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
+  const locationMemberships = useMemo(() => directory?.locationMemberships ?? [], [directory]);
+  const directoryPartialError = directory?.partialError ?? null;
+
+  const loadDirectory = async () => {
+    setStatusMessage(null);
+    await refreshDirectory();
+  };
+
+  const facilityLookup = useMemo(() => {
+    return facilities.reduce<Record<string, FacilitySummary>>((acc, facility) => {
+      acc[facility.id] = facility;
+      return acc;
+    }, {});
+  }, [facilities]);
+
+  useEffect(() => {
+    const userFromQuery = searchParams.get("user");
+    if (userFromQuery && userFromQuery !== selectedUserId) {
+      setSelectedUserId(userFromQuery);
+    }
+  }, [searchParams, selectedUserId]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return users.filter((user) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        user.name.toLowerCase().includes(normalizedSearch) ||
+        user.email.toLowerCase().includes(normalizedSearch);
+      const matchesFacility =
+        facilityFilter === FACILITY_ALL || user.facilityIds.includes(facilityFilter);
+      return matchesSearch && matchesFacility;
+    });
+  }, [facilityFilter, searchTerm, users]);
+
+  const selectedUser =
+    filteredUsers.find((user) => user.id === selectedUserId) ?? filteredUsers[0] ?? null;
+  const selectedFacilityAssignments = useMemo(() => {
+    if (!selectedUser) return [];
+    const seen = new Set<string>();
+    return locationMemberships
+      .filter((membership) => membership.user_id === selectedUser.id)
+      .map((membership) => {
+        const facility = facilityLookup[membership.location_id];
+        return facility ? { membership, facility } : null;
+      })
+      .filter((entry): entry is { membership: (typeof locationMemberships)[number]; facility: FacilitySummary } => Boolean(entry))
+      .filter((entry) => {
+        if (seen.has(entry.facility.id)) return false;
+        seen.add(entry.facility.id);
+        return true;
+      });
+  }, [facilityLookup, locationMemberships, selectedUser]);
+
+  const activeUsers = users.filter((user) => user.isActive).length;
+  const adminUsers = users.filter((user) => user.role === "admin").length;
+  const activeRatio = users.length ? Math.round((activeUsers / users.length) * 100) : 0;
+
+  const summaryDeck = [
+    { label: "Directory", value: users.length || 0, detail: "Total Users" },
+    { label: "Active", value: activeUsers, detail: `${activeRatio}% Utilization` },
+    { label: "Admin", value: adminUsers, detail: "Full Access" },
+    { label: "Coverage", value: facilities.length, detail: "Managed Sites" },
+  ];
+
+  const showEmptyState = !filteredUsers.length && !isLoading && !statusMessage;
+
+  const handleInviteUser = async () => {
+    if (!organizationId) {
+      setOperationMessage("Organization context missing.");
+      return;
+    }
+    const email = window.prompt("Enter the new user's email address");
+    if (!email) return;
+    const role = window.prompt("Role (admin, user, viewer)", "user") || "user";
+    setOperationMessage(null);
+    setPendingAction("invite");
+    try {
+      await UsersAdapter.inviteUser(organizationId, { email, role_key: role });
+      setOperationMessage(`Invitation sent to ${email}.`);
+      await loadDirectory();
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Unable to invite user.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    if (!organizationId || !selectedUser) return;
+    if (!window.confirm(`Are you sure you want to ${selectedUser.isActive ? "deactivate" : "reactivate"} ${selectedUser.name}?`)) return;
+    setPendingAction("status");
+    try {
+      await UsersAdapter.updateUser(organizationId, selectedUser.id, { is_active: !selectedUser.isActive });
+      setOperationMessage(`${selectedUser.name} status updated.`);
+      await loadDirectory();
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Update failed.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleEditUser = async () => {
+      if (!organizationId || !selectedUser) return;
+      const newName = window.prompt("Update Name", selectedUser.name);
+      if (!newName) return;
+      setPendingAction("identity");
+      try {
+          await UsersAdapter.updateUser(organizationId, selectedUser.id, { display_name: newName });
+          setOperationMessage("Identity synchronized.");
+          await loadDirectory();
+      } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Sync failed.";
+          setOperationMessage(message);
+      } finally {
+          setPendingAction(null);
+      }
+  };
+
+  const handleRoleChange = async (event: ChangeEvent<HTMLSelectElement>) => {
+    if (!organizationId || !selectedUser || !isOrgAdmin) return;
+    const nextRole = event.target.value;
+    if (!nextRole || nextRole === selectedUser.role) return;
+    setPendingAction("identity");
+    try {
+      await UsersAdapter.updateUserRole(selectedUser.id, nextRole);
+      setOperationMessage(`Role updated to ${nextRole}.`);
+      await loadDirectory();
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Unable to update role.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleAddFacilityAssignment = async () => {
+    if (!organizationId || !selectedUser || !isOrgAdmin) return;
+    const locationId = window.prompt("Facility ID");
+    if (!locationId?.trim()) return;
+    const role = window.prompt("Assignment role", "member") || "member";
+    setPendingAction("identity");
+    try {
+      await UsersAdapter.addFacilityMembership(organizationId, selectedUser.id, locationId.trim(), role.trim() || "member");
+      setOperationMessage(`Assigned ${selectedUser.name} to ${locationId.trim()}.`);
+      await loadDirectory();
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Unable to add assignment.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleRemoveFacilityAssignment = async (membershipId: string) => {
+    if (!organizationId || !isOrgAdmin) return;
+    setPendingAction("identity");
+    try {
+      await UsersAdapter.removeFacilityMembership(organizationId, membershipId);
+      setOperationMessage("Facility assignment removed.");
+      await loadDirectory();
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Unable to remove assignment.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  if (!organizationId) {
+    return <EmptyState title="Org Context Missing" description="No organization linked." />;
+  }
+
+  const directoryError = error instanceof Error ? error.message : error ? "Unable to load user directory." : null;
+
+  return (
+    <article className="space-y-4">
+      {directoryPartialError ? (
+        <ErrorPanel
+          title="Partial directory data"
+          error={directoryPartialError}
+          action={<button type="button" onClick={() => void loadDirectory()} className="rounded-full border border-current/20 px-4 py-2 text-[11px] font-black uppercase tracking-widest">Retry</button>}
+        />
+      ) : null}
+      {directoryError ? (
+        <ErrorPanel
+          title="Directory load failed"
+          error={directoryError}
+          action={<button type="button" onClick={() => void loadDirectory()} className="rounded-full border border-current/20 px-4 py-2 text-[11px] font-black uppercase tracking-widest">Retry</button>}
+        />
+      ) : null}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {summaryDeck.map((stat) => (
+          <StatCard key={stat.label} label={stat.label} value={stat.value} detail={stat.detail} />
+        ))}
+      </div>
+
+      <PageSection
+        title="Access Directory"
+        description="Review users, roles, facility access, and backend synchronization state."
+        variant="panel"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative group">
+               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-brand transition-colors" />
+               <input
+                 type="search"
+                 placeholder="Search registry..."
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+                 className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm"
+               />
+            </div>
+            <FacilitySelector
+              facilities={facilities}
+              value={facilityFilter}
+              onChange={setFacilityFilter}
+            />
+            <button
+              onClick={() => void loadDirectory()}
+              disabled={isLoading}
+              title={isLoading ? "Directory refresh already in progress" : "Refresh user directory"}
+              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-brand transition-all shadow-sm"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={handleInviteUser}
+              disabled={!isOrgAdmin || pendingAction !== null}
+              title={!isOrgAdmin ? "Organization admin permission is required to invite users." : undefined}
+              className="flex items-center gap-2 rounded-lg bg-brand hover:bg-brand-accent px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-brand/10 transition-all active:scale-95 disabled:opacity-50"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              {pendingAction === "invite" ? "Adding..." : "Add Users"}
+            </button>
+          </div>
+        }
+      >
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div className="lg:col-span-3">
+            {isLoading ? (
+              <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-brand/40" /></div>
+            ) : statusMessage ? (
+              <EmptyState title="Directory error" description={statusMessage} tone="danger" action={<button type="button" onClick={() => void loadDirectory()} className="rounded-full border border-current/20 px-4 py-2 text-[11px] font-black uppercase tracking-widest">Retry</button>} />
+            ) : showEmptyState ? (
+              <EmptyState title="No users match the current view" description="Try adjusting search or facility filters. This is an empty filtered result, not a load failure." />
+            ) : (
+              <div className="-mx-4 -mb-4">
+                <DataTableShell columns={columns}>
+                  {filteredUsers.map((user) => {
+                    const membershipFacilityIds = Array.from(
+                      new Set(
+                        locationMemberships
+                          .filter((membership) => membership.user_id === user.id)
+                          .map((membership) => membership.location_id)
+                          .filter(Boolean)
+                      )
+                    );
+                    const resolvedFacilityIds = membershipFacilityIds.length ? membershipFacilityIds : user.facilityIds;
+                    const facilityNames = resolvedFacilityIds
+                      .map((id) => facilityLookup[id]?.name)
+                      .filter(Boolean);
+                    const isSelected = user.id === selectedUser?.id;
+                    return (
+                      <tr
+                        key={user.id}
+                        onClick={() => setSelectedUserId(user.id)}
+                        className={`group transition-all duration-150 cursor-pointer ${
+                          isSelected ? "bg-brand/[0.03]" : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-7 h-7 rounded bg-slate-100 flex items-center justify-center text-[10px] font-black ${isSelected ? 'text-brand' : 'text-slate-500'}`}>
+                               {user.name.charAt(0)}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                               <span className={`text-xs font-bold truncate ${isSelected ? 'text-brand' : 'text-slate-900'}`}>
+                                 {user.name}
+                               </span>
+                               <span className="text-[10px] text-slate-500 font-medium truncate">{user.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <StatusBadge label={user.role} tone={user.role === "admin" ? "positive" : "neutral"} />
+                        </td>
+                        <td className="px-4 py-2">
+                           <div className="flex items-center gap-1.5">
+                              <div className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                          <span className="text-[11px] font-bold text-slate-600 uppercase tracking-widest">{user.isActive ? "Active" : "Locked"}</span>
+                           </div>
+                        </td>
+                        <td className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                          {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "N/A"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </DataTableShell>
+              </div>
+            )}
+          </div>
+
+          <aside className="lg:border-l border-slate-100 pl-4 py-2">
+             <div className="sticky top-4 space-y-6">
+                {selectedUser ? (
+                  <>
+                    <header className="space-y-3">
+                       <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-brand/10 text-brand flex items-center justify-center text-lg font-black shadow-inner">
+                            {selectedUser.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                             <h3 className="text-[14px] font-black text-slate-950 leading-none truncate uppercase tracking-tight">{selectedUser.name}</h3>
+                          <p className="text-[10px] text-slate-500 font-bold mt-1 truncate">{selectedUser.email}</p>
+                          </div>
+                       </div>
+                       <div className="flex gap-1.5">
+                          <StatusBadge label={selectedUser.role} tone="neutral" />
+                          <StatusBadge label={selectedUser.isActive ? "Sync: Active" : "Sync: Locked"} tone={selectedUser.isActive ? "positive" : "danger"} />
+                       </div>
+                    </header>
+
+                    <nav className="space-y-4">
+                       <div className="space-y-2">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Facility Assignments</p>
+                          <div className="grid grid-cols-1 gap-1">
+                             {selectedFacilityAssignments.length ? selectedFacilityAssignments.map(({ membership, facility }) => (
+                               <Link
+                                 key={membership.location_membership_id}
+                                 href={`/facilities?facility=${encodeURIComponent(facility.id)}`}
+                                 className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between group transition hover:bg-slate-100"
+                               >
+                                  <span className="text-[11px] font-bold text-slate-800 truncate">{facility.name}</span>
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{membership.role || "member"}</span>
+                               </Link>
+                             )) : <div className="p-3 text-center border border-dashed border-slate-200 rounded-lg text-[10px] font-bold text-slate-400 uppercase">No facility assignments found.</div>}
+                          </div>
+                       </div>
+
+                       <div className="space-y-2">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">System Audit</p>
+                          <button 
+                             onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                             className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-500 hover:text-brand transition-all"
+                          >
+                             Technical Details
+                             <ChevronDown className={`w-3 h-3 transition-transform ${showTechnicalDetails ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showTechnicalDetails && (
+                            <div className="p-3 rounded-lg bg-slate-50 font-mono text-[9px] text-slate-700 border border-slate-200 space-y-1 overflow-hidden">
+                               <p>UID: {selectedUser.id}</p>
+                               <p>SIG: {selectedUser.permissions.join('|')}</p>
+                               <p>TS: {new Date(selectedUser.lastUpdated).getTime()}</p>
+                            </div>
+                          )}
+                       </div>
+                    </nav>
+
+                    <footer className="space-y-3 pt-2">
+                       {!isOrgAdmin ? (
+                         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                           Organization admin permission is required for user changes.
+                         </p>
+                       ) : null}
+                          <div className="grid grid-cols-2 gap-2">
+                          <button onClick={handleEditUser} disabled={!isOrgAdmin || pendingAction !== null} title={!isOrgAdmin ? "Organization admin permission is required." : undefined} className="py-2 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === "identity" ? "Saving..." : "Identity"}</button>
+                          <button 
+                             onClick={handleToggleActive} 
+                             disabled={!isOrgAdmin || pendingAction !== null}
+                             title={!isOrgAdmin ? "Organization admin permission is required." : undefined}
+                             className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-50 ${selectedUser.isActive ? 'bg-rose-500/10 text-rose-500 border border-rose-500/10 hover:bg-rose-500 hover:text-white' : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'}`}
+                          >
+                             {pendingAction === "status" ? "Saving..." : selectedUser.isActive ? "Suspend" : "Activate"}
+                          </button>
+                       </div>
+                       <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Role Assignment</p>
+                          <div className="relative">
+                             <Shield className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                             <select
+                               className="w-full pl-7 pr-3 py-1.5 bg-transparent text-[11px] font-bold text-slate-700 outline-none appearance-none cursor-pointer"
+                               value={selectedUser.role}
+                               onChange={(event) => void handleRoleChange(event)}
+                               disabled={!isOrgAdmin || pendingAction !== null}
+                               title={!isOrgAdmin ? "Organization admin required" : "Change user role"}
+                             >
+                                <option value="admin">Administrator</option>
+                                <option value="user">Standard Agent</option>
+                                <option value="viewer">Audit Viewer</option>
+                             </select>
+                          </div>
+                       </div>
+                       <button
+                         type="button"
+                         onClick={() => void handleAddFacilityAssignment()}
+                         disabled={!isOrgAdmin || pendingAction !== null}
+                         title={!isOrgAdmin ? "Organization admin required" : "Assign facility"}
+                         className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
+                       >
+                         Add Facility Assignment
+                         <ChevronDown className="w-3.5 h-3.5" />
+                       </button>
+                       {selectedFacilityAssignments.length ? (
+                         <div className="space-y-2">
+                           {selectedFacilityAssignments.map(({ membership, facility }) => (
+                             <div key={membership.location_membership_id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2">
+                               <Link href={`/facilities?facility=${encodeURIComponent(facility.id)}`} className="min-w-0">
+                                 <p className="truncate text-[11px] font-bold text-slate-800">{facility.name}</p>
+                                 <p className="truncate text-[10px] text-slate-500">{facility.slug}</p>
+                               </Link>
+                               <button
+                                 type="button"
+                                 onClick={() => void handleRemoveFacilityAssignment(membership.location_membership_id)}
+                                 disabled={!isOrgAdmin || pendingAction !== null}
+                                 title={!isOrgAdmin ? "Organization admin required" : "Remove facility assignment"}
+                                 className="rounded-full border border-slate-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-50"
+                               >
+                                 Remove
+                               </button>
+                             </div>
+                           ))}
+                         </div>
+                       ) : null}
+                       {operationMessage && (
+                         <div className="p-2 rounded-lg bg-brand/5 border border-brand/10 text-[9px] font-black text-brand uppercase tracking-widest text-center animate-in fade-in zoom-in-95">
+                           {operationMessage}
+                         </div>
+                       )}
+                    </footer>
+                  </>
+                ) : (
+                  <div className="py-20 text-center space-y-4">
+                     <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mx-auto">
+                        <User className="w-5 h-5" />
+                     </div>
+                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select user registry</p>
+                  </div>
+                )}
+             </div>
+          </aside>
+        </div>
+      </PageSection>
+    </article>
+  );
+}
+

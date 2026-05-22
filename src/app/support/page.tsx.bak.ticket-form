@@ -1,0 +1,107 @@
+"use client";
+
+import Link from "next/link";
+import { PageTitle } from "@/components/ui/PageTitle";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { usePortalSession } from "@/lib/portalSession";
+import { portalConfig } from "@/lib/config";
+import { LifeBuoy, ChevronRight, Ticket, AlertTriangle } from "lucide-react";
+
+export default function SupportPage() {
+  const { session } = usePortalSession();
+  const formUrl = portalConfig.supportFormUrl;
+  const environmentTone = portalConfig.environment === "production" ? "positive" : "warning";
+
+  return (
+    <div className="space-y-6">
+      <PageTitle
+        title="Support Tickets"
+        subtitle="Submit a new ticket or check on an existing request."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card>
+            <CardContent className="p-8">
+              <div className="flex flex-col items-center justify-center space-y-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+                  <LifeBuoy className="w-8 h-8 text-slate-500" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800">Need Assistance?</h3>
+                <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">
+                  If you require operational assistance, please use the provided support form or coordinate via your internal help desk.
+                </p>
+                {formUrl ? (
+                  <Link
+                    href={formUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-accent inline-flex items-center gap-2"
+                  >
+                    Open Support Form <ChevronRight className="w-4 h-4" />
+                  </Link>
+                ) : (
+                  <div className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600">
+                    Support form is not configured for this environment.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+             <CardHeader title="What to include" />
+              <CardContent>
+                <ul className="list-disc list-inside text-sm text-slate-600 space-y-2">
+                  <li>Organization</li>
+                  <li>User email</li>
+                  <li>Page/route</li>
+                  <li>Report ID/VIN if relevant</li>
+                  <li>Screenshot/attachment</li>
+                  <li>Severity/urgency</li>
+                </ul>
+              </CardContent>
+          </Card>
+          <Card>
+             <CardHeader title="Escalation" />
+              <CardContent>
+                <p className="text-sm text-slate-600">
+                  For urgent issues, please contact your account manager directly or use the escalation procedures outlined in your service agreement.
+                </p>
+              </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader
+          title="Technical Details"
+          subtitle="Provide these values when escalating an incident."
+        />
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p className="text-sm font-semibold text-slate-600">API Base</p>
+              <p className="text-sm text-slate-800 break-all font-mono text-xs bg-slate-50 p-2 rounded-md">{portalConfig.apiBase}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+              <p className="text-sm font-semibold text-slate-600">Environment</p>
+              <div className="flex items-center gap-2">
+                <StatusBadge label={portalConfig.environment} tone={environmentTone} />
+              </div>
+            </div>
+            {session?.organization?.organization_id && (
+               <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                <p className="text-sm font-semibold text-slate-600">Organization ID</p>
+                <p className="text-sm text-slate-800 break-all font-mono text-xs bg-slate-50 p-2 rounded-md">{session.organization.organization_id}</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

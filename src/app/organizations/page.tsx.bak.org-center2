@@ -1,0 +1,133 @@
+"use client";
+
+import Link from "next/link";
+import { PageTitle } from "@/components/ui/PageTitle";
+import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalDirectorySnapshot } from "@/lib/portalData";
+import { Building2, Users } from "lucide-react";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+
+export default function OrganizationsPage() {
+  const { session, organizationId, isSuperAdmin } = usePortalSession();
+  const { data: directory } = usePortalDirectorySnapshot();
+
+  const currentOrganizationName = session?.organization?.name || "Not assigned";
+  const facilityCount = directory?.facilities?.length ?? 0;
+  const userCount = directory?.users?.length ?? 0;
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-6">
+        <PageTitle
+          title="Organizations"
+          subtitle="Manage your connected organizations and tenant data."
+        />
+
+        <Card className="overflow-hidden shadow-sm bg-slate-50">
+          <CardHeader
+            title={currentOrganizationName}
+            subtitle={organizationId ? `ID: ${organizationId}` : ""}
+          />
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="text-center">
+                <StatCard label="Organizations" value={1} />
+              </div>
+              <div className="text-center">
+                <StatCard
+                  label="Facilities"
+                  value={`${directory?.facilities?.filter((facility) => facility.active).length ?? 0}/${facilityCount}`}
+                  icon={<Building2 />}
+                />
+              </div>
+              <div className="text-center">
+                <StatCard
+                  label="Users"
+                  value={`${directory?.users?.filter((user) => user.isActive).length ?? 0}/${userCount}`}
+                  icon={<Users />}
+                />
+              </div>
+            </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="font-semibold text-slate-600">Your Role</div>
+                <div className="text-right"><StatusBadge label={session?.user?.role || "N/A"} /></div>
+                <div className="font-semibold text-slate-600">Dashboard</div>
+                <div className="text-right"><StatusBadge label={session?.branding_snapshot?.["power_bi_embed_url"] ? "Configured" : "Not Configured"} tone={session?.branding_snapshot?.["power_bi_embed_url"] ? "positive" : "neutral"} /></div>
+              </div>
+            </CardContent>
+          </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
+          <Card>
+            <CardHeader title="Organization Connections" subtitle="Organizations your account is assigned to." />
+            <CardContent className="p-6">
+              <div className="text-sm text-slate-500 italic">
+                Backend does not currently return assigned organization list for this session.
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1"
+                        disabled
+                        title={isSuperAdmin ? "Backend action pending" : "Super admin required"}
+                      >
+                        Add Organization
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{isSuperAdmin ? "Backend action pending" : "Super admin required"}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1"
+                        disabled
+                        title={isSuperAdmin ? "Backend action pending" : "Super admin required"}
+                      >
+                        Link Organization
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{isSuperAdmin ? "Backend action pending" : "Super admin required"}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader title="Facilities Under Current Organization" subtitle="All facilities managed by this organization." />
+          <CardContent className="p-6">
+            {facilityCount > 0 ? (
+              <ul className="space-y-2">
+                {directory?.facilities?.map(f => (
+                  <li key={f.id}>
+                    <Link
+                      href="/facilities"
+                      className="text-sm text-slate-700 flex items-center gap-2 hover:text-blue-600"
+                    >
+                      <Building2 className="w-4 h-4 text-slate-400" /> {f.name} ({f.slug})
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-sm text-slate-500 italic">
+                No facilities found or backend facilities endpoint unavailable.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+      </div>    </TooltipProvider>
+  );
+}

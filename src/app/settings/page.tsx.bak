@@ -1,0 +1,103 @@
+"use client";
+
+import Link from "next/link";
+import { usePortalSession } from "@/lib/portalSession";
+import { PageSection } from "@/components/ui/PageSection";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Mail } from "lucide-react";
+
+export default function SettingsPage() {
+  const { user, logout } = usePortalSession();
+
+  const accountTiles = [
+    {
+      label: "Identity",
+      value: user?.display_name || "Administrator",
+      detail: "Name",
+    },
+    {
+      label: "Email",
+      value: user?.email || "noreply@nulanesystems.com",
+      detail: "Primary contact",
+    },
+  ];
+
+  return (
+    <article className="space-y-8 px-6 lg:px-10 py-6">
+      <header className="space-y-2">
+        <p className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400">Workspace Controls</p>
+        <h1 className="text-3xl font-black text-slate-900">Settings</h1>
+        <p className="text-sm text-slate-500 max-w-3xl">
+          Curate the DocuDent shell, guard your identity, and keep the operational fabric lean.
+        </p>
+      </header>
+
+      <PageSection title="Account & Access" description="Identity tiles and session controls">
+        <div className="grid gap-4 md:grid-cols-2">
+          {accountTiles.map((tile) => (
+            <div key={tile.label} className="rounded-3xl border border-slate-200/70 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">{tile.label}</p>
+              <p className="text-lg font-black text-slate-900">{tile.value}</p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">{tile.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em] text-rose-600 transition hover:bg-rose-100"
+          >
+            Terminate session
+          </button>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Visual identity"
+        description="The premium DocuDent theme toggle now lives in the top bar for instant contrast control."
+      >
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200/70 bg-slate-50/60 p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Sun Mode</p>
+            <p className="text-lg font-black text-slate-900">Bright focus with gold highlights.</p>
+            <p className="text-[10px] text-slate-600 uppercase tracking-[0.3em]">Ideal for light control rooms</p>
+          </div>
+          <div className="rounded-3xl border border-slate-200/70 bg-slate-50/60 p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Moon Mode</p>
+            <p className="text-lg font-black text-slate-900">High contrast for nighttime ops.</p>
+            <p className="text-[10px] text-slate-600 uppercase tracking-[0.3em]">Auto-syncs with system preferences</p>
+          </div>
+          <div className="rounded-3xl border border-slate-200/70 bg-slate-50/60 p-4 shadow-sm flex flex-col gap-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Toggle live</p>
+            <StatusBadge label="Premium" tone="positive" />
+            <p className="text-xs text-slate-500">Use the top-right device-style switch to change modes instantly.</p>
+          </div>
+        </div>
+      </PageSection>
+
+      <PageSection title="Email signature" description="Primary AWCT signature generator">
+        <div className="rounded-3xl border border-slate-200/70 bg-white p-5 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900">DocuDent email signature tools</p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Available via AWCT credentials</p>
+            </div>
+          </div>
+          <p className="text-sm text-slate-500">
+            Generate or update your AWCT signature card in minutes. Keep formatting consistent and ready for outreach.
+          </p>
+          <Link
+            href="/awct/signature"
+            className="self-start rounded-full bg-slate-900 px-5 py-2 text-[11px] font-black uppercase tracking-[0.3em] text-white transition hover:bg-slate-800"
+          >
+            Open signature generator
+          </Link>
+        </div>
+      </PageSection>
+    </article>
+  );
+}

@@ -1,0 +1,82 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getPortalAuthDebugConfig, redirectToAuth0Login } from "@/lib/portalAuth";
+
+export function LoginRedirectClient() {
+  const searchParams = useSearchParams();
+  const returnTo = searchParams?.get("returnTo") || "/dashboard";
+  const [status, setStatus] = useState<"starting" | "redirecting" | "failed">("starting");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const debugConfig = useMemo(() => getPortalAuthDebugConfig(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const startRedirect = async () => {
+      setStatus("redirecting");
+      setErrorMessage(null);
+      console.debug("[Auth0] login page attempting redirect", {
+        returnTo,
+        debugConfig,
+        href: window.location.href,
+      });
+      try {
+        await redirectToAuth0Login(returnTo);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : "Unknown sign-in error";
+        console.warn("[Auth0] login page redirect failed", error);
+        setErrorMessage(message);
+        setStatus("failed");
+      }
+    };
+
+    void startRedirect();
+    return () => {
+      cancelled = true;
+    };
+  }, [returnTo, debugConfig]);
+
+  return (
+    <main
+      className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 text-slate-900"
+    >
+      <div className="rounded-[2rem] border border-white/70 bg-white/85 px-8 py-10 text-center shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur">
+        <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400">Authentication</p>
+        <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
+          {status === "failed" ? "Sign-in could not start" : "Opening sign-in"}
+        </h1>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500">
+          {status === "failed"
+            ? "The portal could not start the Auth0 redirect. Check the details below."
+            : "Redirecting to Auth0 so you can continue to the portal."}
+        </p>
+        <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400" data-login-status-text>
+          {status}
+        </p>
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
+          <p className="font-black uppercase tracking-[0.24em] text-slate-400">Debug</p>
+          <p className="mt-2">Return target: <span className="font-semibold text-slate-800">{returnTo}</span></p>
+          <p className="mt-1">State: <span className="font-semibold text-slate-800">{status}</span></p>
+          <p className="mt-1">
+            Location: <span className="font-semibold text-slate-800">{typeof window !== "undefined" ? window.location.origin : "server"}</span>
+          </p>
+          <p className="mt-1">
+            Auth0 domain: <span className="font-semibold text-slate-800">{debugConfig && "error" in debugConfig ? "unavailable" : (debugConfig as { domain?: string } | null)?.domain || "unknown"}</span>
+          </p>
+          {debugConfig ? (
+            <pre className="mt-3 overflow-auto rounded-xl bg-white p-3 text-[11px] leading-relaxed text-slate-700">
+              {JSON.stringify(debugConfig, null, 2)}
+            </pre>
+          ) : null}
+          {errorMessage ? (
+            <p className="mt-3 text-[11px] font-semibold text-rose-600">{errorMessage}</p>
+          ) : null}
+        </div>
+      </div>
+    </main>
+  );
+}

@@ -1,0 +1,277 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Shield, LayoutDashboard, Sparkles, ChevronRight } from "lucide-react";
+import { useMemo, type KeyboardEvent, type MouseEvent } from "react";
+import { usePortalSession } from "@/lib/portalSession";
+import { getAppBranding, getPortalBranding } from "@/lib/branding";
+import type { PortalSessionResponse } from "@/lib/types";
+import { redirectToAuth0Login } from "@/lib/portalAuth";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+function buildLoginUrl(returnTo: string): string {
+  return `/login?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+function WorkspaceCard({
+  title,
+  description,
+  href,
+  tone,
+  badge,
+  quickLinks,
+  showQuickLinks,
+  disabled,
+  loginTarget,
+}: {
+  title: string;
+  description: string;
+  href?: string;
+  tone: "main" | "control";
+  badge: string;
+  quickLinks: Array<{ label: string; href: string }>;
+  showQuickLinks: boolean;
+  disabled?: boolean;
+  loginTarget?: string;
+}) {
+  const router = useRouter();
+  const baseTone =
+    tone === "control"
+      ? "border-slate-200 bg-slate-50/80 hover:border-slate-300 hover:bg-slate-50"
+      : "border-emerald-200 bg-emerald-50/80 hover:border-emerald-300 hover:bg-emerald-50";
+  const toneAccent = tone === "control" ? "text-slate-900" : "text-emerald-900";
+  const iconTone = tone === "control" ? "text-slate-600 bg-slate-900/5" : "text-emerald-700 bg-emerald-600/10";
+  const arrowTone = tone === "control" ? "text-slate-400" : "text-emerald-500";
+  const cardAction = async () => {
+    if (disabled) {
+      return;
+    }
+    if (href) {
+      router.push(href);
+      return;
+    }
+    if (loginTarget) {
+      window.location.assign(buildLoginUrl(loginTarget));
+    }
+  };
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) {
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      void cardAction();
+    }
+  };
+  const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("a,button")) {
+      return;
+    }
+    void cardAction();
+  };
+
+  const card = (
+    <div
+      className={`group relative flex h-full min-h-[220px] flex-col justify-between rounded-[1.75rem] border p-6 shadow-sm transition ${
+        disabled ? "cursor-not-allowed opacity-60" : `${baseTone} cursor-pointer`
+      }`}
+      aria-disabled={disabled || undefined}
+      role={disabled ? undefined : "link"}
+      tabIndex={disabled ? -1 : 0}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+    >
+      <div className="space-y-5">
+        <div className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl ${iconTone}`}>
+          {tone === "control" ? <Shield className="h-6 w-6" /> : <LayoutDashboard className="h-6 w-6" />}
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400">{badge}</p>
+          <h2 className={`text-2xl font-black tracking-tight ${toneAccent}`}>{title}</h2>
+          <p className="max-w-md text-sm leading-relaxed text-slate-500">{description}</p>
+        </div>
+      </div>
+      <div className="mt-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">
+            {disabled ? "Access limited" : "Enter workspace"}
+          </span>
+          <ArrowRight className={`h-5 w-5 transition group-hover:translate-x-0.5 ${arrowTone}`} />
+        </div>
+        {showQuickLinks ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {quickLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`inline-flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.24em] transition ${
+                  tone === "control"
+                    ? "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    : "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50"
+                }`}
+              >
+                <span className="truncate">{link.label}</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const primaryAction =
+    disabled ? null : href ? (
+      <Link
+        href={loginTarget ? buildLoginUrl(loginTarget) : href}
+        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.28em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 ${
+          tone === "control" ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-emerald-600 text-white hover:bg-emerald-500"
+        }`}
+      >
+        Open workspace
+      </Link>
+    ) : loginTarget ? (
+      <Link
+        href={buildLoginUrl(loginTarget)}
+        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.28em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 ${
+          tone === "control" ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-emerald-600 text-white hover:bg-emerald-500"
+        }`}
+      >
+        Sign in to continue
+      </Link>
+    ) : null;
+
+  return (
+    <div className="flex h-full flex-col gap-4">
+      {card}
+      {primaryAction ? <div className="px-1">{primaryAction}</div> : null}
+    </div>
+  );
+}
+
+export default function HomePage() {
+  const { session, status, isSuperAdmin } = usePortalSession();
+  const appBranding = useMemo(() => getAppBranding("/"), []);
+  const branding = useMemo(() => {
+    if (!session) return null;
+    return getPortalBranding(session as PortalSessionResponse);
+  }, [session]);
+
+  const organizationName = branding?.organizationName ?? session?.organization?.name ?? appBranding.appLabel;
+  const subtitle =
+    status === "loading"
+      ? "Resolving your session..."
+      : "Choose the workspace you want to open. Main Portal stays customer-facing. Management Portal is reserved for operator work.";
+
+  const controlDisabled = status === "success" && !isSuperAdmin;
+  const unauthenticated = status === "unauthenticated";
+  const showQuickLinks = status === "success";
+  const sessionLabel = status === "success" ? session?.user?.role || "Signed in" : "Opening workspace";
+
+  if (unauthenticated) {
+    return (
+      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 py-10 text-slate-900">
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-5xl items-center justify-center">
+          <div className="w-full rounded-[2rem] border border-white/70 bg-white/85 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur">
+            <EmptyState
+              title="Sign in to continue"
+              description="The portal is locked until Auth0 finishes authentication."
+              action={
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await redirectToAuth0Login("/dashboard");
+                  }}
+                  className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.28em] text-white transition hover:bg-slate-800"
+                >
+                  Log in
+                </button>
+              }
+            />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 py-10 text-slate-900">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-5xl flex-col justify-center">
+        <section className="rounded-[2rem] border border-white/70 bg-white/85 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur">
+          <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.35em] text-slate-500">
+                  <Sparkles className="h-3.5 w-3.5 text-slate-400" />
+                  Workspace selector
+                </div>
+                <h1 className="text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
+                  {organizationName}
+                </h1>
+                <p className="max-w-2xl text-sm leading-relaxed text-slate-500">{subtitle}</p>
+              </div>
+              <div className="flex flex-col items-start gap-3 md:items-end md:text-right">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400">Session</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {sessionLabel}
+                  </p>
+                </div>
+                {branding?.logoUrl ? (
+                  <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Branding</span>
+                    <span className="text-xs font-semibold text-slate-700">{branding.organizationName}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <WorkspaceCard
+                title="Client Portal"
+                description={unauthenticated ? "Sign in to open the customer-facing portal." : "Open the customer-facing portal for dashboards, damage reports, RSA reports, intake, and settings."}
+                tone="main"
+                badge="Primary workspace"
+                showQuickLinks={showQuickLinks}
+                quickLinks={[
+                  { label: "Damage Reports", href: "/reports/damage" },
+                  { label: "RSA Reports", href: "/reports/rsa" },
+                  { label: "Dashboard", href: "/dashboard" },
+                  { label: "DocuDent", href: "/docudent" },
+                  { label: "DocuFit", href: "/docufit" },
+                  { label: "Settings", href: "/settings" },
+                  { label: "Branding", href: "/branding" },
+                ]}
+                loginTarget="/dashboard"
+              />
+              <WorkspaceCard
+                title="Control Portal"
+                description={
+                  controlDisabled
+                    ? "This session does not have super-admin access. Control tools stay hidden until an authorized operator signs in."
+                    : "Open the operator workspace for triage, queues, audit, backup, and control operations."
+                }
+                tone="control"
+                badge={controlDisabled ? "Limited access" : "Operator workspace"}
+                showQuickLinks={showQuickLinks}
+                quickLinks={[
+                  { label: "Control Home", href: "/control" },
+                  { label: "Overview", href: "/control/overview" },
+                  { label: "Reports", href: "/control/reports" },
+                  { label: "Outbox", href: "/control/outbox" },
+                  { label: "Settings", href: "/control/settings" },
+                  { label: "Audit", href: "/control/audit" },
+                ]}
+                disabled={controlDisabled}
+                loginTarget="/control"
+              />
+            </div>
+
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}

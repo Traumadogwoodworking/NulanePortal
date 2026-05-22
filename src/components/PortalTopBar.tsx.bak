@@ -1,0 +1,137 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { usePortalSession } from "@/lib/portalSession";
+import { getPortalBranding, getAppBranding } from "@/lib/branding";
+import { useState, useMemo } from "react";
+import { Moon, Sun, Sparkles } from "lucide-react";
+import { usePortalThemeMode } from "@/lib/portalTheme";
+
+interface PortalTopBarProps {
+  pageTitle: string;
+  pageSubtitle?: string;
+}
+
+const ThemeToggle = () => {
+  const { mode, setMode } = usePortalThemeMode();
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm">
+      {[
+        { key: "branded", label: "Brand", icon: Sparkles },
+        { key: "dark", label: "Dark", icon: Moon },
+        { key: "light", label: "Light", icon: Sun },
+      ].map((item) => {
+        const Icon = item.icon;
+        const active = mode === item.key;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setMode(item.key as typeof mode)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] transition ${
+              active ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
+  const pathname = usePathname();
+  const safePathname = pathname ?? "/";
+  const { user, logout, session } = usePortalSession();
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const branding = session ? getPortalBranding(session) : null;
+  const appBranding = useMemo(() => getAppBranding(safePathname), [safePathname]);
+  
+  const profileName = user?.display_name?.trim() || user?.email?.split("@")[0] || "Account";
+  const organizationName = branding?.organizationName ?? session?.organization?.name ?? "Portal";
+  const logoSrc = branding?.logoUrl || appBranding.brandLogo || null;
+  const fallbackLogo = "/media/Nulane_Systems-removebg-preview-inv.png";
+
+  return (
+    <header className="portal-top-bar sticky top-0 z-40 w-full border-b border-slate-200/60 bg-white/92 backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-[1580px] items-center justify-between gap-6 px-6 py-3">
+        <div className="flex min-w-[260px] items-center gap-3">
+          <div className="flex h-12 min-w-12 items-center justify-center overflow-hidden rounded-2xl bg-transparent">
+            <Image
+              src={logoSrc || fallbackLogo}
+              alt={organizationName}
+              width={96}
+              height={48}
+              className="h-12 w-auto object-contain"
+              priority
+            />
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setProfileOpen((prev) => !prev)}
+              className="group flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-left shadow-sm transition hover:border-slate-300"
+              aria-expanded={profileOpen}
+            >
+              <div className="flex min-w-0 flex-col text-sm leading-none">
+                <span className="truncate font-black text-slate-900">{profileName}</span>
+                <span className="truncate text-[9px] uppercase tracking-[0.2em] text-slate-400">
+                  {user?.role || "Member"}
+                </span>
+              </div>
+            </button>
+            {profileOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setProfileOpen(false)}></div>
+                <div className="absolute left-0 top-full mt-3 w-64 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
+                  <div className="space-y-1 border-b border-slate-100 pb-3">
+                    <p className="text-[8px] uppercase tracking-[0.4em] text-slate-400">Identity Context</p>
+                    <p className="text-sm font-black text-slate-900">{profileName}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">{user?.role || "Member"}</p>
+                    <p className="text-xs text-slate-500">{user?.email}</p>
+                  </div>
+                  <div className="space-y-1 pt-3">
+                    <Link
+                      href="/settings"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                    >
+                      Account Parameters
+                      <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Go</span>
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setProfileOpen(false);
+                        logout();
+                      }}
+                      className="w-full rounded-xl border border-rose-200 px-3 py-2 text-sm font-bold text-rose-500 hover:bg-rose-50"
+                    >
+                      Terminate Session
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col items-center gap-1 text-center">
+          <p className="text-[9px] uppercase tracking-[0.35em] text-slate-400">{pageSubtitle || "Command Center"}</p>
+          <h1 className="truncate text-sm font-black uppercase tracking-[0.35em] text-slate-900">{pageTitle}</h1>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-[12px] font-black uppercase tracking-[0.3em] text-slate-800">{organizationName}</p>
+            <p className="text-[9px] uppercase tracking-[0.4em] text-slate-400">{appBranding.appLabel || "Portal"}</p>
+          </div>
+          <ThemeToggle />
+        </div>
+      </div>
+    </header>
+  );
+}

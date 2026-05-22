@@ -1,0 +1,39 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { getAccessBarrier, getRouteByPath } from "@/lib/navigation";
+import { usePortalSession } from "@/lib/portalSession";
+import { PortalStatusScreen } from "./PortalStatusScreen";
+
+export function AccessGuardClient({ children }: { children: React.ReactNode }) {
+  const { hasPermission, isOrgAdmin, isPortalAccessAllowed, isAwct } = usePortalSession();
+  const pathname = usePathname();
+  const activeRoute = getRouteByPath(pathname ?? "/");
+
+  const accessInfo = { isPortalAccessAllowed, isOrgAdmin, isAwct, hasPermission };
+  const accessBarrier = getAccessBarrier(activeRoute, accessInfo);
+
+  if (accessBarrier?.type === "org-admin") {
+    return (
+      <PortalStatusScreen
+        title="Admin-only area"
+        description="You do not have the administrative role needed to view this section."
+      />
+    );
+  }
+
+  if (accessBarrier?.type === "permission") {
+    return (
+      <PortalStatusScreen
+        title="Restricted"
+        description={
+          accessBarrier.requiredPermission
+            ? `Permission "${accessBarrier.requiredPermission}" is required to view this page.`
+            : "Your permissions currently prevent access to this page."
+        }
+      />
+    );
+  }
+
+  return <>{children}</>;
+}

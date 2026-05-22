@@ -1,0 +1,228 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { PageSection } from "@/components/ui/PageSection";
+import { StatCard } from "@/components/ui/StatCard";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalDirectorySnapshot } from "@/lib/portalData";
+import { Search, RefreshCw, MapPin, Building2, ChevronRight, Settings2 } from "lucide-react";
+import type { LocationSummary } from "@/lib/types";
+
+const columns = ["Facility Identity", "Operating Region", "Site Count", "Sync Status"];
+
+export default function FacilitiesPage() {
+  const { organizationId } = usePortalSession();
+  const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
+  const directoryPartialError = directory?.partialError ?? null;
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [facilityDetail, setFacilityDetail] = useState<LocationSummary | null>(null);
+  const loadFacilities = async () => {
+    setStatusMessage(null);
+    await refreshDirectory();
+  };
+
+  const filteredFacilities = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return facilities;
+    return facilities.filter((f) => 
+      f.name.toLowerCase().includes(term) || 
+      f.slug.toLowerCase().includes(term) || 
+      (f.region || "").toLowerCase().includes(term)
+    );
+  }, [facilities, searchTerm]);
+
+  useEffect(() => {
+    if (!selectedFacilityId || !organizationId) {
+      return;
+    }
+    void (async () => {
+      try {
+        const detail = await FacilitiesAdapter.getLocationSummary(organizationId, selectedFacilityId);
+        setFacilityDetail(detail);
+      } catch {
+        setFacilityDetail(null);
+      }
+    })();
+  }, [selectedFacilityId, organizationId]);
+
+  const activeFacilityDetail = selectedFacilityId && organizationId ? facilityDetail : null;
+
+  const activeCount = facilities.filter(f => f.active).length;
+  const totalLocations = facilities.reduce((sum, f) => sum + (f.locationCount || 0), 0);
+
+  const summaryDeck = [
+    { label: "Total Sites", value: facilities.length, detail: "Managed Instances" },
+    { label: "Active Readiness", value: activeCount, detail: `${Math.round((activeCount/facilities.length)*100 || 0)}% Operational` },
+    { label: "Site Assets", value: totalLocations, detail: "Total Checkpoints" },
+  ];
+
+  const showEmptyState = !filteredFacilities.length && !isLoading && !statusMessage;
+
+  const facilitiesError = error instanceof Error ? error.message : error ? "Unable to load facilities." : null;
+
+  return (
+    <article className="space-y-4">
+      {directoryPartialError ? (
+        <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+          {directoryPartialError}
+        </div>
+      ) : null}
+      {facilitiesError ? <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">{facilitiesError}</div> : null}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        {summaryDeck.map((stat) => (
+          <StatCard key={stat.label} label={stat.label} value={stat.value} detail={stat.detail} />
+        ))}
+      </div>
+
+      <PageSection
+        title="Infrastructure Registry"
+        description="Autonomous facility and checkpoint management."
+        variant="panel"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative group">
+               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-brand transition-colors" />
+               <input
+                 type="search"
+                 placeholder="Search registry..."
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+                 className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[11px] font-bold text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm"
+               />
+            </div>
+            <button
+              onClick={() => void loadFacilities()}
+              className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 hover:text-brand transition-all shadow-sm"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        }
+      >
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div className="lg:col-span-3">
+            {isLoading ? (
+              <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-brand/40" /></div>
+            ) : statusMessage ? (
+              <EmptyState title="Sync Error" description={statusMessage} />
+            ) : showEmptyState ? (
+              <EmptyState title="No Records" description="Try adjusting search parameters." />
+            ) : (
+              <div className="-mx-4 -mb-4">
+                <DataTableShell columns={columns}>
+                  {filteredFacilities.map((f) => {
+                    const isSelected = f.id === selectedFacilityId;
+                    return (
+                      <tr
+                        key={f.id}
+                        onClick={() => {
+                          setFacilityDetail(null);
+                          setSelectedFacilityId(f.id);
+                        }}
+                        className={`group transition-all duration-150 cursor-pointer ${
+                          isSelected ? "bg-brand/[0.03] dark:bg-brand/10" : "hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                        }`}
+                      >
+                        <td className="px-4 py-2">
+                           <div className="flex items-center gap-3">
+                              <div className={`w-7 h-7 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 ${isSelected ? 'text-brand' : ''}`}>
+                                 <Building2 className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                 <span className={`text-xs font-bold truncate ${isSelected ? 'text-brand' : 'text-slate-900 dark:text-white'}`}>{f.name}</span>
+                                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight truncate">{f.slug}</span>
+                              </div>
+                           </div>
+                        </td>
+                        <td className="px-4 py-2 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">{f.region ?? "Global"}</td>
+                        <td className="px-4 py-2 text-[11px] font-black text-slate-900 dark:text-white">{f.locationCount} Sites</td>
+                        <td className="px-4 py-2">
+                           <StatusBadge label={f.active ? "Ready" : "Offline"} tone={f.active ? "positive" : "danger"} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </DataTableShell>
+              </div>
+            )}
+          </div>
+
+          <aside className="lg:border-l border-slate-100 dark:border-slate-800 pl-4 py-2">
+            <div className="sticky top-4 space-y-6">
+               {selectedFacilityId ? (
+                 <>
+                   <header className="space-y-3">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-lg bg-brand/10 text-brand flex items-center justify-center shadow-inner">
+                            <MapPin className="w-5 h-5" />
+                         </div>
+                         <div className="min-w-0">
+                            <h3 className="text-[14px] font-black text-slate-950 dark:text-white leading-none truncate uppercase tracking-tight">{activeFacilityDetail?.name || "Facility Identity"}</h3>
+                            <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-widest">{activeFacilityDetail?.city || "Unknown Site"}</p>
+                         </div>
+                      </div>
+                      <div className="flex gap-1.5">
+                         <StatusBadge label={activeFacilityDetail ? "Registry: Linked" : "Sync Pending"} tone={activeFacilityDetail ? "positive" : "neutral"} />
+                         <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[9px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                           ID: {selectedFacilityId.slice(0, 8)}
+                         </span>
+                      </div>
+                   </header>
+
+                   <nav className="space-y-4">
+                      <div className="space-y-2">
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Infrastructure State</p>
+                         <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-3 space-y-3">
+                            <div className="flex justify-between items-center">
+                               <span className="text-[11px] font-bold text-slate-500 uppercase">Operating State</span>
+                               <span className="text-[11px] font-black text-emerald-500 uppercase">Optimal</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                               <span className="text-[11px] font-bold text-slate-500 uppercase">Checkpoint Visibility</span>
+                               <span className="text-[11px] font-black text-slate-900 dark:text-white uppercase">Site Level</span>
+                            </div>
+                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Regional Context</p>
+                         <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 space-y-1">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Current Zone</p>
+                            <p className="text-[12px] font-bold text-slate-900 dark:text-white">{activeFacilityDetail?.state || "N/A"} Operational Hub</p>
+                         </div>
+                      </div>
+                   </nav>
+
+                   <footer className="space-y-2 pt-2">
+                      <button disabled className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all opacity-50 cursor-not-allowed">
+                         Site Parameters
+                         <Settings2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button disabled className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all opacity-50 cursor-not-allowed">
+                         Ownership Transfer
+                         <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                   </footer>
+                 </>
+               ) : (
+                 <div className="py-20 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300 mx-auto">
+                       <Building2 className="w-5 h-5" />
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select facility entry</p>
+                 </div>
+               )}
+            </div>
+          </aside>
+        </div>
+      </PageSection>
+    </article>
+  );
+}

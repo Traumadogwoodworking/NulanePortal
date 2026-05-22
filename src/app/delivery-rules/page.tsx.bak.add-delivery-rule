@@ -1,0 +1,374 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { PageTitle } from "@/components/ui/PageTitle";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FacilitySelector } from "@/components/ui/FacilitySelector";
+import { StatCard } from "@/components/ui/StatCard";
+import { updateEmailList, addEmailListMember, deleteEmailList, deleteEmailListMember } from "@/lib/services/notificationsService";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalDirectorySnapshot, usePortalEmailListMembers } from "@/lib/portalData";
+import { Bell, Users, Settings2, Search, RefreshCw, BarChart } from "lucide-react";
+import type { FacilitySummary } from "@/lib/types";
+
+const STATUS_COLUMNS = ["Delivery Rule", "Type", "Operational Entity", "State"];
+
+const typeTone: Record<string, "positive" | "warning" | "danger" | "neutral"> = {
+  notification: "positive",
+  alert: "warning",
+  "status-update": "neutral",
+  default: "neutral",
+};
+
+export default function DeliveryRulesPage() {
+  const { organizationId, isOrgAdmin } = usePortalSession();
+  const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [facilityFilter, setFacilityFilter] = useState<string>("all");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"member" | "status" | null>(null);
+  const emailLists = useMemo(() => directory?.emailLists ?? [], [directory]);
+  const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
+  const directoryPartialError = directory?.partialError ?? null;
+
+  const facilityLookup = useMemo(() => {
+    return facilities.reduce<Record<string, FacilitySummary>>((acc, facility) => {
+      acc[facility.id] = facility;
+      return acc;
+    }, {});
+  }, [facilities]);
+
+  const loadLists = async () => {
+    setStatusMessage(null);
+    await refreshDirectory();
+  };
+
+  const filteredLists = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    const facilityConstraint = facilityFilter !== "all";
+    return emailLists.filter((list) => {
+      const matchesQuery =
+        !query ||
+        list.list_name.toLowerCase().includes(query) ||
+        (list.list_key || "").toLowerCase().includes(query);
+      if (!matchesQuery) {
+        return false;
+      }
+      if (facilityConstraint) {
+        return list.location_id === facilityFilter;
+      }
+      return true;
+    });
+  }, [emailLists, searchTerm, facilityFilter]);
+
+  const resolvedSelectedListId =
+    selectedListId && filteredLists.some((list) => list.email_list_id === selectedListId)
+      ? selectedListId
+      : filteredLists[0]?.email_list_id ?? null;
+
+  const { data: members = [] } = usePortalEmailListMembers(resolvedSelectedListId);
+
+  const stats = useMemo(() => ([
+    { label: "Active Rules", value: emailLists.filter(l => l.is_active !== false).length, detail: "Delivery Triggers", icon: <BarChart/> },
+    { label: "Total Members", value: members.length || "...", detail: "Audience Reach", icon: <Users/> },
+    { label: "Regional Nodes", value: facilities.length, detail: "Facility Scopes", icon: <BarChart/> },
+  ]), [emailLists, members, facilities]);
+
+  const selectedList =
+    filteredLists.find((list) => list.email_list_id === resolvedSelectedListId) ??
+    filteredLists[0] ??
+    null;
+
+  const showEmptyState = !filteredLists.length && !isLoading && !statusMessage;
+
+  const routingError = error instanceof Error ? error.message : error ? "Unable to load delivery rules." : null;
+
+  const handleProvisionSubscriber = async () => {
+    if (!organizationId || !isOrgAdmin || !selectedList) {
+      return;
+    }
+    const email = window.prompt("Subscriber email address");
+    if (!email) {
+      return;
+    }
+    const displayName = window.prompt("Display name (optional)", "") || "";
+    setOperationMessage(null);
+    setPendingAction("member");
+    try {
+      await addEmailListMember(organizationId, selectedList.email_list_id, {
+        email,
+        display_name: displayName.trim() || undefined,
+        member_type: "external",
+      });
+      setOperationMessage(`Added ${email} to ${selectedList.list_name}.`);
+      await loadLists();
+    } catch (actionError) {
+      setOperationMessage(actionError instanceof Error ? actionError.message : "Unable to add subscriber.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleToggleRule = async () => {
+    if (!organizationId || !isOrgAdmin || !selectedList) {
+      return;
+    }
+    setOperationMessage(null);
+    setPendingAction("status");
+    try {
+      await updateEmailList(organizationId, selectedList.email_list_id, {
+        is_active: selectedList.is_active === false,
+      });
+      setOperationMessage(
+        selectedList.is_active === false
+          ? `Restored ${selectedList.list_name}.`
+          : `Paused ${selectedList.list_name}.`
+      );
+      await loadLists();
+    } catch (actionError) {
+      setOperationMessage(actionError instanceof Error ? actionError.message : "Unable to update rule.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleArchiveList = async () => {
+    if (!organizationId || !isOrgAdmin || !selectedList) return;
+    if (!window.confirm(`Archive ${selectedList.list_name}?`)) return;
+    setPendingAction("status");
+    try {
+      await deleteEmailList(organizationId, selectedList.email_list_id);
+      setOperationMessage(`Archived ${selectedList.list_name}.`);
+      await loadLists();
+    } catch (actionError) {
+      setOperationMessage(actionError instanceof Error ? actionError.message : "Unable to archive list.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleDeleteMember = async (memberId: string) => {
+    if (!organizationId || !isOrgAdmin || !selectedList) return;
+    if (!window.confirm("Remove this subscriber?")) return;
+    setPendingAction("member");
+    try {
+      await deleteEmailListMember(organizationId, selectedList.email_list_id, memberId);
+      setOperationMessage("Subscriber removed.");
+      await loadLists();
+    } catch (actionError) {
+      setOperationMessage(actionError instanceof Error ? actionError.message : "Unable to remove subscriber.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  if (!organizationId) {
+    return (
+      <EmptyState
+        title="Organization Context Unavailable"
+        description="Establish an organization session to verify notification routing."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageTitle
+        title="Email"
+        subtitle="Configure automated report delivery and notification routing."
+      />
+
+      {directoryPartialError && (
+        <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          {directoryPartialError}
+        </div>
+      )}
+      {routingError && <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">{routingError}</div>}
+      {operationMessage ? <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{operationMessage}</div> : null}
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {stats.map(s => (
+          <StatCard key={s.label} label={s.label} value={s.value} detail={s.detail} icon={s.icon} />
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader
+          title="Notification Lists"
+          subtitle="Manage CC, BCC, triggers, and delivery behavior."
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="search"
+                  placeholder="Search rules..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-48 pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <FacilitySelector
+                facilities={facilities}
+                value={facilityFilter}
+                onChange={setFacilityFilter}
+              />
+              <button
+                onClick={() => void loadLists()}
+                disabled={isLoading}
+                title={isLoading ? "Refresh in progress" : "Refresh delivery rules"}
+                className="p-2 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          }
+        />
+        <CardContent className="p-0">
+          {isLoading || statusMessage ? (
+            <div className="py-24 flex justify-center">
+              {statusMessage ? (
+                <EmptyState title="Routing Error" description={statusMessage} tone="danger" action={<button type="button" onClick={() => void loadLists()} className="mt-4 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white">Retry</button>} />
+              ) : (
+                <RefreshCw className="animate-spin text-blue-500/50 w-8 h-8" />
+              )}
+            </div>
+          ) : showEmptyState ? (
+            <div className="py-24">
+              <EmptyState title="No Delivery Rules Found" description="Try adjusting search or facility filters." />
+            </div>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+              <DataTableShell columns={STATUS_COLUMNS} density="comfortable">
+                {filteredLists.map((list) => {
+                  const facilityName = facilityLookup[list.location_id || ""]?.name || "Global";
+                  const tone = typeTone[list.list_type || "default"] || typeTone.default;
+                  const isSelected = list.email_list_id === resolvedSelectedListId;
+                  return (
+                    <tr
+                      key={list.email_list_id}
+                      onClick={() => setSelectedListId(list.email_list_id)}
+                      className={`cursor-pointer transition-colors ${
+                        isSelected ? "bg-blue-50" : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${isSelected ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                            <Bell className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className={`font-semibold ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>{list.list_name}</span>
+                            <span className="block text-xs text-slate-500">{list.list_key}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge label={list.list_type || "Standard"} tone={tone} /></td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{facilityName}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge
+                          label={list.is_active === false ? "Dormant" : "Operational"}
+                          tone={list.is_active === false ? "danger" : "positive"}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </DataTableShell>
+
+              <aside className="border-l border-slate-200 p-6">
+                <div className="sticky top-20 space-y-6">
+                  {selectedList ? (
+                    <>
+                      <header className="space-y-2">
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                                  <Settings2 className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h3 className="text-base font-bold text-slate-800 truncate">{selectedList.list_name}</h3>
+                                  <p className="text-sm text-slate-500">{selectedList.list_key}</p>
+                              </div>
+                          </div>
+                      </header>
+
+                      <div className="space-y-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Subscribers</p>
+                          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2">
+                              {members.length ? members.map(m => (
+                                  <div key={m.email_list_member_id} className="p-3 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between gap-3">
+                                      <div>
+                                          <p className="text-sm font-semibold text-slate-800 truncate">{m.display_name || m.email}</p>
+                                          <p className="text-xs text-slate-500 capitalize">{m.member_type || "external"}</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className={`w-2 h-2 rounded-full ${m.is_active === false ? 'bg-slate-300' : 'bg-green-500'}`}></div>
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleDeleteMember(m.email_list_member_id)}
+                                          disabled={pendingAction !== null || !isOrgAdmin}
+                                          title={!isOrgAdmin ? "Organization admin required" : pendingAction !== null ? "Backend action pending" : "Remove subscriber"}
+                                          className="rounded-full border border-slate-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-50"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                  </div>
+                              )) : <p className="rounded-lg border-2 border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">No subscribers linked</p>}
+                          </div>
+                      </div>
+
+                      <footer className="space-y-3 pt-4 border-t border-slate-200">
+                        <button
+                          type="button"
+                          disabled={pendingAction !== null || !selectedList || !isOrgAdmin}
+                          title={!isOrgAdmin ? "Organization admin required" : pendingAction !== null || !selectedList ? "Backend action pending" : "Provision subscriber"}
+                          onClick={() => void handleProvisionSubscriber()}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          <Users className="w-4 h-4" />
+                          {pendingAction === "member" ? "Adding..." : "Provision Subscriber"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pendingAction !== null || !selectedList || !isOrgAdmin}
+                          title={!isOrgAdmin ? "Organization admin required" : pendingAction !== null || !selectedList ? "Backend action pending" : selectedList.is_active === false ? "Restore rule" : "Pause rule"}
+                          onClick={() => void handleToggleRule()}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          {pendingAction === "status" ? "Saving..." : selectedList.is_active === false ? "Restore Rule" : "Pause Rule"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pendingAction !== null || !selectedList || !isOrgAdmin}
+                          title={!isOrgAdmin ? "Organization admin required" : pendingAction !== null || !selectedList ? "Backend action pending" : "Archive list"}
+                          onClick={() => void handleArchiveList()}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          Archive List
+                        </button>
+                      </footer>
+                    </>
+                  ) : (
+                    <div className="py-20 text-center">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+                            <Bell className="w-6 h-6" />
+                        </div>
+                        <p className="mt-4 text-sm font-semibold text-slate-600">Select a delivery rule</p>
+                        <p className="text-sm text-slate-500">Details and actions will appear here.</p>
+                    </div>
+                  )}
+                </div>
+              </aside>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

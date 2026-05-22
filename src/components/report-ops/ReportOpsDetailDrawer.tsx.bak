@@ -1,0 +1,241 @@
+"use client";
+
+import { ClipboardCopy, RefreshCw, ShieldBan, ShieldCheck, RotateCcw } from "lucide-react";
+import type { ReactNode } from "react";
+import { ControlDetailPanel, type ControlDetailField } from "@/components/control/ControlDetailPanel";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ReportLifecycleBadge, ReportOutboxBadge } from "./ReportOpsBadge";
+import {
+  buildLifecycleEventRows,
+  formatReportOpsMediaSummary,
+  formatReportOpsTimestamp,
+  type ReportOpsRecord,
+} from "@/lib/services/reportOpsService";
+
+interface ReportOpsDetailDrawerProps {
+  record: ReportOpsRecord | null;
+  historyLoading?: boolean;
+  detailLoading?: boolean;
+  onRefresh: () => void;
+  onRetryOutbox: () => void;
+  onRepair: () => void;
+  onQuarantine: () => void;
+  onCopyReportId: () => void;
+  onCopyVin: () => void;
+  copiedField?: string | null;
+}
+
+function detailFields(record: ReportOpsRecord): ControlDetailField[] {
+  const manifest = record.status?.manifest ?? null;
+  return [
+    { label: "Report ID", value: record.reportId },
+    { label: "VIN", value: record.vin },
+    { label: "Location", value: record.location },
+    { label: "Created", value: formatReportOpsTimestamp(record.createdAt) },
+    { label: "Updated", value: formatReportOpsTimestamp(record.updatedAt) },
+    { label: "Lifecycle", value: <ReportLifecycleBadge state={record.lifecycleState} /> },
+    { label: "Outbox state", value: <ReportOutboxBadge state={record.outboxState} /> },
+    { label: "Exact blocker", value: record.exactBlocker },
+    { label: "Recommended action", value: record.recommendedAction },
+    {
+      label: "Media summary",
+      value: formatReportOpsMediaSummary(record),
+      helper: "Damage entries, attached photos, splats, and manifest counts are shown together to preserve row isolation.",
+    },
+    {
+      label: "PDF presence",
+      value: record.mediaSummary.hasPdf ? "Present" : "Missing",
+      helper: record.mediaSummary.finalized ? "Manifest finalized" : "Manifest still open",
+    },
+    {
+      label: "Manifest counts",
+      value:
+        record.mediaSummary.expectedMedia !== null || record.mediaSummary.receivedMedia !== null
+          ? `${record.mediaSummary.receivedMedia ?? 0} / ${record.mediaSummary.expectedMedia ?? 0}`
+          : "Unavailable",
+      helper: manifest
+        ? `pdf_required=${manifest.pdf_required ? "true" : "false"} · checksums_match=${record.mediaSummary.checksumsMatch ? "true" : "false"}`
+        : "No manifest row returned by the backend status endpoint.",
+    },
+    {
+      label: "Outbox timestamps",
+      value: record.outbox
+        ? `${formatReportOpsTimestamp(record.outbox.created_at)} · ${formatReportOpsTimestamp(record.outbox.last_attempt_at)}`
+        : "No linked outbox row",
+      helper: record.outbox?.sent_at ? `Sent at ${formatReportOpsTimestamp(record.outbox.sent_at)}` : "Not sent yet",
+    },
+    {
+      label: "Retryability",
+      value: record.retryable ? "Retryable" : "Not retryable",
+      helper: record.outbox?.last_error_message || "No retry signal captured.",
+    },
+    {
+      label: "Quarantine flag",
+      value: record.quarantined ? "Quarantined" : "Clear",
+      helper: record.quarantined ? "The row is marked for operator investigation." : "No quarantine flag surfaced from the backend.",
+    },
+  ];
+}
+
+function RawBlock({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-[1.35rem] border border-white/8 bg-white/5 p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-slate-400">{label}</p>
+      <div className="mt-2 text-sm leading-6 text-slate-200">{value}</div>
+    </div>
+  );
+}
+
+export function ReportOpsDetailDrawer({
+  record,
+  historyLoading,
+  detailLoading,
+  onRefresh,
+  onRetryOutbox,
+  onRepair,
+  onQuarantine,
+  onCopyReportId,
+  onCopyVin,
+  copiedField,
+}: ReportOpsDetailDrawerProps) {
+  if (!record) {
+    return (
+      <ControlDetailPanel
+        title="Select a report"
+        eyebrow="Report detail"
+        subtitle="Pick any row in the isolation table to inspect report metadata, manifest state, outbox status, and the exact blocker."
+        emptyLabel="No report selected"
+        emptyDescription="Select a row to open the right-side detail panel."
+      />
+    );
+  }
+
+  const lifecycleEvents = buildLifecycleEventRows(record);
+
+  return (
+    <ControlDetailPanel
+      title={record.reportId}
+      eyebrow="Report detail"
+      subtitle={`${record.vin} · ${record.location}`}
+      fields={detailFields(record)}
+      footer={
+        <div className="space-y-4">
+          <div className="grid gap-2 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={onRetryOutbox}
+              disabled={!record.retryable}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-amber-100 transition disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Retry outbox row
+            </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh state
+            </button>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={onRepair}
+              disabled
+              title="Backend repair/reconcile route is not exposed yet."
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-400/20 bg-slate-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300 transition disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Repair / reconcile
+            </button>
+            <button
+              type="button"
+              onClick={onQuarantine}
+              disabled
+              title="Backend quarantine route is not exposed yet."
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-400/20 bg-slate-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300 transition disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ShieldBan className="h-4 w-4" />
+              Quarantine
+            </button>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={onCopyReportId}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-500/15"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              {copiedField === "reportId" ? "Report ID copied" : "Copy report ID"}
+            </button>
+            <button
+              type="button"
+              onClick={onCopyVin}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-500/15"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              {copiedField === "vin" ? "VIN copied" : "Copy VIN"}
+            </button>
+          </div>
+
+          <div className="grid gap-3">
+            <RawBlock
+              label="Raw report payload"
+              value={
+                <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-white/8 bg-slate-950/80 p-3 text-xs leading-5 text-slate-200">
+                  {JSON.stringify(record.report, null, 2)}
+                </pre>
+              }
+            />
+            <RawBlock
+              label="Manifest / status payload"
+              value={
+                <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-white/8 bg-slate-950/80 p-3 text-xs leading-5 text-slate-200">
+                  {JSON.stringify(record.status ?? {}, null, 2)}
+                </pre>
+              }
+            />
+            <RawBlock
+              label="Outbox payload"
+              value={
+                record.outbox ? (
+                  <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-white/8 bg-slate-950/80 p-3 text-xs leading-5 text-slate-200">
+                    {JSON.stringify(record.outbox, null, 2)}
+                  </pre>
+                ) : (
+                  <span className="text-slate-400">No linked outbox row was found for this report.</span>
+                )
+              }
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-slate-400">
+                Recent lifecycle events
+              </p>
+              <StatusBadge
+                label={historyLoading ? "Loading" : detailLoading ? "Refreshing" : `${lifecycleEvents.length} event(s)`}
+                tone={historyLoading || detailLoading ? "warning" : "neutral"}
+              />
+            </div>
+            <div className="space-y-2">
+              {lifecycleEvents.map((event) => (
+                <div key={`${event.label}-${event.value}`} className="rounded-[1.2rem] border border-white/8 bg-white/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <StatusBadge label={event.label} tone={event.tone} />
+                    <span className="text-xs text-slate-400">{event.value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      }
+    />
+  );
+}

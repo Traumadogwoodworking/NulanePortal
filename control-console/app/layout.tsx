@@ -1,0 +1,21 @@
+import "@/styles/globals.css";
+import { AdminShell } from "@components/layout/AdminShell";
+
+export const metadata = {
+  title: "Control Console",
+  description: "Production-grade registry-driven control plane for DocuDent"
+};
+
+export default function RootLayout({
+  children
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <AdminShell>{children}</AdminShell>
+      </body>
+    </html>
+  );
+}

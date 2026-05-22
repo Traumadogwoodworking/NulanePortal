@@ -1,0 +1,195 @@
+import type { PermissionKey } from "./access";
+import { isModuleEnabled, ModuleToggleKey } from "@/lib/modules";
+
+export type RouteSectionKey = "core" | "apps" | "administration" | "control";
+
+export interface PortalRoute {
+  label: string;
+  href: string;
+  description: string;
+  section: RouteSectionKey;
+  icon?: string; // SVG key or Emoji
+  badge?: string;
+  brandColor?: string;
+  brandLogo?: string;
+  requiresOrgAdmin?: boolean;
+  requiredPermission?: PermissionKey;
+  requiresAwct?: boolean;
+  hideFromNav?: boolean;
+  moduleKey?: ModuleToggleKey;
+}
+
+export interface PortalNavSection {
+  key: RouteSectionKey;
+  title: string;
+  items: PortalRoute[];
+}
+
+const portalRoutes: PortalRoute[] = [
+  {
+    label: "Home",
+    href: "/",
+    description: "Operational launchpad",
+    section: "core",
+    icon: "home",
+    badge: "Live",
+  },
+  {
+    label: "Dashboards",
+    href: "/dashboard",
+    description: "Command-level KPIs and readiness cues",
+    section: "core",
+    icon: "dashboard",
+  },
+  {
+    label: "Damage Reports",
+    href: "/reports/damage",
+    description: "Vehicle Inspections",
+    section: "core",
+    icon: "reports",
+    moduleKey: "reports",
+  },
+  {
+    label: "RSA Reports",
+    href: "/reports/rsa",
+    description: "Railcar Entries",
+    section: "core",
+    icon: "rsa",
+    moduleKey: "reports",
+  },
+  {
+    label: "DocuDent",
+    href: "/docudent",
+    description: "Damage capture, inspections, and visibility",
+    section: "apps",
+    icon: "/media/Docudent.png",
+    brandColor: "#064e3b",
+    brandLogo: "/media/Docudent.png",
+    moduleKey: "docudent",
+  },
+  {
+    label: "Users",
+    href: "/users",
+    description: "Member directory",
+    section: "administration",
+    icon: "people",
+    requiresOrgAdmin: true,
+  },
+  {
+    label: "Facilities",
+    href: "/facilities",
+    description: "Location catalog",
+    section: "administration",
+    icon: "facility",
+    requiresOrgAdmin: true,
+  },
+  {
+    label: "Delivery Rules",
+    href: "/delivery-rules",
+    description: "Submission & Trigger Protocols",
+    section: "administration",
+    icon: "shield", 
+    requiredPermission: "portal.notifications.manage",
+  },
+  {
+    label: "Control",
+    href: "/control",
+    description: "Privileged operations cockpit",
+    section: "control",
+    icon: "shield",
+    badge: "Admin",
+    requiresOrgAdmin: true,
+  },
+];
+
+const sectionOrder: Array<{ key: RouteSectionKey; title: string }> = [
+  { key: "core", title: "Core" },
+  { key: "apps", title: "DocuDent Platform" },
+  { key: "administration", title: "Administration" },
+  { key: "control", title: "Control" },
+];
+
+export const navSections: PortalNavSection[] = sectionOrder.map((section) => ({
+  ...section,
+  items: portalRoutes.filter((route) => route.section === section.key),
+}));
+
+const routeLookup = portalRoutes.reduce<Record<string, PortalRoute>>((acc, route) => {
+  acc[route.href] = route;
+  return acc;
+}, {});
+
+export function getRouteByPath(pathname: string): PortalRoute | null {
+  if (routeLookup[pathname]) {
+    return routeLookup[pathname];
+  }
+
+  const match = portalRoutes
+    .slice()
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((route) => route.href !== "/" && pathname.startsWith(route.href));
+
+  return match ?? routeLookup["/"] ?? null;
+}
+
+export interface SessionAccessInfo {
+  isPortalAccessAllowed: boolean;
+  isAdmin: boolean;
+  isOrgAdmin: boolean;
+  isAwct: boolean;
+  hasPermission: (key: PermissionKey) => boolean;
+}
+
+export type AccessBarrierType = "org-admin" | "permission";
+
+export interface AccessBarrier {
+  type: AccessBarrierType;
+  requiredPermission?: PermissionKey;
+}
+
+export function getAccessBarrier(route: PortalRoute | null, accessInfo: SessionAccessInfo): AccessBarrier | null {
+  if (!route) {
+    return null;
+  }
+  if (route.requiresOrgAdmin && !accessInfo.isOrgAdmin && !accessInfo.isAdmin) {
+    return { type: "org-admin" };
+  }
+  if (route.requiresAwct && !accessInfo.isAwct) {
+    return { type: "permission" }; // Generic barrier for now
+  }
+  if (route.requiredPermission && !accessInfo.hasPermission(route.requiredPermission)) {
+    return { type: "permission", requiredPermission: route.requiredPermission };
+  }
+  return null;
+}
+
+export function canAccessRoute(route: PortalRoute | null, accessInfo: SessionAccessInfo): boolean {
+  return getAccessBarrier(route, accessInfo) === null;
+}
+
+export function filterNavSectionsByAccess(
+  sections: PortalNavSection[],
+  accessInfo: SessionAccessInfo
+): PortalNavSection[] {
+  return sections
+    .map((section) => {
+      const visibleItems = section.items.filter(
+        (route) =>
+          !route.hideFromNav &&
+          canAccessRoute(route, accessInfo) &&
+          isRouteModuleEnabled(route)
+      );
+      return {
+        ...section,
+        items: visibleItems,
+      };
+    })
+    .filter((section) => section.items.length > 0);
+}
+
+function isRouteModuleEnabled(route: PortalRoute) {
+  if (!route.moduleKey) return true;
+  return isModuleEnabled(route.moduleKey);
+}
+
+export const routeMap = routeLookup;

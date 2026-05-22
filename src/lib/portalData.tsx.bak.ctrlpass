@@ -1,0 +1,158 @@
+"use client";
+
+import useSWR, { SWRConfig } from "swr";
+import type { ReactNode } from "react";
+import { usePortalSession } from "@/lib/portalSession";
+import { fetchBranding } from "@/lib/services/brandingService";
+import { fetchOperationsStatus, fetchReadinessStatus } from "@/lib/services/controlPlaneService";
+import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import { UsersAdapter } from "@/lib/services/usersService";
+import { fetchEmailLists, fetchEmailListMembers } from "@/lib/services/notificationsService";
+import type {
+  BrandingSnapshot,
+  EmailListMemberSummary,
+  EmailListSummary,
+  FacilitySummary,
+  ReportDamageApiRow,
+  RsaReportApiRow,
+  UserSummary,
+} from "@/lib/types";
+
+const STALE_TIME_MS = 1000 * 60 * 5;
+const REVALIDATE_ON_FOCUS = false;
+const REVALIDATE_ON_RECONNECT = true;
+const KEEP_PREVIOUS_DATA = true;
+
+export interface ControlSnapshot {
+  status: Awaited<ReturnType<typeof fetchOperationsStatus>> | null;
+  readiness: Awaited<ReturnType<typeof fetchReadinessStatus>> | null;
+}
+
+export function PortalDataProvider({ children }: { children: ReactNode }) {
+  return (
+    <SWRConfig
+      value={{
+        dedupingInterval: STALE_TIME_MS,
+        focusThrottleInterval: STALE_TIME_MS,
+        revalidateOnFocus: REVALIDATE_ON_FOCUS,
+        revalidateOnReconnect: REVALIDATE_ON_RECONNECT,
+        keepPreviousData: KEEP_PREVIOUS_DATA,
+      }}
+    >
+      {children}
+    </SWRConfig>
+  );
+}
+
+function ensureOrgId(orgId?: string | null) {
+  return typeof orgId === "string" && orgId.trim() ? orgId.trim() : null;
+}
+
+export function usePortalBrandingSnapshot() {
+  const { organizationId, session } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  return useSWR<BrandingSnapshot | null>(
+    resolvedOrgId ? ["portal/branding", resolvedOrgId] : null,
+    async () => {
+      if (!resolvedOrgId) return null;
+      return fetchBranding(resolvedOrgId).catch(
+        () => (session?.branding_snapshot as BrandingSnapshot | null | undefined) ?? null
+      );
+    },
+    {
+      fallbackData: (session?.branding_snapshot as BrandingSnapshot | undefined) ?? null,
+      revalidateIfStale: true,
+    }
+  );
+}
+
+export function usePortalControlSnapshots() {
+  const { organizationId } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  return useSWR<ControlSnapshot>(
+    resolvedOrgId ? ["portal/control-snapshot", resolvedOrgId] : null,
+    async () => {
+      const [status, readiness] = await Promise.all([
+        fetchOperationsStatus(),
+        fetchReadinessStatus(),
+      ]);
+      return { status, readiness };
+    },
+    {
+      fallbackData: { status: null, readiness: null },
+      revalidateIfStale: true,
+    }
+  );
+}
+
+export function usePortalDirectorySnapshot() {
+  const { organizationId } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  return useSWR<{
+    users: UserSummary[];
+    facilities: FacilitySummary[];
+    emailLists: EmailListSummary[];
+  }>(
+    resolvedOrgId ? ["portal/directory", resolvedOrgId] : null,
+    async () => {
+      if (!resolvedOrgId) {
+        return { users: [], facilities: [], emailLists: [] };
+      }
+      const [users, facilities, emailLists] = await Promise.all([
+        UsersAdapter.getUsers(resolvedOrgId),
+        FacilitiesAdapter.getFacilities(resolvedOrgId),
+        fetchEmailLists(resolvedOrgId),
+      ]);
+      return { users, facilities, emailLists };
+    },
+    {
+      fallbackData: { users: [], facilities: [], emailLists: [] },
+      revalidateIfStale: true,
+    }
+  );
+}
+
+export function usePortalEmailListMembers(listId?: string | null) {
+  const { organizationId } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  const resolvedListId = ensureOrgId(listId);
+  return useSWR<EmailListMemberSummary[]>(
+    resolvedOrgId && resolvedListId ? ["portal/email-list-members", resolvedOrgId, resolvedListId] : null,
+    async () => {
+      if (!resolvedOrgId || !resolvedListId) {
+        return [];
+      }
+      return fetchEmailListMembers(resolvedOrgId, resolvedListId);
+    },
+    {
+      fallbackData: [],
+      revalidateIfStale: true,
+    }
+  );
+}
+
+export function usePortalReportsSnapshot() {
+  const { organizationId } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  return useSWR<{
+    damageReports: ReportDamageApiRow[];
+    rsaReports: RsaReportApiRow[];
+  }>(
+    resolvedOrgId ? ["portal/reports-snapshot", resolvedOrgId] : null,
+    async () => {
+      if (!resolvedOrgId) {
+        return { damageReports: [], rsaReports: [] };
+      }
+      const [damageReports, rsaReports] = await Promise.all([
+        ReportsAdapter.fetchDamageReports({ organization_id: resolvedOrgId }),
+        ReportsAdapter.fetchRsaReports(),
+      ]);
+      return { damageReports, rsaReports };
+    },
+    {
+      fallbackData: { damageReports: [], rsaReports: [] },
+      revalidateIfStale: true,
+    }
+  );
+}

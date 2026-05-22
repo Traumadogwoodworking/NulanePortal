@@ -1,0 +1,41 @@
+import type { PortalSessionResponse } from "@/lib/types";
+
+export type ModuleToggleKey = "otto" | "docufit" | "reports" | "docudent";
+
+const defaultModuleConfig: Record<ModuleToggleKey, boolean> = {
+  otto: false,
+  docufit: true,
+  reports: true,
+  docudent: true,
+};
+
+const moduleEnvNames: Record<ModuleToggleKey, string> = {
+  otto: "NEXT_PUBLIC_MODULE_OTTO",
+  docufit: "NEXT_PUBLIC_MODULE_DOCUFIT",
+  reports: "NEXT_PUBLIC_MODULE_REPORTS",
+  docudent: "NEXT_PUBLIC_MODULE_DOCUDENT",
+};
+
+function parseEnvToggle(value: string | undefined): boolean | null {
+  if (value === undefined) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "1" || normalized === "true" || normalized === "on") return true;
+  if (normalized === "0" || normalized === "false" || normalized === "off") return false;
+  return null;
+}
+
+export function isModuleEnabled(module: ModuleToggleKey): boolean {
+  const envValue = process.env[moduleEnvNames[module] as keyof typeof process.env];
+  const override = parseEnvToggle(envValue);
+  if (override !== null) return override;
+  return defaultModuleConfig[module];
+}
+
+export function hasOrganizationScope(session: PortalSessionResponse | null): boolean {
+  if (!session) return false;
+  return Boolean(
+    session.organization?.organization_id ||
+      session.user?.organization_id ||
+      session.selected_location?.location_id
+  );
+}

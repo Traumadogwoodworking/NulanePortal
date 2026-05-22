@@ -1,0 +1,14 @@
+"use client";
+
+import DeliveryRulesPage from "@/app/delivery-rules/page";
+
+export default function EmailPage() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
+        Email routing lives here as a first-class portal page.
+      </div>
+      <DeliveryRulesPage />
+    </div>
+  );
+}

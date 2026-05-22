@@ -1,0 +1,18 @@
+import { expect, test } from "@playwright/test";
+import { configureApiMocks } from "./utils/apiMock";
+
+test("happy path through DocuFit workflow", async ({ page }) => {
+  await configureApiMocks(page);
+  await page.goto("/docufit");
+  await expect(page.locator("text=Measurements Dashboard")).toBeVisible();
+
+  const fileInput = page.locator('input[type="file"]');
+  await fileInput.setInputFiles("test/fixtures/upload.png");
+  await expect(page.locator("text=Upload queued")).toBeVisible({ timeout: 10000 });
+
+  await page.click('button:has-text("Export")');
+  await expect(page.locator('button:has-text("Export CSV")')).toBeVisible();
+  await page.click('button:has-text("Export CSV")');
+  await page.click('button:has-text("Export")');
+  await page.click('button:has-text("Export PDF")');
+});

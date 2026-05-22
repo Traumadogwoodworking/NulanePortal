@@ -1,0 +1,106 @@
+// Monolith reference values (see `DEFAULT_API_BASE`, `DEFAULT_DOCUFIT_API_BASE`, and
+// `DEFAULT_DOCUDENT_EMBED_URL` in the inline script).
+const DEFAULT_API_BASE = "https://api.nulanesystems.com/api";
+const DEFAULT_DOCUFIT_API_BASE = "/docufit";
+const DEFAULT_DOCUDENT_EMBED_URL = "https://nulanesystems.com/portal/app/index.html";
+const DEFAULT_DOCUFIT_EMBED_URL = "https://nulanesystems.com/portal/app/docufit/index.html";
+
+export function normalizeBaseUrl(value?: string | null): string | null {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
+const isProduction = process.env.NODE_ENV === "production";
+const envApiBase = normalizeBaseUrl(process.env.EXT_PUBLIC_DOCUDENT_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL);
+
+/**
+ * When running in production (Static Export), we MUST use the absolute API URL.
+ * When running in development, we use the relative proxy path to avoid CORS.
+ */
+const selectApiBase = () => {
+    // 1. If we have an absolute URL override, honor it regardless of mode
+    if (envApiBase?.startsWith("http")) return envApiBase;
+    
+    // 2. In a production build, force the absolute production API domain
+    if (isProduction) return DEFAULT_API_BASE;
+    
+    // 3. In development, fallback to the relative proxy (either from env or default)
+    return envApiBase ?? "/api";
+};
+
+export const portalConfig = {
+  apiBase: selectApiBase(),
+  usesDefaultApiBase: envApiBase == null,
+  docuFitBase: normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUFIT_BASE) ?? DEFAULT_DOCUFIT_API_BASE,
+  docuDentEmbedUrl:
+    normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUDENT_EMBED_URL) ?? DEFAULT_DOCUDENT_EMBED_URL,
+  docuFitEmbedUrl:
+    normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUFIT_EMBED_URL) ?? DEFAULT_DOCUFIT_EMBED_URL,
+  supportFormUrl:
+    normalizeBaseUrl(process.env.NEXT_PUBLIC_SUPPORT_FORM_URL),
+  environment: process.env.NODE_ENV ?? "development",
+};
+
+export function buildApiUrl(path: string): string {
+  const trimmed = path.replace(/^\/+/, "");
+  return `${portalConfig.apiBase}/${trimmed}`;
+}
+
+export function buildDocuFitUrl(path: string): string {
+  const trimmed = path.replace(/^\/+/, "");
+  return `${portalConfig.docuFitBase}/${trimmed}`.replace(/\/+$/g, "");
+}
+
+export const derivedRoutes = {
+  reports: "/reports",
+  dashboard: "/",
+  docuDent: "/docudent",
+  docuFit: "/docufit",
+};
+
+export function getDocuDentEmbedUrl(): string {
+  return portalConfig.docuDentEmbedUrl;
+}
+
+export function getDocuFitEmbedUrl(): string {
+  return portalConfig.docuFitEmbedUrl;
+}
+
+export function parseEmbedUrl(raw: string | null | undefined): string | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Returns a validated DocuDent iframe source or null when configuration is invalid. */
+export function resolveDocuDentEmbedUrl(): string | null {
+  return parseEmbedUrl(portalConfig.docuDentEmbedUrl);
+}
+
+/** Returns a validated DocuFit iframe source or null when configuration is invalid. */
+export function resolveDocuFitEmbedUrl(): string | null {
+  return parseEmbedUrl(portalConfig.docuFitEmbedUrl);
+}
+
+export function getDocuFitBase(): string {
+  return portalConfig.docuFitBase;
+}
+
+export function normalizeMediaUrl(url: string | null | undefined): string {
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    const sanitized = url.replace(/^\/+/, "");
+    // Default to production domain for relative media paths
+    return `https://nulanesystems.com/${sanitized}`;
+}

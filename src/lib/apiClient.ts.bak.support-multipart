@@ -1,0 +1,53 @@
+import { buildApiUrl, buildDocuFitUrl } from "./config";
+import { resolveDevMockResponse, isDevMockEnabled } from "./devMockApi";
+import { getPortalAccessToken } from "./portalAuth";
+
+export type ResponseError = Error & { status?: number };
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const details = await response.text().catch(() => "No response body");
+    const error = new Error(
+      `API request to ${response.url} failed (${response.status} ${response.statusText}): ${details.slice(0, 500)}`
+    ) as ResponseError;
+    error.status = response.status;
+    throw error;
+  }
+
+  return (await response.json()) as T;
+}
+
+async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+  if (isDevMockEnabled()) {
+    const mock = await resolveDevMockResponse(url, options);
+    if (mock !== null) {
+      return mock as T;
+    }
+  }
+  const response = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  return parseResponse<T>(response);
+}
+
+export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = buildApiUrl(path);
+  const token = await getPortalAccessToken();
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  } as Record<string, string>;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return fetchJson(url, { ...options, headers });
+}
+
+export async function docuFitFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = buildDocuFitUrl(path);
+  return fetchJson(url, options);
+}

@@ -1,0 +1,176 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Mail, Shield, Building2, Palette, LayoutGrid } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalBrandingSnapshot, usePortalControlSnapshots, usePortalDirectorySnapshot } from "@/lib/portalData";
+import { PageSection } from "@/components/ui/PageSection";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ControlMetricTile } from "@/components/control/ControlMetricTile";
+import { controlRoutes } from "@/lib/controlRoutes";
+
+const PREF_KEY = "control-layout-order";
+
+export default function SettingsPage() {
+  const { user, session, logout, organizationId } = usePortalSession();
+  const { data: branding } = usePortalBrandingSnapshot();
+  const { data: controlSnapshot, mutate: refreshControl } = usePortalControlSnapshots();
+  const { data: directory } = usePortalDirectorySnapshot();
+  const [layoutOrder, setLayoutOrder] = useState<string[]>(() => controlRoutes.map((route) => route.href));
+
+  const organizationName =
+    branding?.organization_name ||
+    branding?.brand_name ||
+    session?.organization?.name ||
+    "Unknown organization";
+
+  const brandingTiles = useMemo(() => ([
+    { label: "Organization", value: organizationName, detail: "Current tenant identity" },
+    { label: "User", value: user?.display_name || user?.email || "Unknown", detail: "Signed-in operator" },
+    { label: "Logo", value: branding?.logo_url ? "Present" : "Missing", detail: branding?.logo_url || "No live logo provided" },
+    { label: "Module routes", value: controlRoutes.length - 1, detail: "Control + workspace routes" },
+  ]), [branding?.logo_url, organizationName, user?.display_name, user?.email]);
+
+  const liveTiles = [
+    { label: "Users", value: directory?.users.length || 0, detail: "Cached org directory" },
+    { label: "Facilities", value: directory?.facilities.length || 0, detail: "Cached site registry" },
+    { label: "Email lists", value: directory?.emailLists.length || 0, detail: "Routing surfaces" },
+    { label: "Control ready", value: controlSnapshot?.status?.ready ? "Yes" : "No", detail: controlSnapshot?.status?.summary || "Awaiting backend status" },
+  ];
+
+  const visibleRoutes = useMemo(() => {
+    return controlRoutes
+      .filter((route) => route.href !== "/control")
+      .sort((a, b) => layoutOrder.indexOf(a.href) - layoutOrder.indexOf(b.href));
+  }, [layoutOrder]);
+
+  const moveRoute = (href: string, direction: -1 | 1) => {
+    setLayoutOrder((current) => {
+      const next = [...current];
+      const index = next.indexOf(href);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= next.length) {
+        return current;
+      }
+      [next[index], next[target]] = [next[target], next[index]];
+      try {
+        window.localStorage.setItem(PREF_KEY, JSON.stringify(next));
+      } catch {
+        // local preference only
+      }
+      return next;
+    });
+  };
+
+  return (
+    <article className="space-y-6 px-6 lg:px-10 py-6 text-slate-100">
+      <header className="space-y-2">
+        <p className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400">Workspace Controls</p>
+        <h1 className="text-3xl font-black text-white">Settings</h1>
+        <p className="text-sm text-slate-300 max-w-3xl">
+          Live org identity, routing posture, and browser-local control preferences. This page is read-heavy and
+          keeps the portal feel warm by reusing cached session-adjacent data.
+        </p>
+      </header>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {brandingTiles.map((tile) => (
+          <ControlMetricTile key={tile.label} label={tile.label} value={tile.value} detail={tile.detail} icon={tile.label === "Organization" ? <Building2 className="h-4 w-4" /> : tile.label === "User" ? <Shield className="h-4 w-4" /> : tile.label === "Logo" ? <Palette className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />} />
+        ))}
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+        <PageSection title="Organization identity" description="Read-only organization and branding state from the live session payload.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-sm space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Tenant</p>
+              <p className="text-lg font-black text-white">{organizationName}</p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">{session?.organization?.organization_id || organizationId}</p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-sm space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Brand snapshot</p>
+              <p className="text-lg font-black text-white">{branding?.logo_url ? "Logo supplied" : "Logo missing"}</p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">{branding?.primary_color || "No primary color provided"}</p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-sm space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Current user</p>
+              <p className="text-lg font-black text-white">{user?.display_name || user?.email || "Unknown"}</p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">{user?.role || "member"}</p>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-sm space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Session controls</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge label={session?.portal_access === false ? "Portal blocked" : "Portal active"} tone={session?.portal_access === false ? "warning" : "positive"} />
+                <StatusBadge label={session?.requires_ads ? "Ad supported" : "Ad free"} tone={session?.requires_ads ? "warning" : "positive"} />
+              </div>
+            </div>
+          </div>
+        </PageSection>
+
+        <PageSection title="Access & session" description="Terminate the current session or jump into the signature tools without leaving settings.">
+          <div className="space-y-3 rounded-3xl border border-slate-200/70 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">Operator session</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Uses the live `/user/me` response</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em] text-rose-600 transition hover:bg-rose-100"
+              >
+                Terminate session
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshControl()}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em] text-slate-700 transition hover:bg-slate-50"
+              >
+                Refresh control status
+              </button>
+              <Link href="/awct/signature" className="rounded-full bg-slate-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.3em] text-white transition hover:bg-slate-800">
+                Open signature generator
+              </Link>
+            </div>
+          </div>
+        </PageSection>
+      </div>
+
+      <PageSection title="Navigation layout" description="Local browser preference for control tab ordering. This stays cached between adjacent page visits.">
+        <div className="grid gap-3">
+          {visibleRoutes.map((route, index) => (
+            <div key={route.href} className="flex flex-col gap-3 rounded-[1.35rem] border border-slate-200/70 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-black text-slate-900">{route.label}</p>
+                <p className="text-sm text-slate-500">{route.description}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge label={String(index + 1)} tone="neutral" />
+                <button type="button" onClick={() => moveRoute(route.href, -1)} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.28em] text-slate-700 transition hover:bg-slate-50">Up</button>
+                <button type="button" onClick={() => moveRoute(route.href, 1)} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.28em] text-slate-700 transition hover:bg-slate-50">Down</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </PageSection>
+
+      <PageSection title="Cached workspace state" description="Counts shared from the portal cache layer so you can see what the app is already holding locally.">
+        <div className="grid gap-4 md:grid-cols-3">
+          {liveTiles.map((tile) => (
+            <div key={tile.label} className="rounded-3xl border border-slate-200/70 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">{tile.label}</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">{tile.value as string | number}</p>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-500">{tile.detail}</p>
+            </div>
+          ))}
+        </div>
+      </PageSection>
+    </article>
+  );
+}

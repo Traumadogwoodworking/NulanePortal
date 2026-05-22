@@ -1,0 +1,219 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { apiFetch } from "@/lib/apiClient";
+import { controlRoutes } from "@/lib/controlRoutes";
+import { ControlMetricTile } from "@/components/control/ControlMetricTile";
+import { ControlSection } from "@/components/control/ControlSection";
+import { ControlTableShell } from "@/components/control/ControlTableShell";
+import { ControlBlockedSurface } from "@/components/control/ControlBlockedSurface";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
+interface SettingRow {
+  key?: string;
+  scope_type?: string;
+  scope_id?: string;
+  value?: unknown;
+  updated_at?: string;
+}
+
+const PREF_KEY = "control-layout-order";
+
+export default function ControlSettingsPage() {
+  const { organizationId, user } = usePortalSession();
+  const [settingsRows, setSettingsRows] = useState<SettingRow[]>([]);
+  const [auditRows, setAuditRows] = useState<SettingRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [layoutOrder, setLayoutOrder] = useState<string[]>(() => controlRoutes.map((route) => route.href));
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(PREF_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed) && parsed.length) {
+          setLayoutOrder(parsed);
+        }
+      }
+    } catch {
+      // Ignore invalid local prefs.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    void (async () => {
+      try {
+        const [settingsPayload, auditPayload] = await Promise.all([
+          apiFetch<{ settings: SettingRow[] }>("/admin/settings"),
+          apiFetch<{ logs: SettingRow[] }>("/admin/settings-audit-log?limit=25"),
+        ]);
+        if (!active) return;
+        setSettingsRows(Array.isArray(settingsPayload.settings) ? settingsPayload.settings : []);
+        setAuditRows(Array.isArray(auditPayload.logs) ? auditPayload.logs : []);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Unable to load settings.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [organizationId]);
+
+  const visibleRoutes = useMemo(() => {
+    return controlRoutes
+      .filter((route) => route.href !== "/control")
+      .sort((a, b) => layoutOrder.indexOf(a.href) - layoutOrder.indexOf(b.href));
+  }, [layoutOrder]);
+
+  const moveRoute = (href: string, direction: -1 | 1) => {
+    setLayoutOrder((current) => {
+      const next = [...current];
+      const index = next.indexOf(href);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= next.length) {
+        return current;
+      }
+      [next[index], next[target]] = [next[target], next[index]];
+      try {
+        window.localStorage.setItem(PREF_KEY, JSON.stringify(next));
+      } catch {
+        // local preference only
+      }
+      return next;
+    });
+  };
+
+  if (!organizationId) {
+    return <div className="rounded-[1.75rem] border border-amber-400/20 bg-amber-500/10 p-6 text-amber-100">Settings surface requires an organization session.</div>;
+  }
+
+  if (loading) {
+    return <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 text-slate-300">Loading settings...</div>;
+  }
+
+  if (error) {
+    return <div className="rounded-[1.75rem] border border-rose-400/20 bg-rose-500/10 p-6 text-rose-100">{error}</div>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <ControlMetricTile label="Backend settings" value={settingsRows.length} detail="Admin settings rows" />
+        <ControlMetricTile label="Audit rows" value={auditRows.length} detail="Recent settings history" tone="neutral" />
+        <ControlMetricTile label="Layout prefs" value={layoutOrder.length} detail="Saved locally for this browser" tone="positive" />
+        <ControlMetricTile label="Operator" value={user?.display_name || user?.email || "Unknown"} detail="Session owner" tone="neutral" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.6fr)]">
+        <ControlSection
+          title="Layout control"
+          description="Reorder the modular control surfaces locally. This is a safe preference layer until the backend stores shared layout state."
+          actions={
+            <button
+              type="button"
+              onClick={() => {
+                setLayoutOrder(controlRoutes.map((route) => route.href));
+                try {
+                  window.localStorage.removeItem(PREF_KEY);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Reset order
+            </button>
+          }
+        >
+          <div className="grid gap-3">
+            {visibleRoutes.map((route, index) => (
+              <div key={route.href} className="flex flex-col gap-3 rounded-[1.35rem] border border-white/10 bg-white/5 p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-white">{route.label}</p>
+                  <p className="text-sm text-slate-300">{route.description}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge label={String(index + 1)} tone="neutral" />
+                  <button
+                    type="button"
+                    onClick={() => moveRoute(route.href, -1)}
+                    className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-slate-950/80"
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveRoute(route.href, 1)}
+                    className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-slate-950/80"
+                  >
+                    Down
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ControlSection>
+
+        <ControlBlockedSurface
+          title="Safe operational preferences"
+          description="Settings currently exposes the live settings read API and a local layout order preference. Safe write endpoints can be added later without redesigning the page."
+          blockers={[
+            "No backend write endpoint was exposed for shared widget layouts, so the current reorder control is browser-local only.",
+            "No direct template or outbox mutation endpoint is available from the backend for this surface.",
+          ]}
+          liveNotes={[
+            `${settingsRows.length} backend settings rows are visible right now.`,
+            `${auditRows.length} settings audit rows were returned by the backend.`,
+          ]}
+          nextLinks={[
+            { href: "/control/overview", label: "Back to overview" },
+            { href: "/control/entities", label: "Open entity explorer" },
+          ]}
+        />
+      </div>
+
+      <ControlSection title="Backend settings" description="Read-only snapshot from the admin settings API.">
+        <ControlTableShell
+          density="compact"
+          columns={[
+            { id: "key", label: "Key" },
+            { id: "scope", label: "Scope" },
+            { id: "updated", label: "Updated" },
+          ]}
+          rowsCount={settingsRows.length}
+        >
+          {settingsRows.map((setting, index) => (
+            <tr key={`${setting.key || "setting"}-${index}`} className="border-b border-white/8 hover:bg-white/5">
+              <td className="px-3 py-3 text-sm text-white">{setting.key || "Unknown"}</td>
+              <td className="px-3 py-3 text-sm text-slate-300">
+                {setting.scope_type || "global"} {setting.scope_id ? `· ${setting.scope_id}` : ""}
+              </td>
+              <td className="px-3 py-3 text-sm text-slate-300">
+                {setting.updated_at ? new Date(setting.updated_at).toLocaleString() : "Unknown"}
+              </td>
+            </tr>
+          ))}
+        </ControlTableShell>
+      </ControlSection>
+    </div>
+  );
+}

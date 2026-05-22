@@ -1,0 +1,579 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowRight, Building2, ShieldCheck, Truck, Users } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import { UsersAdapter } from "@/lib/services/usersService";
+import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
+import {
+  fetchOperationsStatus,
+  fetchReadinessStatus,
+  fetchYmsVehicles,
+  fetchYmsYardState,
+  isOlderThanHours,
+  type ControlOperationsStatus,
+  type ControlReadyzStatus,
+  type YmsVehicleSummary,
+  type YmsYardStateResponse,
+} from "@/lib/services/controlPlaneService";
+import { apiFetch } from "@/lib/apiClient";
+import type { ReportDamageApiRow, RsaReportApiRow, UserSummary, FacilitySummary } from "@/lib/types";
+import { ControlMetricTile } from "@/components/control/ControlMetricTile";
+import { ControlSection } from "@/components/control/ControlSection";
+import { ControlDetailPanel, type ControlDetailField } from "@/components/control/ControlDetailPanel";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+type AuditLogRow = Record<string, unknown> & {
+  action?: string;
+  entity_type?: string;
+  entity_id?: string;
+  created_at?: string;
+  actor_email?: string;
+  actor_user_id?: string;
+};
+
+interface AttentionItem {
+  id: string;
+  title: string;
+  severity: "neutral" | "warning" | "danger";
+  summary: string;
+  source: string;
+  updatedAt?: string | null;
+  fields: ControlDetailField[];
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return "Unknown";
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? value : new Date(parsed).toLocaleString();
+}
+
+function toneForStatus(value?: string | null): "positive" | "warning" | "danger" | "neutral" {
+  const normalized = (value || "").toLowerCase();
+  if (!normalized) return "neutral";
+  if (normalized.includes("ready") || normalized.includes("ok") || normalized.includes("active")) {
+    return "positive";
+  }
+  if (normalized.includes("warn") || normalized.includes("review") || normalized.includes("partial")) {
+    return "warning";
+  }
+  if (normalized.includes("error") || normalized.includes("fail") || normalized.includes("missing")) {
+    return "danger";
+  }
+  return "neutral";
+}
+
+export default function ControlOverviewPage() {
+  const { organizationId, session } = usePortalSession();
+  const [status, setStatus] = useState<ControlOperationsStatus | null>(null);
+  const [readiness, setReadiness] = useState<ControlReadyzStatus | null>(null);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [facilities, setFacilities] = useState<FacilitySummary[]>([]);
+  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
+  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
+  const [vehicles, setVehicles] = useState<YmsVehicleSummary[]>([]);
+  const [yardState, setYardState] = useState<YmsYardStateResponse | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [selectedAttentionId, setSelectedAttentionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setStatusError(null);
+    setReadinessError(null);
+    setInventoryError(null);
+    setAuditError(null);
+
+    void (async () => {
+      try {
+        const [statusResult, readinessResult, usersResult, facilitiesResult, damageResult, rsaResult, vehiclesResult, yardResult, auditResult] = await Promise.allSettled([
+          fetchOperationsStatus(),
+          fetchReadinessStatus(),
+          UsersAdapter.getUsers(organizationId),
+          FacilitiesAdapter.getFacilities(organizationId),
+          ReportsAdapter.fetchDamageReports({ organization_id: organizationId }),
+          ReportsAdapter.fetchRsaReports(),
+          fetchYmsVehicles(),
+          fetchYmsYardState(),
+          apiFetch<{ audit_logs: AuditLogRow[] }>(`/admin/audit-log?organizationId=${encodeURIComponent(organizationId)}&limit=8`),
+        ]);
+
+        if (!active) return;
+        if (statusResult.status === "fulfilled") setStatus(statusResult.value);
+        else setStatusError(statusResult.reason instanceof Error ? statusResult.reason.message : "Unable to load backend status.");
+        if (readinessResult.status === "fulfilled") setReadiness(readinessResult.value);
+        else setReadinessError(readinessResult.reason instanceof Error ? readinessResult.reason.message : "Unable to load readiness status.");
+        if (usersResult.status === "fulfilled") setUsers(usersResult.value);
+        if (facilitiesResult.status === "fulfilled") setFacilities(facilitiesResult.value);
+        if (damageResult.status === "fulfilled") setDamageReports(damageResult.value);
+        if (rsaResult.status === "fulfilled") setRsaReports(rsaResult.value);
+        if (vehiclesResult.status === "fulfilled") setVehicles(vehiclesResult.value);
+        if (yardResult.status === "fulfilled") setYardState(yardResult.value);
+        if (auditResult.status === "fulfilled") setAuditLogs(Array.isArray(auditResult.value.audit_logs) ? auditResult.value.audit_logs : []);
+        if (usersResult.status === "rejected" || facilitiesResult.status === "rejected" || damageResult.status === "rejected" || rsaResult.status === "rejected" || vehiclesResult.status === "rejected" || yardResult.status === "rejected") {
+          setInventoryError("One or more overview panels could not refresh. Other data remains visible.");
+        }
+        if (auditResult.status === "rejected") {
+          setAuditError(auditResult.reason instanceof Error ? auditResult.reason.message : "Unable to load audit logs.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [organizationId]);
+
+  const openDamageReports = damageReports.filter((report) => {
+    const normalized = (report.status || "").toLowerCase();
+    return normalized === "open" || normalized === "review";
+  });
+
+  const staleVehicles = vehicles.filter((vehicle) => isOlderThanHours(vehicle.lastSeen, 2));
+  const unresolvedRsa = rsaReports.filter((report) => !report.track || !report.spot);
+  const occupancy =
+    yardState && yardState.summary.slots > 0
+      ? Math.round((yardState.summary.occupiedSlots / yardState.summary.slots) * 100)
+      : 0;
+  const totalAttention = openDamageReports.length + staleVehicles.length + unresolvedRsa.length + (occupancy >= 85 ? 1 : 0);
+  const healthyChecks = Object.values(status?.checks ?? {}).filter((value) => value === "ok").length;
+  const metricTone = status?.ready ? "positive" : "warning";
+
+  const attentionItems = useMemo<AttentionItem[]>(() => {
+    const items: AttentionItem[] = [];
+
+    if (status || statusError) {
+      items.push({
+        id: "backend-status",
+        title: "Backend status",
+        severity: status?.ready ? "neutral" : "warning",
+        summary: status?.summary || statusError || "Backend status unavailable.",
+        source: status?.service || "backend",
+        updatedAt: status?.lastCheckedAt ?? null,
+        fields: [
+          { label: "Environment", value: status?.environment || "Unknown" },
+          { label: "Ready", value: status?.ready ? "Yes" : "No" },
+          { label: "Failed dependencies", value: status?.failedDependencies.length || "None" },
+          { label: "Status note", value: statusError || "Loaded" },
+        ],
+      });
+    }
+
+    if (openDamageReports.length) {
+      const report = openDamageReports[0];
+      items.push({
+        id: `damage-${report.report_id}`,
+        title: "Open damage reports",
+        severity: "warning",
+        summary: `${openDamageReports.length} report(s) still need operator review.`,
+        source: report.vin || "Damage workflow",
+        updatedAt: report.updated_at || report.created_at || null,
+        fields: [
+          { label: "VIN", value: report.vin || "Unknown" },
+          { label: "Status", value: report.status || "open" },
+          { label: "Location", value: report.location?.location_label || report.location?.facility || "Unattributed" },
+        ],
+      });
+    }
+
+    if (unresolvedRsa.length) {
+      const report = unresolvedRsa[0];
+      items.push({
+        id: `rsa-${report.report_id}`,
+        title: "RSA reports missing route context",
+        severity: "warning",
+        summary: `${unresolvedRsa.length} report(s) lack a complete track or spot.`,
+        source: report.template_key || "RSA workflow",
+        updatedAt: report.updated_at || report.created_at || null,
+        fields: [
+          { label: "Track", value: report.track || "Missing" },
+          { label: "Spot", value: report.spot || "Missing" },
+          { label: "Rail car", value: report.rail_car_number || "Unknown" },
+        ],
+      });
+    }
+
+    if (staleVehicles.length) {
+      const vehicle = staleVehicles[0];
+      items.push({
+        id: `vehicle-${vehicle.vehicleId}`,
+        title: "Stale vehicle observations",
+        severity: "danger",
+        summary: `${staleVehicles.length} vehicle(s) have not been observed recently.`,
+        source: vehicle.yardName || "YMS",
+        updatedAt: vehicle.lastSeen,
+        fields: [
+          { label: "VIN", value: vehicle.vin },
+          { label: "Status", value: vehicle.status },
+          { label: "Yard", value: vehicle.yardName },
+        ],
+      });
+    }
+
+    if (occupancy >= 85) {
+      items.push({
+        id: "yard-occupancy",
+        title: "Yard occupancy elevated",
+        severity: "danger",
+        summary: `Current occupancy is ${occupancy}% of available slots.`,
+        source: yardState?.yards[0]?.name || "Yard state",
+        updatedAt: null,
+        fields: [
+          { label: "Slots", value: yardState?.summary.slots ?? 0 },
+          { label: "Occupied", value: yardState?.summary.occupiedSlots ?? 0 },
+          { label: "Zones", value: yardState?.summary.zones ?? 0 },
+        ],
+      });
+    }
+
+    return items;
+  }, [occupancy, openDamageReports, staleVehicles, status, statusError, unresolvedRsa, yardState]);
+
+  useEffect(() => {
+    if (!selectedAttentionId && attentionItems.length) {
+      setSelectedAttentionId(attentionItems[0].id);
+    }
+  }, [attentionItems, selectedAttentionId]);
+
+  const selectedAttention =
+    attentionItems.find((item) => item.id === selectedAttentionId) ?? attentionItems[0] ?? null;
+
+  const recentEvents = auditLogs.slice(0, 6).map((row) => ({
+    id: `${row.created_at || "audit"}-${row.entity_id || row.action || Math.random()}`,
+    when: formatDate(row.created_at),
+    actor: row.actor_email || row.actor_user_id || "System",
+    action: row.action || "audit",
+    entity: row.entity_type || "entity",
+    entityId: row.entity_id || "",
+  }));
+
+  const quickLinks = [
+    { href: "/control/entities", label: "Entity explorer", description: "Search users, reports, and managed objects." },
+    { href: "/control/vehicles", label: "Vehicle timeline", description: "Inspect YMS state and route history." },
+    { href: "/control/exceptions", label: "Exception queue", description: "Review derived anomalies and stuck states." },
+    { href: "/control/audit", label: "Operator audit", description: "Trace the latest privileged actions." },
+  ];
+
+  if (!organizationId) {
+    return (
+      <div className="rounded-[1.75rem] border border-amber-400/20 bg-amber-500/10 p-6 text-amber-100">
+        <p className="text-sm font-semibold uppercase tracking-[0.36em]">Organization required</p>
+        <p className="mt-2 text-sm leading-6">
+          The control area needs an active org-scoped session before it can load live data.
+        </p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]">
+        <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-36 rounded-[1.5rem] border border-white/10 bg-white/5" />
+            ))}
+          </div>
+          <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 text-sm text-slate-300">
+            Loading live control-plane data...
+          </div>
+        </div>
+        <div className="h-96 rounded-[1.75rem] border border-white/10 bg-white/5" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]">
+      <div className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <ControlMetricTile
+            label="Ready status"
+            value={status?.ready ? "Ready" : "Attention"}
+            detail={`${healthyChecks}/${Object.keys(status?.checks ?? {}).length || 0} checks healthy`}
+            tone={metricTone}
+          />
+          <ControlMetricTile
+            label="Users"
+            value={users.length}
+            detail={`${users.filter((user) => user.isActive).length} active accounts in scope`}
+          />
+          <ControlMetricTile
+            label="Vehicles"
+            value={vehicles.length}
+            detail={`${staleVehicles.length} stale observations over the last two hours`}
+            tone={staleVehicles.length ? "warning" : "positive"}
+          />
+          <ControlMetricTile
+            label="Attention"
+            value={totalAttention}
+            detail={`${openDamageReports.length} damage, ${unresolvedRsa.length} RSA, ${occupancy >= 85 ? 1 : 0} yard alert`}
+            tone={totalAttention ? "warning" : "positive"}
+          />
+        </div>
+
+        <ControlSection
+          title="Needs attention"
+          description="Derived from live backend data. Read-only until the backend exposes explicit action endpoints."
+          actions={
+            <>
+              <StatusBadge label={status?.summary || statusError || "backend"} tone={toneForStatus(status?.status)} />
+              <StatusBadge label={readiness?.status || readinessError || "readyz"} tone={toneForStatus(readiness?.status)} />
+            </>
+          }
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+            <div className="space-y-3">
+              {attentionItems.length ? (
+                attentionItems.map((item) => {
+                  const active = item.id === selectedAttention?.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedAttentionId(item.id)}
+                      className={`w-full rounded-[1.35rem] border p-4 text-left transition ${
+                        active
+                          ? "border-cyan-400/30 bg-cyan-400/10"
+                          : "border-white/10 bg-slate-950/60 hover:border-white/20 hover:bg-slate-950/80"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-white">{item.title}</p>
+                        <StatusBadge label={item.severity} tone={item.severity === "danger" ? "danger" : item.severity === "warning" ? "warning" : "neutral"} />
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{item.summary}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                        <span>{item.source}</span>
+                        <span>•</span>
+                        <span>{formatDate(item.updatedAt)}</span>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="rounded-[1.35rem] border border-white/10 bg-slate-950/60 p-6">
+                  <EmptyState
+                    title="No live attention"
+                    description="The current live slices did not surface any open attention items."
+                  />
+                </div>
+              )}
+            </div>
+
+            <ControlDetailPanel
+              title={selectedAttention?.title || "Attention detail"}
+              eyebrow={selectedAttention ? selectedAttention.source : "Overview"}
+              subtitle={selectedAttention?.summary}
+              fields={selectedAttention?.fields}
+              footer={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href="/control/exceptions"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+                  >
+                    Exception queue
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href="/control/vehicles"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+                  >
+                    Vehicles
+                    <Truck className="h-4 w-4" />
+                  </Link>
+                </div>
+              }
+            />
+          </div>
+        </ControlSection>
+
+        <ControlSection
+          title="Recent events"
+          description="Latest audit rows from the backend. No synthetic events are manufactured here."
+          actions={auditError ? <StatusBadge label="Partial audit" tone="warning" /> : null}
+        >
+          {recentEvents.length ? (
+            <div className="overflow-hidden rounded-[1.35rem] border border-white/10">
+              <DataTableShell
+                columns={[
+                  { id: "when", label: "When", sortable: false },
+                  { id: "actor", label: "Actor", sortable: false },
+                  { id: "action", label: "Action", sortable: false },
+                  { id: "entity", label: "Entity", sortable: false },
+                ]}
+                density="compact"
+                rowsCount={recentEvents.length}
+              >
+                {recentEvents.map((event) => (
+                  <tr key={event.id} className="border-b border-white/8 hover:bg-white/5">
+                    <td className="px-3 py-3 text-xs text-slate-200">{event.when}</td>
+                    <td className="px-3 py-3 text-xs text-slate-200">{event.actor}</td>
+                    <td className="px-3 py-3 text-xs font-medium text-white">{event.action}</td>
+                    <td className="px-3 py-3 text-xs text-slate-300">
+                      {event.entity}
+                      {event.entityId ? <span className="ml-2 text-slate-500">{event.entityId}</span> : null}
+                    </td>
+                  </tr>
+                ))}
+              </DataTableShell>
+            </div>
+          ) : (
+            <div className="rounded-[1.35rem] border border-white/10 bg-slate-950/60 p-6">
+              <EmptyState
+                title="No audit rows"
+                description="The audit log endpoint returned no recent events for this session."
+              />
+            </div>
+          )}
+        </ControlSection>
+      </div>
+
+      <div className="space-y-5">
+        <ControlSection
+          title="Quick commands"
+          description="Jump to the highest-value work surfaces."
+        >
+          <div className="grid gap-3">
+            {quickLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="group rounded-[1.25rem] border border-white/10 bg-slate-950/60 p-4 transition hover:border-cyan-400/25 hover:bg-slate-950/80"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{link.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-300">{link.description}</p>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-cyan-200" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </ControlSection>
+
+        <ControlSection
+          title="Live context"
+          description="Operational scope and the most recent live counts."
+        >
+          <div className="space-y-3">
+            <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-slate-400">Operator</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                {session?.user?.display_name || session?.user?.email || "Unknown operator"}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-300">
+                {session?.user?.role?.toString().toLowerCase() === "super_admin"
+                  ? "Super admin"
+                  : session?.user?.role?.toString().toLowerCase() === "org_admin"
+                    ? "Org admin"
+                    : "Operator"} in {session?.organization?.name || organizationId}
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <Building2 className="h-4 w-4" />
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.36em]">Facilities</p>
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-white">{facilities.length}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <Users className="h-4 w-4" />
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.36em]">Active users</p>
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-white">{users.filter((user) => user.isActive).length}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <Truck className="h-4 w-4" />
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.36em]">Vehicle observations</p>
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-white">{vehicles.length}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <ShieldCheck className="h-4 w-4" />
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.36em]">Healthy checks</p>
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-white">{healthyChecks}</p>
+              </div>
+            </div>
+          </div>
+        </ControlSection>
+
+        <ControlSection
+          title="Reporting signal"
+          description="Live report activity currently visible in the backend."
+        >
+          <div className="space-y-3 text-sm">
+            <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-slate-400">
+                Damage reports
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">{damageReports.length}</p>
+              <p className="mt-1 text-slate-300">
+                {openDamageReports.length} open or in-review records are available for operator follow-up.
+              </p>
+            </div>
+            <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-slate-400">
+                RSA reports
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-white">{rsaReports.length}</p>
+              <p className="mt-1 text-slate-300">
+                {unresolvedRsa.length} entries still lack full route context.
+              </p>
+            </div>
+          </div>
+        </ControlSection>
+        <div className="grid gap-3 md:grid-cols-2">
+          {statusError ? (
+            <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+              Live backend status could not be refreshed: {statusError}
+            </div>
+          ) : null}
+          {readinessError ? (
+            <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+              Readiness signal could not be refreshed: {readinessError}
+            </div>
+          ) : null}
+          {inventoryError ? (
+            <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+              Inventory data is partially unavailable: {inventoryError}
+            </div>
+          ) : null}
+          {auditError ? (
+            <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+              Audit log is partially unavailable: {auditError}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+

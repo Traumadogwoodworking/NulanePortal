@@ -1,0 +1,265 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo } from "react";
+import { ArrowRight, FileText, Layers, ActivitySquare, Activity, AlertCircle, Building, CheckCircle2, Clock } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { getPortalBranding } from "@/lib/branding";
+import { useReportsOverview } from "@/lib/hooks/useReportsOverview";
+import type { ReportStatus } from "@/lib/types";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+// Widget Layout Config Array - dictates the structure rendered
+const WIDGET_LAYOUT = [
+  { id: "quick-actions", type: "QuickActionsWidget" },
+  { id: "damage-summary", type: "DamageSummaryWidget" },
+  { id: "facility-activity", type: "FacilityActivityWidget" },
+  { id: "rsa-signal", type: "RSASignalWidget" }
+];
+
+export default function HomePage() {
+  const { session, selectedLocationLabel, selectedLocationId } = usePortalSession();
+  const branding = session ? getPortalBranding(session) : null;
+  const organizationLabel = branding?.organizationName ?? "DocuDent workspace";
+  const { damageReports, rsaReports, loading } = useReportsOverview();
+
+  const activeLocationLabel = selectedLocationLabel ?? "Global View";
+  const activeLocationId = selectedLocationId ?? "global";
+  const hasOrgScope = Boolean(session?.organization?.organization_id || session?.user?.organization_id);
+
+  return (
+    <article className="space-y-8 px-6 py-8 lg:px-10">
+      <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+        <div className="space-y-2">
+          <p className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400">
+            Operational Home
+          </p>
+          <h1 className="text-3xl font-black text-slate-900">{organizationLabel}</h1>
+          <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
+            Welcome to the centralized portal view. Organize your tools, inspect recent submissions, and jump into operational workflows.
+          </p>
+        </div>
+        <div className="inline-flex flex-col items-end text-right">
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm text-sm">
+            <span className="font-medium text-slate-500">Context: </span>
+            <span className="font-bold text-slate-900">{activeLocationLabel} ({activeLocationId})</span>
+          </div>
+          {loading && <p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-400 animate-pulse">Syncing data...</p>}
+        </div>
+      </header>
+
+      {!hasOrgScope ? (
+        <EmptyState
+          title="Organization context missing"
+          description="Some widgets stay hidden until the session is tied to an organization."
+        />
+      ) : null}
+
+      {/* Widget Grid Layout Engine */}
+      <section className="grid gap-6 lg:grid-cols-2">
+        {WIDGET_LAYOUT.map((widgetConfig) => {
+          switch (widgetConfig.type) {
+            case "QuickActionsWidget":
+              return <WidgetQuickActions key={widgetConfig.id} />;
+            case "DamageSummaryWidget":
+              return <WidgetDamageSummary key={widgetConfig.id} damageReports={damageReports} />;
+            case "FacilityActivityWidget":
+              return <WidgetFacilityActivity key={widgetConfig.id} damageReports={damageReports} />;
+            case "RSASignalWidget":
+              return <WidgetRSASignal key={widgetConfig.id} rsaReports={rsaReports} />;
+            default:
+              return null;
+          }
+        })}
+      </section>
+    </article>
+  );
+}
+
+function WidgetQuickActions() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm col-span-1 lg:col-span-2">
+      <div className="mb-5 flex items-center justify-between">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-cyan-600">Quick Actions</h3>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+         <Link href="/docudent" className="group flex flex-col justify-between rounded-xl border border-emerald-100 bg-emerald-50/50 p-5 transition hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-sm">
+           <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+             <FileText className="w-5 h-5" />
+           </div>
+           <div className="flex items-center justify-between">
+            <span className="font-bold text-emerald-900">DocuDent Capture</span>
+            <ArrowRight className="w-4 h-4 text-emerald-400 transition group-hover:-rotate-45 group-hover:text-emerald-600" />
+           </div>
+         </Link>
+         
+         <Link href="/reports/damage" className="group flex flex-col justify-between rounded-xl border border-blue-100 bg-blue-50/50 p-5 transition hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm">
+           <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+             <Layers className="w-5 h-5" />
+           </div>
+           <div className="flex items-center justify-between">
+            <span className="font-bold text-blue-900">Damage Reports</span>
+            <ArrowRight className="w-4 h-4 text-blue-400 transition group-hover:-rotate-45 group-hover:text-blue-600" />
+           </div>
+         </Link>
+         
+         <Link href="/reports/rsa" className="group flex flex-col justify-between rounded-xl border border-fuchsia-100 bg-fuchsia-50/50 p-5 transition hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:shadow-sm">
+           <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-fuchsia-100 text-fuchsia-600">
+             <ActivitySquare className="w-5 h-5" />
+           </div>
+           <div className="flex items-center justify-between">
+            <span className="font-bold text-fuchsia-900">RSA Entries</span>
+            <ArrowRight className="w-4 h-4 text-fuchsia-400 transition group-hover:-rotate-45 group-hover:text-fuchsia-600" />
+           </div>
+         </Link>
+         
+         <Link href="/dashboard" className="group flex flex-col justify-between rounded-xl border border-purple-100 bg-purple-50/50 p-5 transition hover:border-purple-300 hover:bg-purple-50 hover:shadow-sm">
+           <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+             <Activity className="w-5 h-5" />
+           </div>
+           <div className="flex items-center justify-between">
+            <span className="font-bold text-purple-900">Dashboards</span>
+            <ArrowRight className="w-4 h-4 text-purple-400 transition group-hover:-rotate-45 group-hover:text-purple-600" />
+           </div>
+         </Link>
+      </div>
+    </div>
+  );
+}
+
+type ReportSummaryLike = {
+  status?: string | null;
+  location?: {
+    location_label?: string | null;
+    location_name?: string | null;
+    facility?: string | null;
+  } | null;
+};
+
+function WidgetDamageSummary({ damageReports }: { damageReports: ReportSummaryLike[] }) {
+  const breakdown = useMemo(() => {
+    const counts = new Map<ReportStatus | string, number>();
+    damageReports.forEach((report) => {
+      const status = report.status || "open";
+      counts.set(status, (counts.get(status) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, [damageReports]);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col">
+      <div className="mb-6 flex items-center justify-between">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Damage Breakdown</h3>
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+          Last 30 Days
+        </span>
+      </div>
+      
+      {breakdown.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center py-6 text-slate-400">
+          <CheckCircle2 className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-sm font-medium">No open damage tickets</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {breakdown.slice(0, 4).map(([status, count]) => {
+            const isError = status.toLowerCase() === "error" || status.toLowerCase() === "failed";
+            const isPending = status.toLowerCase() === "pending" || status.toLowerCase() === "open";
+            return (
+              <div key={status} className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                <div className="flex items-center gap-3">
+                  {isError ? <AlertCircle className="w-4 h-4 text-rose-500" /> : isPending ? <Clock className="w-4 h-4 text-amber-500" /> : <div className="w-2 h-2 rounded-full bg-slate-300 ml-1.5" />}
+                  <span className="text-sm font-bold capitalize text-slate-700">{status}</span>
+                </div>
+                <span className="text-sm font-black text-slate-900">{count}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WidgetFacilityActivity({ damageReports }: { damageReports: ReportSummaryLike[] }) {
+  const coverage = useMemo(() => {
+    const map = new Map<string, number>();
+    damageReports.forEach((report) => {
+      const label = report.location?.location_label || report.location?.location_name || report.location?.facility || "Unattributed";
+      map.set(label, (map.get(label) ?? 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+  }, [damageReports]);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col">
+      <div className="mb-6 flex items-center justify-between">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Active Facilities</h3>
+      </div>
+      
+      {coverage.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center py-6 text-slate-400">
+          <Building className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-sm font-medium">No reporting facilities</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {coverage.map((fac) => (
+            <div key={fac.label} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 border border-slate-100">
+              <span className="text-sm font-bold text-slate-700 truncate mr-4">{fac.label}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-black text-slate-900">{fac.count}</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Rpts</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type RsaSummaryLike = { track?: string | null };
+
+function WidgetRSASignal({ rsaReports }: { rsaReports: RsaSummaryLike[] }) {
+  const tracks = useMemo(() => {
+    const map = new Map<string, number>();
+    rsaReports.forEach((report) => {
+      if (report.track) map.set(report.track, (map.get(report.track) ?? 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([track, count]) => ({ track, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+  }, [rsaReports]);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col">
+      <div className="mb-6 flex items-center justify-between">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">RSA Track Signal</h3>
+      </div>
+      
+      {tracks.length === 0 ? (
+         <div className="flex-1 flex flex-col items-center justify-center py-6 text-slate-400">
+           <ActivitySquare className="w-8 h-8 mb-2 opacity-50" />
+           <p className="text-sm font-medium">No active RSA tracks</p>
+         </div>
+      ) : (
+        <div className="space-y-3">
+          {tracks.map((track) => (
+            <div key={track.track} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 border border-slate-100">
+              <span className="text-sm font-bold text-slate-700 border-l-2 border-indigo-400 pl-2">{track.track}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-black text-slate-900">{track.count}</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Entries</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

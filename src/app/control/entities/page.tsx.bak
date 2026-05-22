@@ -1,0 +1,366 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Gauge, UserRound } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import { UsersAdapter } from "@/lib/services/usersService";
+import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
+import { fetchYmsVehicles, normalizeControlTimestamp } from "@/lib/services/controlPlaneService";
+import { ControlFilterBar } from "@/components/control/ControlFilterBar";
+import { ControlDetailPanel, type ControlDetailField } from "@/components/control/ControlDetailPanel";
+import { ControlMetricTile } from "@/components/control/ControlMetricTile";
+import { ControlTableShell } from "@/components/control/ControlTableShell";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
+type EntityKind = "user" | "facility" | "damage" | "rsa" | "vehicle";
+
+interface EntityRow {
+  id: string;
+  kind: EntityKind;
+  label: string;
+  scope: string;
+  status: string;
+  updatedAt: string | null;
+  summary: string;
+  fields: ControlDetailField[];
+}
+
+const kindTone: Record<EntityKind, "positive" | "warning" | "danger" | "neutral"> = {
+  user: "neutral",
+  facility: "positive",
+  damage: "warning",
+  rsa: "warning",
+  vehicle: "neutral",
+};
+
+function kindLabel(kind: EntityKind): string {
+  switch (kind) {
+    case "user":
+      return "User";
+    case "facility":
+      return "Facility";
+    case "damage":
+      return "Damage";
+    case "rsa":
+      return "RSA";
+    case "vehicle":
+      return "Vehicle";
+  }
+}
+
+export default function ControlEntitiesPage() {
+  const { organizationId } = usePortalSession();
+  const [rows, setRows] = useState<EntityRow[]>([]);
+  const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<EntityKind | "all">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    void (async () => {
+      try {
+        const [users, facilities, damageReports, rsaReports, vehicles] = await Promise.all([
+          UsersAdapter.getUsers(organizationId),
+          FacilitiesAdapter.getFacilities(organizationId),
+          ReportsAdapter.fetchDamageReports({ organization_id: organizationId }),
+          ReportsAdapter.fetchRsaReports(),
+          fetchYmsVehicles(),
+        ]);
+
+        const nextRows: EntityRow[] = [
+          ...users.map((user) => ({
+            id: `user:${user.id}`,
+            kind: "user" as const,
+            label: user.name,
+            scope: user.email,
+            status: user.isActive ? "active" : "inactive",
+            updatedAt: user.lastUpdated,
+            summary: `${user.role} · ${user.facilityIds.length} site(s)`,
+            fields: [
+              { label: "Email", value: user.email },
+              { label: "Role", value: user.role },
+              { label: "Status", value: user.isActive ? "Active" : "Inactive" },
+              { label: "Facilities", value: user.facilityIds.join(", ") || "None" },
+            ],
+          })),
+          ...facilities.map((facility) => ({
+            id: `facility:${facility.id}`,
+            kind: "facility" as const,
+            label: facility.name,
+            scope: facility.region || "Regional scope",
+            status: facility.active ? "ready" : "offline",
+            updatedAt: null,
+            summary: `${facility.locationCount} location(s) · ${facility.slug}`,
+            fields: [
+              { label: "Facility ID", value: facility.id },
+              { label: "Slug", value: facility.slug },
+              { label: "Region", value: facility.region || "Global" },
+              { label: "Active", value: facility.active ? "Yes" : "No" },
+            ],
+          })),
+          ...damageReports.map((report) => ({
+            id: `damage:${report.report_id}`,
+            kind: "damage" as const,
+            label: report.vin || report.report_id,
+            scope: report.location?.location_label || report.location?.facility || "Unattributed",
+            status: report.status || "open",
+            updatedAt: report.updated_at || report.created_at || null,
+            summary: `${report.damage_entries?.length || 0} damage entry(s)`,
+            fields: [
+              { label: "Report ID", value: report.report_id },
+              { label: "VIN", value: report.vin || "Unknown" },
+              { label: "Status", value: report.status || "open" },
+              { label: "Location", value: report.location?.location_label || report.location?.facility || "Unattributed" },
+            ],
+          })),
+          ...rsaReports.map((report) => ({
+            id: `rsa:${report.report_id}`,
+            kind: "rsa" as const,
+            label: report.rail_car_number || report.report_id,
+            scope: `${report.track || "No track"} · ${report.spot || "No spot"}`,
+            status: report.track && report.spot ? "complete" : "missing-context",
+            updatedAt: report.updated_at || report.created_at || null,
+            summary: `${report.template_key || "template"} · ${report.recipients?.length || 0} recipient(s)`,
+            fields: [
+              { label: "Report ID", value: report.report_id },
+              { label: "Track", value: report.track || "Missing" },
+              { label: "Spot", value: report.spot || "Missing" },
+              { label: "Template", value: report.template_key || "Unknown" },
+            ],
+          })),
+          ...vehicles.map((vehicle) => ({
+            id: `vehicle:${vehicle.vin}`,
+            kind: "vehicle" as const,
+            label: vehicle.vin,
+            scope: vehicle.yardName || "YMS",
+            status: vehicle.status,
+            updatedAt: vehicle.lastSeen,
+            summary: `${vehicle.make || "Unknown make"} ${vehicle.model || ""}`.trim(),
+            fields: [
+              { label: "VIN", value: vehicle.vin },
+              { label: "Yard", value: vehicle.yardName || "Unknown" },
+              { label: "Slot", value: vehicle.slotLabel || "Not assigned" },
+              { label: "Last seen", value: normalizeControlTimestamp(vehicle.lastSeen) },
+            ],
+          })),
+        ];
+
+        if (!active) return;
+        setRows(nextRows);
+        setSelectedId(nextRows[0]?.id ?? null);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Unable to load entity explorer.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [organizationId]);
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (kindFilter !== "all" && row.kind !== kindFilter) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return [row.label, row.scope, row.status, row.summary, row.id]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [kindFilter, rows, search]);
+
+  const selectedRow =
+    filteredRows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
+
+  useEffect(() => {
+    if (filteredRows.length && !filteredRows.some((row) => row.id === selectedId)) {
+      setSelectedId(filteredRows[0].id);
+    }
+  }, [filteredRows, selectedId]);
+
+  const counts = useMemo(() => {
+    const buckets = {
+      user: 0,
+      facility: 0,
+      damage: 0,
+      rsa: 0,
+      vehicle: 0,
+    };
+    rows.forEach((row) => {
+      buckets[row.kind] += 1;
+    });
+    return buckets;
+  }, [rows]);
+
+  if (!organizationId) {
+    return (
+      <div className="rounded-[1.75rem] border border-amber-400/20 bg-amber-500/10 p-6 text-amber-100">
+        Entity explorer requires an organization session.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 text-slate-300">
+        Loading entity explorer...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-[1.75rem] border border-rose-400/20 bg-rose-500/10 p-6 text-rose-100">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <ControlMetricTile label="Users" value={counts.user} detail="Identity records" />
+        <ControlMetricTile label="Facilities" value={counts.facility} detail="Location scopes" tone="positive" />
+        <ControlMetricTile label="Damage" value={counts.damage} detail="Inspection records" tone="warning" />
+        <ControlMetricTile label="RSA" value={counts.rsa} detail="Rail scan records" tone="warning" />
+        <ControlMetricTile label="Vehicles" value={counts.vehicle} detail="YMS observations" />
+      </div>
+
+      <ControlFilterBar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search users, VINs, report IDs, locations, or role names"
+        filters={
+          <div className="flex flex-wrap gap-2">
+            {(["all", "user", "facility", "damage", "rsa", "vehicle"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setKindFilter(kind)}
+                className={`rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] transition ${
+                  kindFilter === kind
+                    ? "border-cyan-400/30 bg-cyan-400/15 text-cyan-100"
+                    : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10"
+                }`}
+              >
+                {kind === "all" ? "All" : kindLabel(kind)}
+              </button>
+            ))}
+          </div>
+        }
+        summary={<StatusBadge label={`${filteredRows.length} matches`} tone={filteredRows.length ? "neutral" : "warning"} />}
+      />
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
+        <ControlTableShell
+          title="Entity index"
+          description="Unified view over users, facilities, report rows, and YMS observations."
+          density="compact"
+          columns={[
+            { id: "kind", label: "Type" },
+            { id: "label", label: "Identity" },
+            { id: "scope", label: "Scope" },
+            { id: "status", label: "Status" },
+            { id: "updated", label: "Updated" },
+          ]}
+          rowsCount={filteredRows.length}
+        >
+          {filteredRows.map((row) => {
+            const active = row.id === selectedRow?.id;
+            return (
+              <tr
+                key={row.id}
+                data-row-key={row.id}
+                className={`cursor-pointer transition ${
+                  active ? "bg-cyan-400/10" : "hover:bg-white/5"
+                }`}
+                onClick={() => setSelectedId(row.id)}
+              >
+                <td className="px-3 py-3">
+                  <StatusBadge label={kindLabel(row.kind)} tone={kindTone[row.kind]} />
+                </td>
+                <td className="px-3 py-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-white">{row.label}</p>
+                    <p className="text-xs text-slate-400">{row.summary}</p>
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-sm text-slate-300">{row.scope}</td>
+                <td className="px-3 py-3">
+                  <StatusBadge label={row.status} tone={toneForEntityStatus(row.status)} />
+                </td>
+                <td className="px-3 py-3 text-sm text-slate-300">{normalizeControlTimestamp(row.updatedAt)}</td>
+              </tr>
+            );
+          })}
+        </ControlTableShell>
+
+        <ControlDetailPanel
+          title={selectedRow?.label || "Entity detail"}
+          eyebrow={selectedRow ? kindLabel(selectedRow.kind) : "Entity"}
+          subtitle={selectedRow?.summary}
+          fields={selectedRow?.fields}
+          footer={
+            selectedRow ? (
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/control/users"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+                >
+                  Users
+                  <UserRound className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/control/vehicles"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white transition hover:border-white/20 hover:bg-white/10"
+                >
+                  Vehicles
+                  <Gauge className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : null
+          }
+          emptyLabel="No selection"
+          emptyDescription="Select a row to inspect its linked data and traceability context."
+        />
+      </div>
+    </div>
+  );
+}
+
+function toneForEntityStatus(status: string): "positive" | "warning" | "danger" | "neutral" {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("active") || normalized.includes("ready") || normalized.includes("complete")) {
+    return "positive";
+  }
+  if (normalized.includes("warning") || normalized.includes("review") || normalized.includes("missing")) {
+    return "warning";
+  }
+  if (normalized.includes("inactive") || normalized.includes("offline") || normalized.includes("error")) {
+    return "danger";
+  }
+  return "neutral";
+}
+

@@ -1,0 +1,1045 @@
+"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @next/next/no-img-element, react/no-unescaped-entities, jsx-a11y/alt-text */
+
+import Image from "next/image";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { FacilitySelector } from "@/components/ui/FacilitySelector";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DamageMapCard } from "@/components/reports/DamageMapCard";
+import { ReportActions } from "@/components/reports/ReportActions";
+import { buildReportGallery } from "@/lib/reportGallery";
+import { normalizeMediaUrl } from "@/lib/config";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import { saveAs } from "file-saver";
+import { 
+  ChevronRight, 
+  Download, 
+  FileEdit, 
+  FileSpreadsheet, 
+  FileText, 
+  Image as ImageIcon, 
+  Info, 
+  AlertTriangle,
+  CheckCircle2,
+  Maximize2,
+  Calendar,
+  User,
+  MapPin,
+  RefreshCw,
+  Search,
+  FilterX,
+} from "lucide-react";
+import {
+  deriveReportSeverity,
+  deriveMostMajorDamage,
+  getUserColor,
+  resolveDamageReportLocationName,
+  resolveRsaFacilityLabel,
+  slugForFacilityLabel,
+} from "@/lib/reportUtils";
+import { severityLabel, severityTone } from "@/lib/severityUtils";
+import { getPortalBranding } from "@/lib/branding";
+import { usePortalSession } from "@/lib/portalSession";
+import { toneForReportStatus } from "@/lib/status";
+import type {
+  FacilitySummary,
+  ReportDamageApiRow,
+  ReportFilterKey,
+  ReportFilters,
+  ReportStatus,
+  RsaReportApiRow,
+  ReportSummary,
+} from "@/lib/types";
+
+const FACILITY_FILTER_ALL = "all";
+
+const STATUS_OPTIONS: Array<{ label: string; value: ReportStatus }> = [
+  { label: "Open", value: "open" },
+  { label: "Review", value: "review" },
+  { label: "Closed", value: "closed" },
+];
+
+interface ReportsManagerProps {
+  mode: "all" | "damage" | "rsa";
+}
+
+function UserLegend({ reports }: { reports: ReportSummary[] }) {
+  const users = useMemo(() => {
+    const map = new Map<string, string>();
+    reports.forEach(r => {
+      if (r.inspectorEmail) {
+        map.set(r.inspectorEmail, r.inspectorEmail);
+      }
+    });
+    return Array.from(map.values()).sort();
+  }, [reports]);
+
+  if (users.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] shadow-sm mb-4">
+      <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100 dark:border-slate-800 pr-4 h-4 flex items-center">Inspector Key</div>
+      <div className="flex flex-wrap gap-2">
+        {users.map(email => {
+          const colors = getUserColor(email);
+          return (
+            <div key={email} className={`flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-full border ${colors.bg} ${colors.border} transition-all hover:scale-105 cursor-default`}>
+              <div className={`w-2 h-2 rounded-full ${colors.circle} shadow-sm`} />
+              <span className={`text-[10px] font-black ${colors.text} uppercase tracking-tight`}>{email.split('@')[0]}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function ReportsManager({ mode }: ReportsManagerProps) {
+  const { organizationId, session } = usePortalSession();
+  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
+  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
+  const [filters, setFilters] = useState<Partial<Record<ReportFilterKey, string>>>({});
+  const [statusFilter, setStatusFilter] = useState<ReportStatus | "">("");
+  const [facilityFilter, setFacilityFilter] = useState(FACILITY_FILTER_ALL);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [rsaTrackFilter, setRsaTrackFilter] = useState("");
+  const [rsaSpotFilter, setRsaSpotFilter] = useState("");
+  const [rsaStartDate, setRsaStartDate] = useState("");
+  const [rsaEndDate, setRsaEndDate] = useState("");
+  const [selectedDamageReportId, setSelectedDamageReportId] = useState<string | null>(null);
+  const [selectedRsaReportId, setSelectedRsaReportId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [activePhoto, setActivePhoto] = useState<string | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [damageLoadError, setDamageLoadError] = useState<string | null>(null);
+  const [rsaLoadError, setRsaLoadError] = useState<string | null>(null);
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  const [expandedTracks, setExpandedTracks] = useState<Record<string, boolean>>({});
+  const [expandedSpots, setExpandedSpots] = useState<Record<string, boolean>>({});
+
+  const loadDamageReports = useCallback(async () => {
+    if (!organizationId) {
+      setDamageReports([]);
+      setSelectedDamageReportId(null);
+      return;
+    }
+    setLoading(true);
+    setLoadError(null);
+    setDamageLoadError(null);
+    try {
+      const response = await ReportsAdapter.fetchDamageReports(filters as ReportFilters);
+      setDamageReports(response);
+    } catch (err) {
+      console.error(err);
+      setDamageLoadError(err instanceof Error ? err.message : "Unable to load damage reports.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, organizationId]);
+
+  const loadRsaReports = useCallback(async () => {
+    setLoading(true);
+    setRsaLoadError(null);
+    try {
+      const response = await ReportsAdapter.fetchRsaReports();
+      setRsaReports(response);
+    } catch (err) {
+      console.error(err);
+      setRsaLoadError(err instanceof Error ? err.message : "Unable to load RSA reports.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const resolveCarDisplayInfo = (car: any) => {
+    const allVins: string[] = [];
+    const deckVinsMap: Record<string, string[]> = {};
+    
+    if (car.decks) {
+      Object.entries(car.decks).forEach(([deckKey, deckVins]: [string, any]) => {
+        const vinsForDeck: string[] = [];
+        if (Array.isArray(deckVins)) {
+          deckVins.forEach((v: any) => {
+            const vinVal = (v.vin || v).toString().trim().toUpperCase();
+            if (vinVal && vinVal !== "N/A" && vinVal !== "UNDEFINED") {
+              allVins.push(vinVal);
+              vinsForDeck.push(vinVal);
+            }
+          });
+        }
+        if (vinsForDeck.length > 0) {
+          deckVinsMap[deckKey] = vinsForDeck;
+        }
+      });
+    }
+
+    const railcarNum = (car.railCarNumber || car.rail_car_number || car.car_id || "").toUpperCase();
+    
+    // Engine prioritizes a single VIN as the ID, otherwise the railcar number
+    const primaryId = allVins.length === 1 
+      ? allVins[0] 
+      : (railcarNum || "No ID");
+    
+    return {
+        primaryId,
+        vinCount: allVins.length,
+        allVins,
+        deckVinsMap,
+        hasMultiple: allVins.length > 1,
+        railcarId: railcarNum,
+        decks: Object.keys(deckVinsMap).sort(),
+        isUnverified: allVins.length === 0
+    };
+  };
+
+  useEffect(() => {
+    if (mode === "all" || mode === "damage") void loadDamageReports();
+  }, [loadDamageReports, mode]);
+
+  useEffect(() => {
+    if (mode === "all" || mode === "rsa") void loadRsaReports();
+  }, [loadRsaReports, mode]);
+
+  const damageSummaries = useMemo<ReportSummary[]>(() => {
+    return damageReports.map((report) => {
+      const locationName = resolveDamageReportLocationName(report);
+      const severity = deriveReportSeverity(report);
+      const normalizedStatus = (report.status as ReportStatus) || "open";
+      return {
+        id: report.report_id,
+        type: "damage",
+        status: normalizedStatus,
+        title: `${report.make || ""} ${report.model || ""}`.trim() || report.report_id,
+        vin: report.vin || "",
+        make: report.make,
+        model: report.model,
+        year: report.year,
+        inspectorEmail: report.inspector_email,
+        locationName,
+        facilityName: locationName,
+        createdAt: report.created_at,
+        updatedAt: report.updated_at,
+        severity,
+      };
+    });
+  }, [damageReports]);
+
+  const rsaSummaries = useMemo<ReportSummary[]>(() => {
+    return rsaReports.map((report) => ({
+      id: report.report_id,
+      type: "rsa",
+      status: (report.report_id ? "closed" : "review") as ReportStatus,
+      title: report.subject || report.report_id,
+      inspectorEmail: report.inspector_email,
+      facilityName: resolveRsaFacilityLabel(report),
+      locationName: report.rail_car_number || report.facility || "",
+      createdAt: report.created_at,
+      updatedAt: report.updated_at,
+      track: report.track || null,
+      spot: report.spot || null,
+      cars: report.cars || [] as any[],
+      payload: report.payload,
+    }));
+  }, [rsaReports]);
+
+  const facilityChoices = useMemo<FacilitySummary[]>(() => {
+    const map = new Map<string, string>();
+    [...damageSummaries, ...rsaSummaries].forEach((summary) => {
+      const label = summary.facilityName || summary.locationName || "Unknown facility";
+      const slug = slugForFacilityLabel(label);
+      if (!map.has(slug)) map.set(slug, label);
+    });
+    return Array.from(map.entries()).map(([slug, label]) => ({
+      id: slug,
+      name: label,
+      slug,
+      region: "",
+      active: true,
+      locationCount: 1,
+    }));
+  }, [damageSummaries, rsaSummaries]);
+
+  const filteredDamageSummaries = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return damageSummaries.filter((summary) => {
+      if (facilityFilter !== FACILITY_FILTER_ALL) {
+        const slug = slugForFacilityLabel(summary.locationName || summary.facilityName || "Unknown facility");
+        if (slug !== facilityFilter) return false;
+      }
+      if (statusFilter && summary.status !== statusFilter) return false;
+      if (query) {
+        const haystack = [summary.id, summary.vin, summary.make, summary.model, summary.inspectorEmail].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [damageSummaries, facilityFilter, searchTerm, statusFilter]);
+
+  const filteredRsaSummaries = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    const startDate = rsaStartDate ? new Date(rsaStartDate) : null;
+    const endDate = rsaEndDate ? (() => { const d = new Date(rsaEndDate); d.setHours(23, 59, 59, 999); return d; })() : null;
+    
+    return rsaSummaries.filter((summary) => {
+      if (facilityFilter !== FACILITY_FILTER_ALL) {
+        const slug = slugForFacilityLabel(summary.facilityName || summary.locationName || "RSA facility");
+        if (slug !== facilityFilter) return false;
+      }
+      if (rsaTrackFilter && summary.track !== rsaTrackFilter) return false;
+      if (rsaSpotFilter && summary.spot !== rsaSpotFilter) return false;
+      if (startDate || endDate) {
+        const created = summary.createdAt ? new Date(summary.createdAt) : null;
+        if (!created) return false;
+        if (startDate && created < startDate) return false;
+        if (endDate && created > endDate) return false;
+      }
+      if (query) {
+        const haystack = [summary.id, summary.title, summary.inspectorEmail, summary.track, summary.spot].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [rsaSummaries, facilityFilter, rsaTrackFilter, rsaSpotFilter, rsaStartDate, rsaEndDate, searchTerm]);
+
+  const groupedRsaRows = useMemo(() => {
+    const days: Record<string, Record<string, Record<string, any[]>>> = {};
+    const sorted = [...filteredRsaSummaries].sort((a,b) => (b.createdAt && a.createdAt) ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() : 0);
+
+    sorted.forEach(report => {
+      const dateKey = report.createdAt ? new Date(report.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Ongoing';
+      if (!days[dateKey]) days[dateKey] = {};
+      const trackKey = report.track ? `Track ${report.track}` : 'Miscellaneous';
+      if (!days[dateKey][trackKey]) days[dateKey][trackKey] = {};
+      const spotKey = report.spot ? `Spot ${report.spot}` : 'Unassigned';
+      if (!days[dateKey][trackKey][spotKey]) days[dateKey][trackKey][spotKey] = [];
+      days[dateKey][trackKey][spotKey].push(report);
+    });
+    return days;
+  }, [filteredRsaSummaries]);
+
+  const clearFilters = useCallback(() => {
+    setSearchTerm("");
+    setStatusFilter("");
+    setFacilityFilter(FACILITY_FILTER_ALL);
+    setRsaTrackFilter("");
+    setRsaSpotFilter("");
+    setRsaStartDate("");
+    setRsaEndDate("");
+    setFilters({});
+  }, []);
+
+  const exportToCsv = (type: "damage" | "rsa") => {
+    setExporting(true);
+    try {
+      const data = type === "damage" ? filteredDamageSummaries : filteredRsaSummaries;
+      if (data.length === 0) return;
+      
+      const headers = Object.keys(data[0]).filter(k => k !== 'cars' && k !== 'payload').join(",");
+      const rows = data.map(obj => {
+        return Object.entries(obj)
+          .filter(([k]) => k !== 'cars' && k !== 'payload')
+          .map(([k, val]) => {
+            const stringVal = val === null || val === undefined ? "" : String(val);
+            return `"${stringVal.replace(/"/g, '""')}"`;
+          }).join(",");
+      }).join("\n");
+
+      let content = `${headers}\n${rows}`;
+      
+      // If RSA, add a section for assets if appropriate or keep it simple
+      if (type === "rsa") {
+        content = `Report ID,Track,Spot,Facility,Asset List\n` + 
+          (filteredRsaSummaries as any[]).map(s => {
+            const vins = s.cars?.flatMap((c: any) => {
+              const info = resolveCarDisplayInfo(c);
+              return info.allVins.length > 0 ? info.allVins : [info.railcarId];
+            }) || [];
+            return `"${s.id}","${s.track || ""}","${s.spot || ""}","${s.facilityName || ""}","${vins.join(' | ')}"`;
+          }).join("\n");
+      }
+
+      saveAs(new Blob([content], { type: "text/csv;charset=utf-8;" }), `Docudent_${type}_${new Date().toISOString().split('T')[0]}.csv`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDownloadPdf = (reportId: string) => {
+    const report = damageReports.find((entry) => entry.report_id === reportId);
+    const pdfUrl = report ? ReportsAdapter.resolveDamageReportPdfUrl(report) : null;
+    if (!pdfUrl) {
+      setOperationMessage(`No PDF was generated for #${reportId}.`);
+      return;
+    }
+    const anchor = document.createElement("a");
+    anchor.href = pdfUrl;
+    anchor.target = "_blank";
+    anchor.rel = "noopener";
+    anchor.download = "";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  };
+
+  const handleDownloadPhotos = async (reportId: string) => {
+    const report = damageReports.find((entry) => entry.report_id === reportId);
+    if (!report) {
+      setOperationMessage(`Unable to find report #${reportId}.`);
+      return;
+    }
+    try {
+      setOperationMessage(`Preparing photo archive for #${reportId}.`);
+      await ReportsAdapter.downloadDamageReportPhotosZip(report);
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Unable to download report photos.");
+    }
+  };
+
+  const handleEditDamageReport = (reportId: string) => {
+    setSelectedDamageReportId(reportId);
+    setOperationMessage(`Edit flow for #${reportId} is not wired yet on the new surface.`);
+  };
+
+  const handleUpdateStatus = (reportId: string) => {
+      const nextStatus = window.prompt("Enter new status (open, review, closed)", "review");
+      if (nextStatus) setOperationMessage(`Record #${reportId} status updated to ${nextStatus}.`);
+  };
+
+  const selectedDamageFullRow = useMemo(() => damageReports.find(r => r.report_id === selectedDamageReportId) ?? null, [damageReports, selectedDamageReportId]);
+  const selectedRsaFullRow = useMemo(() => rsaReports.find(r => r.report_id === selectedRsaReportId) ?? null, [rsaReports, selectedRsaReportId]);
+  const selectedDamagePdfUrl = useMemo(
+    () => (selectedDamageFullRow ? ReportsAdapter.resolveDamageReportPdfUrl(selectedDamageFullRow) : null),
+    [selectedDamageFullRow]
+  );
+  const selectedDamagePhotosAvailable = Boolean(selectedDamageFullRow?.report_id);
+  const selectedDamageGallery = useMemo(
+    () => buildReportGallery(selectedDamageFullRow ?? null),
+    [selectedDamageFullRow]
+  );
+
+  const rsaTrackOptions = useMemo(() => Array.from(new Set(rsaSummaries.map(s => s.track).filter(Boolean))).sort(), [rsaSummaries]);
+  const rsaSpotOptions = useMemo(() => Array.from(new Set(rsaSummaries.map(s => s.spot).filter(Boolean))).sort(), [rsaSummaries]);
+
+  const damageColumns = ["Report", "VIN", "Location", "Severity", "Status", "Inspector", "Created"];
+  const rsaColumns = ["Asset Registry (VIN)", "Track", "Spot", "Facility", "Created"];
+
+  return (
+    <article className="max-w-7xl mx-auto w-full space-y-6 pb-12">
+      <header className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="page-title text-3xl font-black tracking-tight">
+            {mode === "all" ? "Operations Reports" : mode === "damage" ? "Damage Reports" : "RSA Reports"}
+          </h1>
+          <p className="page-subtitle text-slate-500 mt-1">
+            Analyze organization inspection activity across facilities.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => exportToCsv(mode === "rsa" ? "rsa" : "damage")}
+            disabled={exporting}
+            className="px-5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 hover:border-brand/40 transition-all flex items-center gap-2 shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+            {exporting ? "Generating..." : "Export CSV"}
+          </button>
+        </div>
+      </header>
+
+      {operationMessage && (
+          <div className="p-3 rounded-xl bg-slate-900 text-emerald-400 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest text-center animate-in fade-in slide-in-from-top-2 duration-300">
+              {operationMessage}
+          </div>
+      )}
+
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--metric-warning-border)] bg-[color:var(--metric-warning-bg)] p-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--metric-warning-fg)]">
+          <span>Damage reports could not be refreshed: {loadError}</span>
+          <button
+            type="button"
+            onClick={loadDamageReports}
+            className="rounded-full border border-current/20 bg-white/30 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition hover:bg-white/50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {damageLoadError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--metric-warning-border)] bg-[color:var(--metric-warning-bg)] p-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--metric-warning-fg)]">
+          <span>Damage reports are partially unavailable: {damageLoadError}</span>
+          <button
+            type="button"
+            onClick={loadDamageReports}
+            className="rounded-full border border-current/20 bg-white/30 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition hover:bg-white/50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {rsaLoadError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--metric-warning-border)] bg-[color:var(--metric-warning-bg)] p-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--metric-warning-fg)]">
+          <span>RSA reports are partially unavailable: {rsaLoadError}</span>
+          <button
+            type="button"
+            onClick={loadRsaReports}
+            className="rounded-full border border-current/20 bg-white/30 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition hover:bg-white/50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {(mode === "all" || mode === "damage") && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div>
+                        <h2 className="text-lg font-bold text-slate-950 tracking-tight">Damage Inspections</h2>
+                <p className="text-[11px] text-slate-500 font-medium uppercase tracking-widest">Active Incident Logs</p>
+              </div>
+            </div>
+            <button type="button" onClick={loadDamageReports} className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-500 transition-all">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          <UserLegend reports={filteredDamageSummaries} />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-2 p-1.5 bg-slate-50/30 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col gap-1 xl:col-span-2">
+              <div className="relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 group-focus-within:text-brand transition-colors" />
+                <input
+                  type="text"
+                  className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm w-full"
+                  placeholder="ID, VIN, Make, Model..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as ReportStatus | "")}
+                className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand/40 shadow-sm"
+            >
+                <option value="">All Statuses</option>
+                {STATUS_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+            <div className="xl:col-span-2">
+              <FacilitySelector facilities={facilityChoices} value={facilityFilter} onChange={setFacilityFilter} />
+            </div>
+            <button onClick={clearFilters} className="w-full py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-brand border border-dashed border-slate-200 dark:border-slate-800 transition-all">
+              Clear
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="xl:col-span-2 h-fit">
+              <DataTableShell columns={damageColumns} density="compact">
+                {loading ? (
+                  <tr><td colSpan={damageColumns.length} className="py-12 text-center text-slate-400">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto opacity-40 mb-2" />
+                      <p className="text-[9px] font-black uppercase tracking-widest">Fetching telemetry...</p>
+                  </td></tr>
+                ) : filteredDamageSummaries.length === 0 ? (
+                  <tr><td colSpan={damageColumns.length} className="py-12 text-center text-[9px] font-black uppercase tracking-widest text-slate-400">No matching results</td></tr>
+                ) : (
+                  filteredDamageSummaries.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      className={`group transition-all duration-200 cursor-pointer border-b border-slate-100/50 dark:border-slate-800/40 last:border-b-0 ${
+                        entry.id === selectedDamageReportId ? "bg-brand/5 dark:bg-brand/10 shadow-[inset_3px_0_0_0_#2563eb]" : "hover:bg-slate-50/50 dark:hover:bg-white/[0.01]"
+                      }`}
+                      onClick={() => setSelectedDamageReportId(entry.id)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-black tracking-tighter transition-all ${getUserColor(entry.inspectorEmail).bg} ${getUserColor(entry.inspectorEmail).text} ${entry.id === selectedDamageReportId ? 'ring-2 ring-brand ring-offset-2 dark:ring-offset-slate-950 shadow-md' : 'border border-slate-200 dark:border-slate-800 shadow-sm'}`}>
+                            {entry.make?.charAt(0) || "D"}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className={`text-[13px] font-black uppercase tracking-tight truncate leading-none mb-1.5 ${entry.id === selectedDamageReportId ? 'text-slate-950' : 'text-slate-950'}`}>
+                              {entry.title || "Unknown Asset"}
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 dark:bg-slate-900 px-1 rounded border border-slate-100 dark:border-slate-800">#{entry.id.substring(0, 8)}...</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-[10px] text-slate-500 font-bold uppercase tracking-tight">{entry.vin || "—"}</td>
+                      <td className="px-3 py-2 text-[10px] text-slate-500 font-bold uppercase tracking-tight">{entry.locationName || "Global"}</td>
+                      <td className="px-3 py-3">
+                        <StatusBadge label={severityLabel(entry.severity)} tone={severityTone(entry.severity)} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <StatusBadge label={entry.status} tone={toneForReportStatus(entry.status)} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border shadow-sm ${getUserColor(entry.inspectorEmail).bg} ${getUserColor(entry.inspectorEmail).text} ${getUserColor(entry.inspectorEmail).border}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${getUserColor(entry.inspectorEmail).circle}`} />
+                            <span className="text-[10px] font-black uppercase tracking-tighter whitespace-nowrap">
+                                {entry.inspectorEmail?.split('@')[0] || "—"}
+                            </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-[10px] font-bold text-slate-400 flex items-center justify-between">
+                        {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "—"}
+                        <ChevronRight className={`w-3 h-3 transition-transform ${entry.id === selectedDamageReportId ? 'translate-x-1 text-brand opacity-100' : 'opacity-0'}`} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </DataTableShell>
+            </div>
+
+            <aside className="space-y-4">
+              {selectedDamageFullRow ? (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl overflow-hidden animate-in fade-in duration-500">
+                  <header className="p-4 bg-white dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-start justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex flex-col">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Vehicle Identity</p>
+                        <h3 className="text-xl font-black text-slate-950 tracking-tight uppercase">
+                            {selectedDamageFullRow.make} {selectedDamageFullRow.model}
+                        </h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-black text-slate-700">{selectedDamageFullRow.year}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3">
+                           <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border shadow-sm ${getUserColor(selectedDamageFullRow.inspector_email).bg} ${getUserColor(selectedDamageFullRow.inspector_email).text} ${getUserColor(selectedDamageFullRow.inspector_email).border}`}>
+                              <div className={`w-2 h-2 rounded-full ${getUserColor(selectedDamageFullRow.inspector_email).circle} shadow-sm`} />
+                              <span className="text-[10px] font-black uppercase tracking-widest">
+                                  Inspector {selectedDamageFullRow.inspector_email?.split('@')[0] || "Agent"}
+                              </span>
+                           </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Report Registry</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-950 bg-white px-2 py-0.5 rounded border border-slate-200">#{selectedDamageFullRow.report_id}</span>
+                      </div>
+                    </div>
+                    <div className="pt-1">
+                        <div className="space-y-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Primary Operational Concern</p>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center shadow-sm">
+                                    <AlertTriangle className="w-5 h-5" />
+                                </div>
+                                <h3 className="text-sm font-black text-slate-950 tracking-tight uppercase leading-none">
+                                  {deriveMostMajorDamage(selectedDamageFullRow)}
+                                </h3>
+                            </div>
+                        </div>
+                    </div>
+                  </header>
+
+                  <div className="p-4 space-y-5">
+                    <ReportActions
+                      onEdit={() => handleEditDamageReport(selectedDamageFullRow.report_id)}
+                      onDownloadPhotos={() => handleDownloadPhotos(selectedDamageFullRow.report_id)}
+                      onDownloadPdf={() => handleDownloadPdf(selectedDamageFullRow.report_id)}
+                      photosDisabled={!selectedDamagePhotosAvailable}
+                      photosDisabledReason={selectedDamagePhotosAvailable ? undefined : "No photo archive is available for this report."}
+                      pdfDisabled={!selectedDamagePdfUrl}
+                      pdfDisabledReason={selectedDamagePdfUrl ? undefined : "No PDF is available for this report."}
+                      className="justify-start"
+                    />
+                      <div className="space-y-3">
+                        <h4 className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300 flex items-center gap-3">
+                          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700"></div>
+                          Splat
+                          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700"></div>
+                        </h4>
+                        <DamageMapCard report={selectedDamageFullRow} />
+                      </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all group">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2 group-hover:text-emerald-500">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Lifecycle
+                        </p>
+                        <p className="text-xs font-black text-slate-950 dark:text-slate-200 capitalize">{selectedDamageFullRow.status || "open"}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all group">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2 group-hover:text-brand">
+                          <Info className="w-3.5 h-3.5" /> Risk Tier
+                        </p>
+                        <p className="text-xs font-black text-slate-950 dark:text-slate-200 capitalize">{deriveReportSeverity(selectedDamageFullRow)}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <h4 className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-3">
+                            <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                            Incident Breakdown
+                            <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                        </h4>
+                        <div className="space-y-4">
+                          {selectedDamageFullRow.damage_entries?.map((entry: any, idx) => (
+                            <div key={idx} className="p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 group hover:border-brand/40 transition-all">
+                               <div className="flex items-start justify-between mb-3">
+                                  <div className="flex items-center gap-3">
+                                     <div className="w-6 h-6 rounded bg-slate-100 text-slate-950 flex items-center justify-center text-[10px] font-black">{idx + 1}</div>
+                                     <div>
+                                        <p className="text-[10px] font-black text-slate-950 uppercase tracking-tight">{entry.damage_area || "General Area"}</p>
+                                        <p className="text-[8px] font-medium text-slate-400 uppercase tracking-widest">{entry.damage_type || "Surface Impact"}</p>
+                                     </div>
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${entry.severity === 'high' ? 'bg-rose-500/10 text-rose-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                                    {entry.severity || "Standard"}
+                                  </span>
+                               </div>
+                               {entry.comments && <p className="text-[10px] text-slate-950 italic mb-3 border-l-2 border-slate-200 pl-3">"{entry.comments}"</p>}
+                               <div className="grid grid-cols-2 gap-2">
+                                  {entry.photos?.map((photo: any, phIdx: number) => {
+                                    const photoUrl = typeof photo === 'string' ? photo : (photo.url || photo.cloud_url || photo.uri || photo.splat_url);
+                                    if (!photoUrl) return null;
+                                    return (
+                                      <div key={phIdx} onClick={() => setActivePhoto(normalizeMediaUrl(photoUrl))} className="aspect-square rounded-xl bg-white dark:bg-slate-950 border border-slate-200 overflow-hidden cursor-zoom-in relative group">
+                                          <img src={normalizeMediaUrl(photoUrl)} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                                          <div className="absolute inset-0 bg-black/0 opacity-0 group-hover:opacity-100" />
+                                      </div>
+                                    )
+                                  })}
+                               </div>
+                            </div>
+                          ))}
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 p-8 text-center flex flex-col items-center justify-center min-h-[400px]">
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center text-slate-200 dark:text-slate-800 mb-6 border border-slate-100 dark:border-slate-800">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Select Inspection</h4>
+                </div>
+              )}
+            </aside>
+          </div>
+        </section>
+      )}
+
+      {(mode === "all" || mode === "rsa") && (
+        <section className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+           <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-500 flex items-center justify-center">
+                <FileText className="w-4 h-4" />
+              </div>
+               <div>
+                 <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">RSA Logistics Summary</h2>
+                 <p className="text-[11px] text-slate-500 font-medium uppercase tracking-widest">Asset Registry Stream</p>
+               </div>
+             </div>
+             <div className="flex items-center gap-2">
+               <button 
+                 onClick={() => exportToCsv("rsa")}
+                 className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[9px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:border-sky-500/40 transition-all flex items-center gap-2 shadow-sm"
+               >
+                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+                 Export
+               </button>
+               <button type="button" onClick={loadRsaReports} className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-500 transition-all">
+                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+               </button>
+             </div>
+           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-1.5 p-1 bg-slate-50/50 dark:bg-slate-900/50 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
+            <select value={rsaTrackFilter || ""} onChange={(e) => setRsaTrackFilter(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs">
+              <option value="">All Tracks</option>
+              {rsaTrackOptions.map((t) => <option key={t || "unknown"} value={t || ""}>{t}</option>)}
+            </select>
+            <select value={rsaSpotFilter || ""} onChange={(e) => setRsaSpotFilter(e.target.value)} className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs">
+              <option value="">All Spots</option>
+              {rsaSpotOptions.map((s) => <option key={s || "unknown"} value={s || ""}>{s}</option>)}
+            </select>
+            <div className="lg:col-span-2 flex items-center gap-1.5">
+              <input type="date" value={rsaStartDate} onChange={(e) => setRsaStartDate(e.target.value)} className="flex-1 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-1 text-[10px] font-bold" />
+              <input type="date" value={rsaEndDate} onChange={(e) => setRsaEndDate(e.target.value)} className="flex-1 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-1 text-[10px] font-bold" />
+            </div>
+            <button onClick={clearFilters} className="py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-[8px] font-black uppercase tracking-widest text-slate-400 hover:text-brand">
+              Reset
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="xl:col-span-2">
+              <DataTableShell columns={rsaColumns}>
+                {loading ? (
+                   <tr><td colSpan={rsaColumns.length} className="py-12 text-center text-slate-400"><RefreshCw className="w-5 h-5 animate-spin mx-auto opacity-40 mb-2" /><p className="text-[9px] font-black uppercase tracking-widest">Processing Logistics...</p></td></tr>
+                ) : filteredRsaSummaries.length === 0 ? (
+                  <tr><td colSpan={rsaColumns.length} className="py-12 text-center text-[9px] font-black uppercase tracking-widest text-slate-400">No telemetry found in timeline.</td></tr>
+                ) : (
+                  Object.entries(groupedRsaRows).map(([date, tracks]) => {
+                    const isDateExpanded = expandedDates[date] ?? true;
+                    return (
+                      <React.Fragment key={date}>
+                        <tr className="cursor-pointer bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100/50 dark:border-slate-800/50" onClick={() => setExpandedDates(prev => ({ ...prev, [date]: !isDateExpanded }))}>
+                          <td colSpan={rsaColumns.length} className="px-3 py-1.5">
+                             <div className="flex items-center justify-between">
+                               <div className="flex items-center gap-2">
+                                 <Calendar className="w-3 h-3 text-brand" />
+                                 <h3 className="text-[11px] font-bold text-slate-950 dark:text-white uppercase tracking-tight">{date}</h3>
+                                 <span className="text-[9px] font-black text-slate-400 bg-slate-200/50 dark:bg-slate-800 px-1.5 py-0.5 rounded-full ml-2">
+                                    {Object.values(tracks).reduce((acc, spots) => acc + Object.values(spots).reduce((sacc, items) => sacc + items.length, 0), 0)} Assets
+                                 </span>
+                               </div>
+                               <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${isDateExpanded ? 'rotate-90' : ''}`} />
+                             </div>
+                          </td>
+                        </tr>
+                        {isDateExpanded && Object.entries(tracks).map(([trackName, spots]) => {
+                          const trackKey = `${date}-${trackName}`;
+                          const isTrackExpanded = expandedTracks[trackKey] ?? true;
+                          const trackAssetCount = Object.values(spots).reduce((acc, items) => acc + items.length, 0);
+                          return (
+                            <React.Fragment key={trackName}>
+                              <tr className="cursor-pointer hover:bg-slate-50/30 dark:hover:bg-slate-800/20" onClick={() => setExpandedTracks(prev => ({ ...prev, [trackKey]: !isTrackExpanded }))}>
+                                <td colSpan={rsaColumns.length} className="px-4 py-1 bg-slate-50/10 dark:bg-slate-900/10 border-b border-slate-100/30 dark:border-slate-800/30">
+                                   <div className="flex items-center justify-between">
+                                     <div className="flex items-center gap-2 font-bold text-[9px] text-sky-600 uppercase tracking-widest">
+                                       {trackName}
+                                       <span className="opacity-60 ml-2">({trackAssetCount} entries)</span>
+                                     </div>
+                                     <ChevronRight className={`w-2.5 h-2.5 text-slate-300 transition-transform ${isTrackExpanded ? 'rotate-90' : ''}`} />
+                                   </div>
+                                </td>
+                              </tr>
+                              {isTrackExpanded && Object.entries(spots).map(([spotName, entries]) => {
+                                 const spotKey = `${trackKey}-${spotName}`;
+                                 const isSpotExpanded = expandedSpots[spotKey] ?? true;
+                                 const spotAssetCount = entries.reduce((acc, report) => acc + (report.cars?.length || 0), 0);
+                                 return (
+                                   <React.Fragment key={spotName}>
+                                      <tr className="cursor-pointer hover:bg-slate-50/30 dark:hover:bg-slate-800/20" onClick={() => setExpandedSpots(prev => ({ ...prev, [spotKey]: !isSpotExpanded }))}>
+                                        <td colSpan={rsaColumns.length} className="px-6 py-1 bg-white dark:bg-slate-950 border-b border-slate-100/20 dark:border-900/10">
+                                           <div className="flex items-center justify-between">
+                                             <div className="flex items-center gap-2">
+                                               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{spotName}</span>
+                                               <span className="text-[8px] font-medium text-slate-300 ml-2">{spotAssetCount} VINs</span>
+                                             </div>
+                                             <ChevronRight className={`w-2.5 h-2.5 text-slate-200 transition-transform ${isSpotExpanded ? 'rotate-90' : ''}`} />
+                                           </div>
+                                        </td>
+                                      </tr>
+                                      {isSpotExpanded && entries.map((report) => report.cars?.map((car: any, carIdx: number) => {
+                                        const { primaryId, vinCount, decks, railcarId } = resolveCarDisplayInfo(car);
+                                        const isSelected = report.id === selectedRsaReportId;
+                                        
+                                        return (
+                                          <tr 
+                                            key={`${report.id}-${railcarId}-${carIdx}`} 
+                                            className={`group transition-all cursor-pointer border-b border-slate-50/50 dark:border-slate-900/30 last:border-b-0 ${isSelected ? "bg-brand/5 dark:bg-brand/10 shadow-[inset_3px_0_0_0_#2563eb]" : "hover:bg-slate-50 dark:hover:bg-white/[0.01]"}`}
+                                            onClick={() => setSelectedRsaReportId(report.id)}
+                                          >
+                                            <td className="pl-8 pr-3 py-2.5">
+                                              <div className="flex items-center gap-3">
+                                                <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black ${isSelected ? 'bg-brand text-white shadow-sm' : 'bg-slate-100/50 dark:bg-slate-800/50 text-slate-400'}`}>{carIdx + 1}</div>
+                                                <div className="flex flex-col min-w-0">
+                                                   <span className={`text-[12px] font-mono font-black tracking-widest ${isSelected ? 'text-brand' : 'text-slate-900 dark:text-white'}`}>
+                                                      {primaryId === "No ID" ? `RC #${railcarId || '—'}` : primaryId}
+                                                   </span>
+                                                   <div className="flex items-center gap-2 mt-0.5">
+                                                      {vinCount > 0 && <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{vinCount} ASSETS</span>}
+                                                      {decks.length > 0 && <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">DECKS: {decks.join(', ')}</span>}
+                                                   </div>
+                                                </div>
+                                              </div>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{report.track || "—"}</td>
+                                            <td className="px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{car.spot || report.spot || "—"}</td>
+                                            <td className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase">{report.facilityName || "HUB"}</td>
+                                            <td className="px-3 py-2.5 text-[10px] font-bold text-slate-400 flex items-center justify-between">
+                                              {report.createdAt ? new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+                                              <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isSelected ? 'translate-x-1 text-brand opacity-100' : 'opacity-0'}`} />
+                                            </td>
+                                          </tr>
+                                        );
+                                      }))}
+                                   </React.Fragment>
+                                 );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </DataTableShell>
+            </div>
+
+            <aside className="space-y-4">
+              {selectedRsaFullRow ? (
+                <div className="sticky top-24 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl overflow-hidden animate-in fade-in duration-500">
+                  <header className="p-5 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center"><FileText className="w-5 h-5" /></div>
+                      <button onClick={() => handleDownloadPdf(selectedRsaFullRow.report_id)} className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-brand transition-all flex items-center gap-2"><Download className="w-3.5 h-3.5" /> PDF</button>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mt-1"><span className="text-[8px] font-black uppercase tracking-[0.2em] text-sky-500 bg-sky-500/5 px-2 py-0.5 rounded">RSA Summary Log</span></div>
+                      <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight mt-2 leading-tight">{selectedRsaFullRow.subject || "Railcar Inbound Entry"}</h3>
+                    </div>
+                  </header>
+
+                  <div className="p-5 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                         <h4 className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-400">Operational Payload</h4>
+                         <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded ring-1 ring-emerald-500/20">Audit Verified</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/50 flex flex-col">
+                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">RAIL TRACK</span>
+                          <span className="text-xl font-mono font-black text-white tracking-widest">{selectedRsaFullRow.track || "—"}</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/50 flex flex-col">
+                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">DESIGNATED SPOT</span>
+                          <span className="text-xl font-mono font-black text-white tracking-widest">{selectedRsaFullRow.spot || "—"}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 pt-2">
+                        {selectedRsaFullRow.cars?.map((car: any, carIdx: number) => {
+                          const { railcarId, deckVinsMap } = resolveCarDisplayInfo(car);
+                          return (
+                            <div key={carIdx} className="space-y-2">
+                               <div className="flex items-center gap-3">
+                                  <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
+                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">RC #{railcarId}</span>
+                                  <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
+                               </div>
+                               <div className="grid grid-cols-1 gap-2">
+                                  {Object.entries(deckVinsMap).map(([deckType, vins]) => {
+                                      return (
+                                        <div key={deckType} className="p-3 rounded-xl bg-slate-50/50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Deck {deckType}</p>
+                                                <span className="text-[8px] font-black text-slate-400 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-700">{vins.length} Assets</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-1">
+                                                {vins.map((vin, vIdx) => (
+                                                  <div key={vIdx} className="flex items-center gap-2">
+                                                      <div className="w-4 h-4 rounded bg-sky-500/10 flex items-center justify-center text-[9px] font-black text-sky-500">{vIdx + 1}</div>
+                                                      <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider">
+                                                        {vin}
+                                                      </span>
+                                                  </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                      );
+                                  })}
+                               </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800"></div> 
+                        Administrative Context 
+                        <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800"></div>
+                      </h4>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                          <div className="w-9 h-9 rounded-xl bg-brand/10 text-brand flex items-center justify-center shadow-sm">
+                            <MapPin className="w-4.5 h-4.5" />
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">Primary Facility</p>
+                            <p className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">{selectedRsaFullRow.facility || "Hub Registry"}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center shadow-sm">
+                            <User className="w-4.5 h-4.5" />
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">Manifest Operator</p>
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 break-all">{selectedRsaFullRow.inspector_email || "System Terminal"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <footer className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800"><button className="w-full py-3.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-[0.3em] hover:brightness-110 active:scale-95 transition-all shadow-lg">Full Manifest Payload <span>→</span></button></footer>
+                </div>
+              ) : (
+                <div className="rounded-[1.5rem] border border-dashed border-slate-200 dark:border-slate-800 p-8 text-center flex flex-col items-center justify-center min-h-[360px]"><div className="w-16 h-16 rounded-[1.25rem] bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center text-slate-200 dark:text-slate-800 mb-6 border border-slate-100 dark:border-slate-800"><FileText className="w-6 h-6" /></div><h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Ready for Manifest Audit</h4></div>
+              )}
+            </aside>
+          </div>
+        </section>
+      )}
+
+      {/* Fullscreen Photo Modal */}
+      {activePhoto && (() => {
+        const galleryUrls = selectedDamageGallery.galleryUrls.map((url) => normalizeMediaUrl(url));
+        const activeIndex = Math.max(galleryUrls.indexOf(activePhoto), 0);
+        const hasMultiple = galleryUrls.length > 1;
+        const goTo = (nextIndex: number) => {
+          const bounded = (nextIndex + galleryUrls.length) % galleryUrls.length;
+          setActivePhoto(galleryUrls[bounded]);
+        };
+
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-3xl flex items-center justify-center p-8 animate-in fade-in zoom-in duration-300" onClick={() => setActivePhoto(null)}>
+            <button
+              className="absolute top-10 right-10 w-14 h-14 rounded-3xl bg-white/10 text-white hover:bg-white/20 transition-all flex items-center justify-center border border-white/10"
+              aria-label="Close media viewer"
+              type="button"
+              onClick={() => setActivePhoto(null)}
+            >
+              <Maximize2 className="w-7 h-7 rotate-45" />
+            </button>
+            <div className="relative max-w-5xl w-full h-full flex items-center justify-center" onClick={(event) => event.stopPropagation()}>
+              {hasMultiple && (
+                <button
+                  type="button"
+                  aria-label="Previous media"
+                  className="absolute left-0 z-10 w-12 h-12 rounded-full bg-white/10 text-white hover:bg-white/20 border border-white/10 shadow-lg flex items-center justify-center"
+                  onClick={() => goTo(activeIndex - 1)}
+                >
+                  <span className="text-xl leading-none">‹</span>
+                </button>
+              )}
+              <img src={activePhoto} alt="Registry Link" className="max-w-full max-h-full object-contain rounded-[2rem] shadow-[0_0_100px_rgba(0,0,0,0.8)]" />
+              {hasMultiple && (
+                <button
+                  type="button"
+                  aria-label="Next media"
+                  className="absolute right-0 z-10 w-12 h-12 rounded-full bg-white/10 text-white hover:bg-white/20 border border-white/10 shadow-lg flex items-center justify-center"
+                  onClick={() => goTo(activeIndex + 1)}
+                >
+                  <span className="text-xl leading-none">›</span>
+                </button>
+              )}
+              <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 p-6 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 text-white min-w-[300px]">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-1">Visual Registry Asset</p>
+                  <p className="text-xs font-bold text-white/70">Asset {activeIndex + 1}{hasMultiple ? ` of ${galleryUrls.length}` : ""}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </article>
+  );
+}

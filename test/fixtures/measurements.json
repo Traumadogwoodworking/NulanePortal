@@ -1,0 +1,2002 @@
+[
+  {
+    "id": "pt-0001",
+    "takenAt": "2026-01-01T08:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 1.89
+    }
+  },
+  {
+    "id": "pt-0002",
+    "takenAt": "2026-01-01T08:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.49
+    }
+  },
+  {
+    "id": "pt-0003",
+    "takenAt": "2026-01-01T08:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.42
+    }
+  },
+  {
+    "id": "pt-0004",
+    "takenAt": "2026-01-01T08:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.11
+    }
+  },
+  {
+    "id": "pt-0005",
+    "takenAt": "2026-01-01T09:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.71
+    }
+  },
+  {
+    "id": "pt-0006",
+    "takenAt": "2026-01-01T09:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.76
+    }
+  },
+  {
+    "id": "pt-0007",
+    "takenAt": "2026-01-01T09:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.06
+    }
+  },
+  {
+    "id": "pt-0008",
+    "takenAt": "2026-01-01T09:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.99
+    }
+  },
+  {
+    "id": "pt-0009",
+    "takenAt": "2026-01-01T10:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.4
+    }
+  },
+  {
+    "id": "pt-0010",
+    "takenAt": "2026-01-01T10:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.92
+    }
+  },
+  {
+    "id": "pt-0011",
+    "takenAt": "2026-01-01T10:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.06
+    }
+  },
+  {
+    "id": "pt-0012",
+    "takenAt": "2026-01-01T10:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.52
+    }
+  },
+  {
+    "id": "pt-0013",
+    "takenAt": "2026-01-01T11:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.79
+    }
+  },
+  {
+    "id": "pt-0014",
+    "takenAt": "2026-01-01T11:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.42
+    }
+  },
+  {
+    "id": "pt-0015",
+    "takenAt": "2026-01-01T11:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.76
+    }
+  },
+  {
+    "id": "pt-0016",
+    "takenAt": "2026-01-01T11:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.67
+    }
+  },
+  {
+    "id": "pt-0017",
+    "takenAt": "2026-01-01T12:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.94
+    }
+  },
+  {
+    "id": "pt-0018",
+    "takenAt": "2026-01-01T12:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.3
+    }
+  },
+  {
+    "id": "pt-0019",
+    "takenAt": "2026-01-01T12:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 5.0
+    }
+  },
+  {
+    "id": "pt-0020",
+    "takenAt": "2026-01-01T12:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 5.16
+    }
+  },
+  {
+    "id": "pt-0021",
+    "takenAt": "2026-01-01T13:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.02
+    }
+  },
+  {
+    "id": "pt-0022",
+    "takenAt": "2026-01-01T13:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.53
+    }
+  },
+  {
+    "id": "pt-0023",
+    "takenAt": "2026-01-01T13:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.45
+    }
+  },
+  {
+    "id": "pt-0024",
+    "takenAt": "2026-01-01T13:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.23
+    }
+  },
+  {
+    "id": "pt-0025",
+    "takenAt": "2026-01-01T14:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.47
+    }
+  },
+  {
+    "id": "pt-0026",
+    "takenAt": "2026-01-01T14:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.9
+    }
+  },
+  {
+    "id": "pt-0027",
+    "takenAt": "2026-01-01T14:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.91
+    }
+  },
+  {
+    "id": "pt-0028",
+    "takenAt": "2026-01-01T14:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.72
+    }
+  },
+  {
+    "id": "pt-0029",
+    "takenAt": "2026-01-01T15:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.89
+    }
+  },
+  {
+    "id": "pt-0030",
+    "takenAt": "2026-01-01T15:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.78
+    }
+  },
+  {
+    "id": "pt-0031",
+    "takenAt": "2026-01-01T15:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.57
+    }
+  },
+  {
+    "id": "pt-0032",
+    "takenAt": "2026-01-01T15:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.99
+    }
+  },
+  {
+    "id": "pt-0033",
+    "takenAt": "2026-01-01T16:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.62
+    }
+  },
+  {
+    "id": "pt-0034",
+    "takenAt": "2026-01-01T16:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.37
+    }
+  },
+  {
+    "id": "pt-0035",
+    "takenAt": "2026-01-01T16:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.15
+    }
+  },
+  {
+    "id": "pt-0036",
+    "takenAt": "2026-01-01T16:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.58
+    }
+  },
+  {
+    "id": "pt-0037",
+    "takenAt": "2026-01-01T17:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.08
+    }
+  },
+  {
+    "id": "pt-0038",
+    "takenAt": "2026-01-01T17:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.26
+    }
+  },
+  {
+    "id": "pt-0039",
+    "takenAt": "2026-01-01T17:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 5.0
+    }
+  },
+  {
+    "id": "pt-0040",
+    "takenAt": "2026-01-01T17:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.91
+    }
+  },
+  {
+    "id": "pt-0041",
+    "takenAt": "2026-01-01T18:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.02
+    }
+  },
+  {
+    "id": "pt-0042",
+    "takenAt": "2026-01-01T18:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 1.7
+    }
+  },
+  {
+    "id": "pt-0043",
+    "takenAt": "2026-01-01T18:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.04
+    }
+  },
+  {
+    "id": "pt-0044",
+    "takenAt": "2026-01-01T18:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 1.98
+    }
+  },
+  {
+    "id": "pt-0045",
+    "takenAt": "2026-01-01T19:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.18
+    }
+  },
+  {
+    "id": "pt-0046",
+    "takenAt": "2026-01-01T19:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.49
+    }
+  },
+  {
+    "id": "pt-0047",
+    "takenAt": "2026-01-01T19:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.7
+    }
+  },
+  {
+    "id": "pt-0048",
+    "takenAt": "2026-01-01T19:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.39
+    }
+  },
+  {
+    "id": "pt-0049",
+    "takenAt": "2026-01-01T20:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.93
+    }
+  },
+  {
+    "id": "pt-0050",
+    "takenAt": "2026-01-01T20:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.08
+    }
+  },
+  {
+    "id": "pt-0051",
+    "takenAt": "2026-01-01T20:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.55
+    }
+  },
+  {
+    "id": "pt-0052",
+    "takenAt": "2026-01-01T20:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.14
+    }
+  },
+  {
+    "id": "pt-0053",
+    "takenAt": "2026-01-01T21:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.29
+    }
+  },
+  {
+    "id": "pt-0054",
+    "takenAt": "2026-01-01T21:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.26
+    }
+  },
+  {
+    "id": "pt-0055",
+    "takenAt": "2026-01-01T21:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.04
+    }
+  },
+  {
+    "id": "pt-0056",
+    "takenAt": "2026-01-01T21:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.52
+    }
+  },
+  {
+    "id": "pt-0057",
+    "takenAt": "2026-01-01T22:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.65
+    }
+  },
+  {
+    "id": "pt-0058",
+    "takenAt": "2026-01-01T22:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.7
+    }
+  },
+  {
+    "id": "pt-0059",
+    "takenAt": "2026-01-01T22:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.6
+    }
+  },
+  {
+    "id": "pt-0060",
+    "takenAt": "2026-01-01T22:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.78
+    }
+  },
+  {
+    "id": "pt-0061",
+    "takenAt": "2026-01-01T23:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 1.68
+    }
+  },
+  {
+    "id": "pt-0062",
+    "takenAt": "2026-01-01T23:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.48
+    }
+  },
+  {
+    "id": "pt-0063",
+    "takenAt": "2026-01-01T23:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.67
+    }
+  },
+  {
+    "id": "pt-0064",
+    "takenAt": "2026-01-01T23:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.94
+    }
+  },
+  {
+    "id": "pt-0065",
+    "takenAt": "2026-01-02T00:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.42
+    }
+  },
+  {
+    "id": "pt-0066",
+    "takenAt": "2026-01-02T00:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.0
+    }
+  },
+  {
+    "id": "pt-0067",
+    "takenAt": "2026-01-02T00:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.31
+    }
+  },
+  {
+    "id": "pt-0068",
+    "takenAt": "2026-01-02T00:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.37
+    }
+  },
+  {
+    "id": "pt-0069",
+    "takenAt": "2026-01-02T01:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.11
+    }
+  },
+  {
+    "id": "pt-0070",
+    "takenAt": "2026-01-02T01:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.05
+    }
+  },
+  {
+    "id": "pt-0071",
+    "takenAt": "2026-01-02T01:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.03
+    }
+  },
+  {
+    "id": "pt-0072",
+    "takenAt": "2026-01-02T01:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.53
+    }
+  },
+  {
+    "id": "pt-0073",
+    "takenAt": "2026-01-02T02:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.38
+    }
+  },
+  {
+    "id": "pt-0074",
+    "takenAt": "2026-01-02T02:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.26
+    }
+  },
+  {
+    "id": "pt-0075",
+    "takenAt": "2026-01-02T02:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.33
+    }
+  },
+  {
+    "id": "pt-0076",
+    "takenAt": "2026-01-02T02:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.9
+    }
+  },
+  {
+    "id": "pt-0077",
+    "takenAt": "2026-01-02T03:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.26
+    }
+  },
+  {
+    "id": "pt-0078",
+    "takenAt": "2026-01-02T03:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.7
+    }
+  },
+  {
+    "id": "pt-0079",
+    "takenAt": "2026-01-02T03:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.32
+    }
+  },
+  {
+    "id": "pt-0080",
+    "takenAt": "2026-01-02T03:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.65
+    }
+  },
+  {
+    "id": "pt-0081",
+    "takenAt": "2026-01-02T04:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.32
+    }
+  },
+  {
+    "id": "pt-0082",
+    "takenAt": "2026-01-02T04:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.52
+    }
+  },
+  {
+    "id": "pt-0083",
+    "takenAt": "2026-01-02T04:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.59
+    }
+  },
+  {
+    "id": "pt-0084",
+    "takenAt": "2026-01-02T04:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.51
+    }
+  },
+  {
+    "id": "pt-0085",
+    "takenAt": "2026-01-02T05:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.75
+    }
+  },
+  {
+    "id": "pt-0086",
+    "takenAt": "2026-01-02T05:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.17
+    }
+  },
+  {
+    "id": "pt-0087",
+    "takenAt": "2026-01-02T05:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.18
+    }
+  },
+  {
+    "id": "pt-0088",
+    "takenAt": "2026-01-02T05:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.07
+    }
+  },
+  {
+    "id": "pt-0089",
+    "takenAt": "2026-01-02T06:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.08
+    }
+  },
+  {
+    "id": "pt-0090",
+    "takenAt": "2026-01-02T06:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.88
+    }
+  },
+  {
+    "id": "pt-0091",
+    "takenAt": "2026-01-02T06:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.88
+    }
+  },
+  {
+    "id": "pt-0092",
+    "takenAt": "2026-01-02T06:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.07
+    }
+  },
+  {
+    "id": "pt-0093",
+    "takenAt": "2026-01-02T07:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.08
+    }
+  },
+  {
+    "id": "pt-0094",
+    "takenAt": "2026-01-02T07:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.58
+    }
+  },
+  {
+    "id": "pt-0095",
+    "takenAt": "2026-01-02T07:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.87
+    }
+  },
+  {
+    "id": "pt-0096",
+    "takenAt": "2026-01-02T07:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.28
+    }
+  },
+  {
+    "id": "pt-0097",
+    "takenAt": "2026-01-02T08:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.27
+    }
+  },
+  {
+    "id": "pt-0098",
+    "takenAt": "2026-01-02T08:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.36
+    }
+  },
+  {
+    "id": "pt-0099",
+    "takenAt": "2026-01-02T08:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.42
+    }
+  },
+  {
+    "id": "pt-0100",
+    "takenAt": "2026-01-02T08:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 5.09
+    }
+  },
+  {
+    "id": "pt-0101",
+    "takenAt": "2026-01-02T09:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.04
+    }
+  },
+  {
+    "id": "pt-0102",
+    "takenAt": "2026-01-02T09:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.47
+    }
+  },
+  {
+    "id": "pt-0103",
+    "takenAt": "2026-01-02T09:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.56
+    }
+  },
+  {
+    "id": "pt-0104",
+    "takenAt": "2026-01-02T09:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.86
+    }
+  },
+  {
+    "id": "pt-0105",
+    "takenAt": "2026-01-02T10:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.79
+    }
+  },
+  {
+    "id": "pt-0106",
+    "takenAt": "2026-01-02T10:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.05
+    }
+  },
+  {
+    "id": "pt-0107",
+    "takenAt": "2026-01-02T10:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.81
+    }
+  },
+  {
+    "id": "pt-0108",
+    "takenAt": "2026-01-02T10:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.9
+    }
+  },
+  {
+    "id": "pt-0109",
+    "takenAt": "2026-01-02T11:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.92
+    }
+  },
+  {
+    "id": "pt-0110",
+    "takenAt": "2026-01-02T11:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.91
+    }
+  },
+  {
+    "id": "pt-0111",
+    "takenAt": "2026-01-02T11:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.71
+    }
+  },
+  {
+    "id": "pt-0112",
+    "takenAt": "2026-01-02T11:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.25
+    }
+  },
+  {
+    "id": "pt-0113",
+    "takenAt": "2026-01-02T12:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.11
+    }
+  },
+  {
+    "id": "pt-0114",
+    "takenAt": "2026-01-02T12:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.91
+    }
+  },
+  {
+    "id": "pt-0115",
+    "takenAt": "2026-01-02T12:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.86
+    }
+  },
+  {
+    "id": "pt-0116",
+    "takenAt": "2026-01-02T12:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.82
+    }
+  },
+  {
+    "id": "pt-0117",
+    "takenAt": "2026-01-02T13:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.97
+    }
+  },
+  {
+    "id": "pt-0118",
+    "takenAt": "2026-01-02T13:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.38
+    }
+  },
+  {
+    "id": "pt-0119",
+    "takenAt": "2026-01-02T13:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.77
+    }
+  },
+  {
+    "id": "pt-0120",
+    "takenAt": "2026-01-02T13:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.58
+    }
+  },
+  {
+    "id": "pt-0121",
+    "takenAt": "2026-01-02T14:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 1.63
+    }
+  },
+  {
+    "id": "pt-0122",
+    "takenAt": "2026-01-02T14:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.01
+    }
+  },
+  {
+    "id": "pt-0123",
+    "takenAt": "2026-01-02T14:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 1.85
+    }
+  },
+  {
+    "id": "pt-0124",
+    "takenAt": "2026-01-02T14:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 1.99
+    }
+  },
+  {
+    "id": "pt-0125",
+    "takenAt": "2026-01-02T15:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.78
+    }
+  },
+  {
+    "id": "pt-0126",
+    "takenAt": "2026-01-02T15:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.57
+    }
+  },
+  {
+    "id": "pt-0127",
+    "takenAt": "2026-01-02T15:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.8
+    }
+  },
+  {
+    "id": "pt-0128",
+    "takenAt": "2026-01-02T15:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.87
+    }
+  },
+  {
+    "id": "pt-0129",
+    "takenAt": "2026-01-02T16:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.48
+    }
+  },
+  {
+    "id": "pt-0130",
+    "takenAt": "2026-01-02T16:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.74
+    }
+  },
+  {
+    "id": "pt-0131",
+    "takenAt": "2026-01-02T16:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.46
+    }
+  },
+  {
+    "id": "pt-0132",
+    "takenAt": "2026-01-02T16:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.1
+    }
+  },
+  {
+    "id": "pt-0133",
+    "takenAt": "2026-01-02T17:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.02
+    }
+  },
+  {
+    "id": "pt-0134",
+    "takenAt": "2026-01-02T17:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.3
+    }
+  },
+  {
+    "id": "pt-0135",
+    "takenAt": "2026-01-02T17:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.39
+    }
+  },
+  {
+    "id": "pt-0136",
+    "takenAt": "2026-01-02T17:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.65
+    }
+  },
+  {
+    "id": "pt-0137",
+    "takenAt": "2026-01-02T18:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.68
+    }
+  },
+  {
+    "id": "pt-0138",
+    "takenAt": "2026-01-02T18:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.75
+    }
+  },
+  {
+    "id": "pt-0139",
+    "takenAt": "2026-01-02T18:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.85
+    }
+  },
+  {
+    "id": "pt-0140",
+    "takenAt": "2026-01-02T18:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.94
+    }
+  },
+  {
+    "id": "pt-0141",
+    "takenAt": "2026-01-02T19:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.29
+    }
+  },
+  {
+    "id": "pt-0142",
+    "takenAt": "2026-01-02T19:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.35
+    }
+  },
+  {
+    "id": "pt-0143",
+    "takenAt": "2026-01-02T19:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 1.86
+    }
+  },
+  {
+    "id": "pt-0144",
+    "takenAt": "2026-01-02T19:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.0
+    }
+  },
+  {
+    "id": "pt-0145",
+    "takenAt": "2026-01-02T20:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.25
+    }
+  },
+  {
+    "id": "pt-0146",
+    "takenAt": "2026-01-02T20:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.82
+    }
+  },
+  {
+    "id": "pt-0147",
+    "takenAt": "2026-01-02T20:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.32
+    }
+  },
+  {
+    "id": "pt-0148",
+    "takenAt": "2026-01-02T20:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.65
+    }
+  },
+  {
+    "id": "pt-0149",
+    "takenAt": "2026-01-02T21:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.91
+    }
+  },
+  {
+    "id": "pt-0150",
+    "takenAt": "2026-01-02T21:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.97
+    }
+  },
+  {
+    "id": "pt-0151",
+    "takenAt": "2026-01-02T21:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.88
+    }
+  },
+  {
+    "id": "pt-0152",
+    "takenAt": "2026-01-02T21:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.06
+    }
+  },
+  {
+    "id": "pt-0153",
+    "takenAt": "2026-01-02T22:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.84
+    }
+  },
+  {
+    "id": "pt-0154",
+    "takenAt": "2026-01-02T22:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.46
+    }
+  },
+  {
+    "id": "pt-0155",
+    "takenAt": "2026-01-02T22:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.04
+    }
+  },
+  {
+    "id": "pt-0156",
+    "takenAt": "2026-01-02T22:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.8
+    }
+  },
+  {
+    "id": "pt-0157",
+    "takenAt": "2026-01-02T23:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.12
+    }
+  },
+  {
+    "id": "pt-0158",
+    "takenAt": "2026-01-02T23:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.24
+    }
+  },
+  {
+    "id": "pt-0159",
+    "takenAt": "2026-01-02T23:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.62
+    }
+  },
+  {
+    "id": "pt-0160",
+    "takenAt": "2026-01-02T23:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.54
+    }
+  },
+  {
+    "id": "pt-0161",
+    "takenAt": "2026-01-03T00:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 1.78
+    }
+  },
+  {
+    "id": "pt-0162",
+    "takenAt": "2026-01-03T00:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.02
+    }
+  },
+  {
+    "id": "pt-0163",
+    "takenAt": "2026-01-03T00:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 1.89
+    }
+  },
+  {
+    "id": "pt-0164",
+    "takenAt": "2026-01-03T00:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.38
+    }
+  },
+  {
+    "id": "pt-0165",
+    "takenAt": "2026-01-03T01:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.09
+    }
+  },
+  {
+    "id": "pt-0166",
+    "takenAt": "2026-01-03T01:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.89
+    }
+  },
+  {
+    "id": "pt-0167",
+    "takenAt": "2026-01-03T01:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.09
+    }
+  },
+  {
+    "id": "pt-0168",
+    "takenAt": "2026-01-03T01:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.62
+    }
+  },
+  {
+    "id": "pt-0169",
+    "takenAt": "2026-01-03T02:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.01
+    }
+  },
+  {
+    "id": "pt-0170",
+    "takenAt": "2026-01-03T02:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.4
+    }
+  },
+  {
+    "id": "pt-0171",
+    "takenAt": "2026-01-03T02:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.71
+    }
+  },
+  {
+    "id": "pt-0172",
+    "takenAt": "2026-01-03T02:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.11
+    }
+  },
+  {
+    "id": "pt-0173",
+    "takenAt": "2026-01-03T03:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.2
+    }
+  },
+  {
+    "id": "pt-0174",
+    "takenAt": "2026-01-03T03:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.07
+    }
+  },
+  {
+    "id": "pt-0175",
+    "takenAt": "2026-01-03T03:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.8
+    }
+  },
+  {
+    "id": "pt-0176",
+    "takenAt": "2026-01-03T03:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.53
+    }
+  },
+  {
+    "id": "pt-0177",
+    "takenAt": "2026-01-03T04:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.59
+    }
+  },
+  {
+    "id": "pt-0178",
+    "takenAt": "2026-01-03T04:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.76
+    }
+  },
+  {
+    "id": "pt-0179",
+    "takenAt": "2026-01-03T04:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.88
+    }
+  },
+  {
+    "id": "pt-0180",
+    "takenAt": "2026-01-03T04:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 5.23
+    }
+  },
+  {
+    "id": "pt-0181",
+    "takenAt": "2026-01-03T05:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.23
+    }
+  },
+  {
+    "id": "pt-0182",
+    "takenAt": "2026-01-03T05:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 1.76
+    }
+  },
+  {
+    "id": "pt-0183",
+    "takenAt": "2026-01-03T05:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.54
+    }
+  },
+  {
+    "id": "pt-0184",
+    "takenAt": "2026-01-03T05:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.45
+    }
+  },
+  {
+    "id": "pt-0185",
+    "takenAt": "2026-01-03T06:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.87
+    }
+  },
+  {
+    "id": "pt-0186",
+    "takenAt": "2026-01-03T06:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.55
+    }
+  },
+  {
+    "id": "pt-0187",
+    "takenAt": "2026-01-03T06:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.02
+    }
+  },
+  {
+    "id": "pt-0188",
+    "takenAt": "2026-01-03T06:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.86
+    }
+  },
+  {
+    "id": "pt-0189",
+    "takenAt": "2026-01-03T07:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.67
+    }
+  },
+  {
+    "id": "pt-0190",
+    "takenAt": "2026-01-03T07:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.35
+    }
+  },
+  {
+    "id": "pt-0191",
+    "takenAt": "2026-01-03T07:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.05
+    }
+  },
+  {
+    "id": "pt-0192",
+    "takenAt": "2026-01-03T07:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.14
+    }
+  },
+  {
+    "id": "pt-0193",
+    "takenAt": "2026-01-03T08:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.87
+    }
+  },
+  {
+    "id": "pt-0194",
+    "takenAt": "2026-01-03T08:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.76
+    }
+  },
+  {
+    "id": "pt-0195",
+    "takenAt": "2026-01-03T08:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.21
+    }
+  },
+  {
+    "id": "pt-0196",
+    "takenAt": "2026-01-03T08:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.42
+    }
+  },
+  {
+    "id": "pt-0197",
+    "takenAt": "2026-01-03T09:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.39
+    }
+  },
+  {
+    "id": "pt-0198",
+    "takenAt": "2026-01-03T09:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.52
+    }
+  },
+  {
+    "id": "pt-0199",
+    "takenAt": "2026-01-03T09:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.26
+    }
+  },
+  {
+    "id": "pt-0200",
+    "takenAt": "2026-01-03T09:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.38
+    }
+  },
+  {
+    "id": "pt-0201",
+    "takenAt": "2026-01-03T10:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.45
+    }
+  },
+  {
+    "id": "pt-0202",
+    "takenAt": "2026-01-03T10:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.03
+    }
+  },
+  {
+    "id": "pt-0203",
+    "takenAt": "2026-01-03T10:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.15
+    }
+  },
+  {
+    "id": "pt-0204",
+    "takenAt": "2026-01-03T10:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.81
+    }
+  },
+  {
+    "id": "pt-0205",
+    "takenAt": "2026-01-03T11:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.3
+    }
+  },
+  {
+    "id": "pt-0206",
+    "takenAt": "2026-01-03T11:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.17
+    }
+  },
+  {
+    "id": "pt-0207",
+    "takenAt": "2026-01-03T11:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.43
+    }
+  },
+  {
+    "id": "pt-0208",
+    "takenAt": "2026-01-03T11:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.15
+    }
+  },
+  {
+    "id": "pt-0209",
+    "takenAt": "2026-01-03T12:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.85
+    }
+  },
+  {
+    "id": "pt-0210",
+    "takenAt": "2026-01-03T12:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 3.74
+    }
+  },
+  {
+    "id": "pt-0211",
+    "takenAt": "2026-01-03T12:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.33
+    }
+  },
+  {
+    "id": "pt-0212",
+    "takenAt": "2026-01-03T12:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.44
+    }
+  },
+  {
+    "id": "pt-0213",
+    "takenAt": "2026-01-03T13:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.9
+    }
+  },
+  {
+    "id": "pt-0214",
+    "takenAt": "2026-01-03T13:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.93
+    }
+  },
+  {
+    "id": "pt-0215",
+    "takenAt": "2026-01-03T13:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.3
+    }
+  },
+  {
+    "id": "pt-0216",
+    "takenAt": "2026-01-03T13:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.56
+    }
+  },
+  {
+    "id": "pt-0217",
+    "takenAt": "2026-01-03T14:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 4.0
+    }
+  },
+  {
+    "id": "pt-0218",
+    "takenAt": "2026-01-03T14:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.3
+    }
+  },
+  {
+    "id": "pt-0219",
+    "takenAt": "2026-01-03T14:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.51
+    }
+  },
+  {
+    "id": "pt-0220",
+    "takenAt": "2026-01-03T14:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 5.06
+    }
+  },
+  {
+    "id": "pt-0221",
+    "takenAt": "2026-01-03T15:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 1.93
+    }
+  },
+  {
+    "id": "pt-0222",
+    "takenAt": "2026-01-03T15:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 1.69
+    }
+  },
+  {
+    "id": "pt-0223",
+    "takenAt": "2026-01-03T15:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.23
+    }
+  },
+  {
+    "id": "pt-0224",
+    "takenAt": "2026-01-03T15:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.43
+    }
+  },
+  {
+    "id": "pt-0225",
+    "takenAt": "2026-01-03T16:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.89
+    }
+  },
+  {
+    "id": "pt-0226",
+    "takenAt": "2026-01-03T16:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.44
+    }
+  },
+  {
+    "id": "pt-0227",
+    "takenAt": "2026-01-03T16:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 3.32
+    }
+  },
+  {
+    "id": "pt-0228",
+    "takenAt": "2026-01-03T16:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.59
+    }
+  },
+  {
+    "id": "pt-0229",
+    "takenAt": "2026-01-03T17:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.6
+    }
+  },
+  {
+    "id": "pt-0230",
+    "takenAt": "2026-01-03T17:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.02
+    }
+  },
+  {
+    "id": "pt-0231",
+    "takenAt": "2026-01-03T17:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 3.98
+    }
+  },
+  {
+    "id": "pt-0232",
+    "takenAt": "2026-01-03T17:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.49
+    }
+  },
+  {
+    "id": "pt-0233",
+    "takenAt": "2026-01-03T18:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.01
+    }
+  },
+  {
+    "id": "pt-0234",
+    "takenAt": "2026-01-03T18:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.01
+    }
+  },
+  {
+    "id": "pt-0235",
+    "takenAt": "2026-01-03T18:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 3.99
+    }
+  },
+  {
+    "id": "pt-0236",
+    "takenAt": "2026-01-03T18:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 4.64
+    }
+  },
+  {
+    "id": "pt-0237",
+    "takenAt": "2026-01-03T19:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 4.28
+    }
+  },
+  {
+    "id": "pt-0238",
+    "takenAt": "2026-01-03T19:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 4.63
+    }
+  },
+  {
+    "id": "pt-0239",
+    "takenAt": "2026-01-03T19:30:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 4.31
+    }
+  },
+  {
+    "id": "pt-0240",
+    "takenAt": "2026-01-03T19:45:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 4.79
+    }
+  },
+  {
+    "id": "pt-0241",
+    "takenAt": "2026-01-03T20:00:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.03
+    }
+  },
+  {
+    "id": "pt-0242",
+    "takenAt": "2026-01-03T20:15:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 2.48
+    }
+  },
+  {
+    "id": "pt-0243",
+    "takenAt": "2026-01-03T20:30:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.29
+    }
+  },
+  {
+    "id": "pt-0244",
+    "takenAt": "2026-01-03T20:45:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 2.17
+    }
+  },
+  {
+    "id": "pt-0245",
+    "takenAt": "2026-01-03T21:00:00Z",
+    "dimension": "left-panel",
+    "measurement": {
+      "value": 2.3
+    }
+  },
+  {
+    "id": "pt-0246",
+    "takenAt": "2026-01-03T21:15:00Z",
+    "dimension": "right-panel",
+    "measurement": {
+      "value": 2.38
+    }
+  },
+  {
+    "id": "pt-0247",
+    "takenAt": "2026-01-03T21:30:00Z",
+    "dimension": "door-gap",
+    "measurement": {
+      "value": 2.93
+    }
+  },
+  {
+    "id": "pt-0248",
+    "takenAt": "2026-01-03T21:45:00Z",
+    "dimension": "roof",
+    "measurement": {
+      "value": 3.36
+    }
+  },
+  {
+    "id": "pt-0249",
+    "takenAt": "2026-01-03T22:00:00Z",
+    "dimension": "hood",
+    "measurement": {
+      "value": 2.73
+    }
+  },
+  {
+    "id": "pt-0250",
+    "takenAt": "2026-01-03T22:15:00Z",
+    "dimension": "trunk",
+    "measurement": {
+      "value": 3.31
+    }
+  }
+]

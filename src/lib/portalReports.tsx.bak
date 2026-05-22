@@ -1,0 +1,140 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { ReportsAdapter } from "@/lib/services/reportService";
+import { usePortalSession } from "@/lib/portalSession";
+import type { ReportDamageApiRow, ReportFilters, RsaReportApiRow } from "@/lib/types";
+
+const PORTAL_REPORTS_CACHE_KEY = "portalReportsCache";
+const CACHE_TTL_MS = 1000 * 60 * 3; // 3 minutes
+
+type PortalReportsCache = {
+  damageReports: ReportDamageApiRow[];
+  rsaReports: RsaReportApiRow[];
+  timestamp: number;
+};
+
+function readPortalReportsCache(): PortalReportsCache | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(PORTAL_REPORTS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PortalReportsCache;
+    if (
+      !Array.isArray(parsed.damageReports) ||
+      !Array.isArray(parsed.rsaReports) ||
+      typeof parsed.timestamp !== "number"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePortalReportsCache(damageReports: ReportDamageApiRow[], rsaReports: RsaReportApiRow[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    const payload: PortalReportsCache = {
+      damageReports,
+      rsaReports,
+      timestamp: Date.now(),
+    };
+    window.sessionStorage.setItem(PORTAL_REPORTS_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore cache write failures
+  }
+}
+
+function isCacheFresh(cache: PortalReportsCache | null): cache is PortalReportsCache {
+  return Boolean(cache && Date.now() - cache.timestamp <= CACHE_TTL_MS);
+}
+
+interface PortalReportsValue {
+  damageReports: ReportDamageApiRow[];
+  rsaReports: RsaReportApiRow[];
+  loading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+}
+
+const PortalReportsContext = createContext<PortalReportsValue | undefined>(undefined);
+
+export function PortalReportsProvider({ children }: { children: ReactNode }) {
+  const { organizationId } = usePortalSession();
+  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
+  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [cacheHydrated, setCacheHydrated] = useState(false);
+
+  const loadReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const filters: ReportFilters = organizationId
+        ? { organization_id: organizationId }
+        : {};
+      const damagePromise = organizationId
+        ? ReportsAdapter.fetchDamageReports(filters)
+        : Promise.resolve([] as ReportDamageApiRow[]);
+      const [damage, rsa] = await Promise.all([
+        damagePromise,
+        ReportsAdapter.fetchRsaReports(),
+      ]);
+      setDamageReports(damage);
+      setRsaReports(rsa);
+      writePortalReportsCache(damage, rsa);
+    } catch (err) {
+      console.error("Unable to load portal reports", err);
+      setError(err instanceof Error ? err : new Error("Unable to load portal reports"));
+    } finally {
+      setLoading(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      setCacheHydrated(true);
+      return;
+    }
+    const cache = readPortalReportsCache();
+    if (isCacheFresh(cache)) {
+      setDamageReports(cache.damageReports);
+      setRsaReports(cache.rsaReports);
+    }
+    setCacheHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!cacheHydrated) return;
+    void loadReports();
+  }, [cacheHydrated, loadReports]);
+
+  const value = useMemo(
+    () => ({
+      damageReports,
+      rsaReports,
+      loading,
+      error,
+      refetch: loadReports,
+    }),
+    [damageReports, rsaReports, loading, error, loadReports]
+  );
+
+  return (
+    <PortalReportsContext.Provider value={value}>
+      {children}
+    </PortalReportsContext.Provider>
+  );
+}
+
+export function usePortalReports() {
+  return useContext(PortalReportsContext);
+}

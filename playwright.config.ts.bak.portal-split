@@ -1,0 +1,21 @@
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "e2e",
+  timeout: 60 * 1000,
+  retries: process.env.CI ? 1 : 0,
+  use: {
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4173",
+    headless: true,
+    viewport: { width: 1280, height: 720 },
+  },
+  webServer: {
+    command: "npm run dev -- --hostname 127.0.0.1 --port 4173",
+    port: 4173,
+    reuseExistingServer: !process.env.CI,
+    env: {
+      PORTAL_DEV_SESSION_BYPASS: "true",
+      NEXT_PUBLIC_API_BASE_URL: "https://api.nulanesystems.com/api",
+    },
+  },
+});

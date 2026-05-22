@@ -1,0 +1,352 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { DataTableShell } from "@/components/ui/DataTableShell";
+import { FacilitySelector } from "@/components/ui/FacilitySelector";
+import { ImageDropzone } from "@/components/docufit/ImageDropzone";
+import { ModuleNotice } from "@/components/ui/ModuleNotice";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { hasOrganizationScope, isModuleEnabled } from "@/lib/modules";
+import { usePortalSession } from "@/lib/portalSession";
+import { fetchDocuFitHealth } from "@/lib/services/docuFitService";
+import {
+  MeasurementPoint,
+  getMeasurements,
+  uploadDocuFitImage,
+  DocuFitUploadMetadata,
+  DocuFitUploadRequest,
+} from "@/lib/services/measurementService";
+import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
+import type { DocuFitHealthResponse, FacilitySummary } from "@/lib/types";
+import {
+  docuFitKpiLabels,
+  docuFitQueueStatusTone,
+  docuFitReviewLabels,
+  docuFitSteps,
+} from "@/lib/docufit/schema";
+
+const docuFitEndpoints = [
+  { method: "GET", path: "/docufit/health", scope: "public", notes: "DocuFit health check", confirmed: true },
+  { method: "POST", path: "/docufit/api/milestones", scope: "tenant", notes: "Milestone ingest", confirmed: false },
+  { method: "POST", path: "/docufit/api/uploads", scope: "tenant", notes: "Upload proxy", confirmed: false },
+  { method: "POST", path: "/docufit/api/email", scope: "proxy", notes: "Notification emails", confirmed: false },
+];
+
+export default function DocuFitPage() {
+  const { organizationId, selectedLocationId, session } = usePortalSession();
+  const moduleEnabled = isModuleEnabled("docufit");
+  const hasScope = hasOrganizationScope(session);
+  const [health, setHealth] = useState<DocuFitHealthResponse | null>(null);
+  const [healthState, setHealthState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [facilities, setFacilities] = useState<FacilitySummary[]>([]);
+  const [facilityLoading, setFacilityLoading] = useState(false);
+  const [selectedFacility, setSelectedFacility] = useState("all");
+  const [measurements, setMeasurements] = useState<MeasurementPoint[]>([]);
+  const [measurementsLoading, setMeasurementsLoading] = useState(false);
+  const [measurementError, setMeasurementError] = useState<string | null>(null);
+  const [uploadNotes, setUploadNotes] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [uploadHistory, setUploadHistory] = useState<DocuFitUploadRequest[]>([]);
+
+  const loadHealth = useCallback(async () => {
+    if (!moduleEnabled || !hasScope) return;
+    setHealthState("loading");
+    try {
+      const payload = await fetchDocuFitHealth();
+      setHealth(payload);
+      setHealthState("success");
+    } catch (err: unknown) {
+      console.error("DocuFit health error", err);
+      setHealthState("error");
+    }
+  }, [moduleEnabled, hasScope]);
+
+  const loadFacilities = useCallback(async () => {
+    if (!organizationId) return;
+    if (!moduleEnabled || !hasScope) {
+      setFacilities([]);
+      return;
+    }
+    setFacilityLoading(true);
+    try {
+      const data = await FacilitiesAdapter.getFacilities(organizationId);
+      setFacilities(data);
+    } catch {
+      setFacilities([]);
+    } finally {
+      setFacilityLoading(false);
+    }
+  }, [organizationId, moduleEnabled, hasScope]);
+
+  const loadMeasurements = useCallback(async () => {
+    if (!organizationId) return;
+    const locationId = selectedFacility === "all" ? selectedLocationId : selectedFacility;
+    if (!locationId || !moduleEnabled || !hasScope) {
+      setMeasurements([]);
+      return;
+    }
+    setMeasurementsLoading(true);
+    setMeasurementError(null);
+    try {
+      const data = await getMeasurements(organizationId, locationId);
+      setMeasurements(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to load measurements";
+      setMeasurementError(message);
+      setMeasurements([]);
+    } finally {
+      setMeasurementsLoading(false);
+    }
+  }, [organizationId, selectedLocationId, selectedFacility, moduleEnabled, hasScope]);
+
+  useEffect(() => {
+    loadHealth();
+    loadFacilities();
+    loadMeasurements();
+  }, [loadHealth, loadFacilities, loadMeasurements]);
+
+  const lastChecked = useMemo(() => {
+    if (health?.timestamp) {
+      return new Date(health.timestamp).toLocaleTimeString();
+    }
+    return new Date().toLocaleTimeString();
+  }, [health]);
+
+  const healthTone = healthState === "error" ? "danger" : healthState === "loading" ? "warning" : "positive";
+  const healthLabel = health?.status ?? "Sync pending";
+  const healthDetail = health?.message ?? health?.detail ?? "Awaiting sync";
+
+  const queueDepth = measurements.length;
+  const facilityLabel =
+    selectedFacility === "all"
+      ? "All facilities"
+      : facilities.find((facility) => facility.id === selectedFacility)?.name ?? "Facility";
+  const queueItems = useMemo(() => {
+    const tone = docuFitQueueStatusTone["queued"] ?? docuFitQueueStatusTone.default;
+    return measurements.slice(0, 3).map((point) => ({
+      id: point.id,
+      title: point.dimension ? `${point.dimension} measurement` : "Measurement",
+      facility: facilityLabel,
+      status: "Queued",
+      tone,
+      time: point.takenAt ? new Date(point.takenAt).toLocaleTimeString() : "Pending",
+      value: point.measurement?.value ?? null,
+    }));
+  }, [measurements, facilityLabel]);
+
+  const queueStatusLabel = measurementError
+    ? measurementError
+    : queueItems.length
+    ? `${queueItems.length} queued`
+    : "Queue idle";
+
+  const handleUpload = async (params: { file: File; metadata: DocuFitUploadMetadata }) => {
+    if (!organizationId || !selectedLocationId) {
+      setUploadMessage("Location context required to upload images.");
+      return;
+    }
+    setUploading(true);
+    setUploadMessage("Uploading fit imagery...");
+    try {
+      const payload = await uploadDocuFitImage({
+        file: params.file,
+        organizationId,
+        locationId: selectedLocationId,
+        metadata: params.metadata,
+      });
+      setUploadHistory((prev) => [...prev, payload]);
+      setUploadMessage("Upload queued for sync.");
+      await loadMeasurements();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      setUploadMessage(message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!moduleEnabled) {
+    return (
+      <ModuleNotice
+        title="Valad Fit disabled"
+        description="The compliance sync module is off in this build."
+        message="Enable NEXT_PUBLIC_MODULE_DOCUFIT=1 to restore Valad Fit."
+      />
+    );
+  }
+
+  if (!hasScope) {
+    return (
+      <ModuleNotice
+        title="DocuFit demo mode"
+        description="DocuFit requires tenant organization context."
+        message="Sign in with a tenant to continue syncing milestones."
+      />
+    );
+  }
+
+  return (
+    <article className="space-y-6">
+      <Card>
+        <CardHeader title="Valad Fit workflow" subtitle="Desktop-native view of the mobile Valad Fit pipeline." />
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            {docuFitSteps.map((step) => (
+              <div key={step.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400">{step.label}</p>
+                <p className="text-sm font-black text-slate-900">{step.description}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <StatCard label={docuFitKpiLabels.queue} value={`${queueDepth} items`} detail={queueStatusLabel} />
+            <StatCard label={docuFitKpiLabels.success} value={health?.status || "Unknown"} detail={`Last checked ${lastChecked}`} />
+            <StatCard label={docuFitKpiLabels.pending} value={`${uploadHistory.length} uploads`} detail="Ready for sync" />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <FacilitySelector
+              facilities={facilities}
+              value={selectedFacility}
+              label={facilityLoading ? "Loading facilities…" : "Filter queue by facility"}
+              onChange={(value) => setSelectedFacility(value)}
+            />
+            <StatusBadge
+              label={healthState === "error" ? "API offline" : "API online"}
+              tone={healthState === "error" ? "danger" : "positive"}
+            />
+            <StatusBadge 
+              label={selectedFacility === "all" ? "Global session" : "Focused view"} 
+              tone={selectedFacility === "all" ? "neutral" : "positive"} 
+            />
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Last sync {lastChecked}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Milestone queue" subtitle="Live measurement queue synced through Valad Fit." />
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-3">
+            {measurementsLoading ? (
+              <p className="col-span-3 text-center text-sm text-slate-400">Loading queue…</p>
+            ) : queueItems.length ? (
+              queueItems.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{item.title}</p>
+                    <StatusBadge label={item.status} tone={item.tone} />
+                  </div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{item.facility}</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-[0.4em]">{item.time}</p>
+                  {item.value !== null && (
+                    <p className="text-[10px] text-slate-500">Value: {item.value.toFixed(2)}</p>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="col-span-3 text-center text-sm text-slate-500">No queued measurements yet.</p>
+            )}
+          </div>
+          {measurementError && <p className="mt-3 text-xs text-rose-500">{measurementError}</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Upload imagery" subtitle="Drag/drop fit images with context notes." />
+        <CardContent>
+          <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+            <div className="space-y-3">
+              <ImageDropzone
+                uploading={uploading}
+                metadata={{ takenAt: new Date().toISOString(), notes: uploadNotes }}
+                onUpload={handleUpload}
+              />
+              <textarea
+                value={uploadNotes}
+                onChange={(event) => setUploadNotes(event.target.value)}
+                placeholder="Add notes (operator, match serial, etc.)"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:border-brand focus:outline-none"
+              />
+              {uploadMessage && <p className="text-[10px] text-slate-500">{uploadMessage}</p>}
+            </div>
+            <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+              <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400">{docuFitReviewLabels.uploads}</p>
+              {uploadHistory.length ? (
+                <ul className="space-y-3">
+                  {uploadHistory.slice(-3).map((entry, index) => {
+                    const takenAtLabel = entry.metadata?.takenAt
+                      ? new Date(entry.metadata.takenAt).toLocaleString()
+                      : "Time unknown";
+                    return (
+                      <li key={`${entry.imageUrl}-${index}`} className="rounded-2xl border border-slate-100 bg-white/70 p-3 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{takenAtLabel}</p>
+                        <p className="text-sm text-slate-900">{entry.metadata?.notes || "No notes"}</p>
+                        <p className="text-[10px] text-slate-500 break-words">{entry.imageUrl}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-500">Upload images to document fit sessions.</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Review & status" subtitle="Mirror of the mobile Valad Fit review card." />
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400">{docuFitReviewLabels.status}</p>
+                <StatusBadge
+                  label={healthState === "error" ? "Offline" : healthState === "loading" ? "Syncing" : "Active"}
+                  tone={healthTone}
+                />
+              </div>
+              <p className="text-sm font-black text-slate-900">{healthLabel}</p>
+              <p className="text-[10px] text-slate-500">{healthDetail}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400">{docuFitReviewLabels.notes}</p>
+              <p className="text-sm text-slate-700">{uploadNotes || "No notes provided."}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <p className="text-[9px] uppercase tracking-[0.3em] text-slate-400">{docuFitReviewLabels.uploads}</p>
+              <p className="text-sm font-black text-slate-900">{uploadHistory.length} files queued</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader title="Valad Fit endpoints" subtitle="Documented API surface shared with mobile clients." />
+        <CardContent>
+          <DataTableShell columns={["Method", "Endpoint", "Scope", "Notes"]} title="Valad Fit surface">
+            {docuFitEndpoints.map((endpoint) => (
+              <tr key={endpoint.path}>
+                <td className="px-3 py-2 text-slate-500">{endpoint.method}</td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-slate-700">{endpoint.path}</span>
+                    <StatusBadge
+                      label={endpoint.confirmed ? "Confirmed" : "Documented"}
+                      tone={endpoint.confirmed ? "positive" : "neutral"}
+                    />
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-slate-500">{endpoint.scope}</td>
+                <td className="px-3 py-2 text-sm leading-5 text-slate-500">{endpoint.notes}</td>
+              </tr>
+            ))}
+          </DataTableShell>
+        </CardContent>
+      </Card>
+    </article>
+  );
+}

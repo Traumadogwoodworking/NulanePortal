@@ -1,0 +1,135 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Mail, RefreshCw, Workflow, ShieldCheck } from "lucide-react";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalBrandingSnapshot, usePortalDirectorySnapshot } from "@/lib/portalData";
+import { fetchAdminOutbox, fetchAdminOutboxItem, fetchAdminOutboxHistory, retryAdminOutbox, resendAdminOutbox, fetchAdminSettings } from "@/lib/services/controlPlaneService";
+import { ControlMetricTile } from "@/components/control/ControlMetricTile";
+import { ControlSection } from "@/components/control/ControlSection";
+import { ControlTableShell } from "@/components/control/ControlTableShell";
+import { ControlDetailPanel, type ControlDetailField } from "@/components/control/ControlDetailPanel";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+export default function ControlEmailPage() {
+  const { organizationId, isAdmin } = usePortalSession();
+  const { data: branding } = usePortalBrandingSnapshot();
+  const { data: directory } = usePortalDirectorySnapshot();
+  const [rows, setRows] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedRow, setSelectedRow] = useState<any | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [outbox, settings] = await Promise.all([
+        fetchAdminOutbox(organizationId, { limit: 40 }),
+        fetchAdminSettings(),
+      ]);
+      setRows(outbox.items || []);
+      setSelectedId((current) => current ?? outbox.items?.[0]?.id ?? null);
+      if (selectedId) {
+        const [item, historyRows] = await Promise.all([fetchAdminOutboxItem(selectedId, organizationId), fetchAdminOutboxHistory(selectedId, organizationId)]);
+        setSelectedRow(item);
+        setHistory(historyRows);
+      }
+      void settings;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load email operations.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [organizationId]);
+
+  if (!organizationId) return <EmptyState title="Email ops unavailable" description="Organization session required." />;
+  if (loading && !rows.length) return <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 text-slate-300">Loading email operations...</div>;
+  if (error) return <div className="rounded-[1.75rem] border border-rose-400/20 bg-rose-500/10 p-6 text-rose-100">{error}</div>;
+
+  const selected = selectedRow ?? rows.find((row) => row.id === selectedId) ?? null;
+  const retryable = rows.filter((row) => row.status === "failed_retryable").length;
+  const sent = rows.filter((row) => row.status === "sent").length;
+  const queued = rows.filter((row) => row.status === "queued" || row.status === "scheduled").length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-4">
+        <ControlMetricTile label="Outbox rows" value={rows.length} detail="Live queue items" icon={<Mail className="h-4 w-4" />} />
+        <ControlMetricTile label="Retryable" value={retryable} detail="Can be retried" tone={retryable ? "warning" : "positive"} icon={<RefreshCw className="h-4 w-4" />} />
+        <ControlMetricTile label="Queued" value={queued} detail="Waiting delivery" tone={queued ? "warning" : "neutral"} icon={<Workflow className="h-4 w-4" />} />
+        <ControlMetricTile label="Sent" value={sent} detail="Delivered items" tone={sent ? "positive" : "neutral"} icon={<ShieldCheck className="h-4 w-4" />} />
+      </div>
+
+      <ControlSection title="Outbound delivery" description="Queue rows, detail preview, retry/resend controls, and routing-adjacent state.">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
+          <ControlTableShell title="Outbox" description="Link the email surface back to submission/report flow." density="compact" columns={[{ id: "subject", label: "Subject" }, { id: "status", label: "Status" }, { id: "source", label: "Source" }, { id: "updated", label: "Updated" }]} rowsCount={rows.length}>
+            {rows.map((row) => (
+              <tr key={row.id} className="cursor-pointer hover:bg-white/5" onClick={async () => {
+                setSelectedId(row.id);
+                const [item, historyRows] = await Promise.all([fetchAdminOutboxItem(row.id, organizationId), fetchAdminOutboxHistory(row.id, organizationId)]);
+                setSelectedRow(item);
+                setHistory(historyRows);
+              }}>
+                <td className="px-3 py-3 text-sm text-white">{row.subject || row.template_key || row.email_type || row.id}</td>
+                <td className="px-3 py-3"><StatusBadge label={row.status} tone={row.status === "sent" ? "positive" : row.status.startsWith("failed") ? "danger" : "warning"} /></td>
+                <td className="px-3 py-3 text-sm text-slate-300">{row.source_record_type || "outbox"} {row.source_record_id ? `· ${row.source_record_id}` : ""}</td>
+                <td className="px-3 py-3 text-sm text-slate-300">{row.updated_at || row.created_at || "Unknown"}</td>
+              </tr>
+            ))}
+          </ControlTableShell>
+
+          <ControlDetailPanel
+            title={selected?.subject || "Outbox detail"}
+            eyebrow="Email ops"
+            subtitle={selected ? "Selected row is linked back to the submission/report flow when possible." : "Select a row to inspect delivery and retry state."}
+            fields={selected ? detailFields(selected) : []}
+            footer={
+              <div className="space-y-3">
+                <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-slate-400">Brand / email context</p>
+                  <p className="mt-2">{branding?.organization_name || branding?.brand_name || "Unknown organization"}</p>
+                  <p className="mt-1 text-xs text-slate-400">{directory?.emailLists.length || 0} email lists cached</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white" onClick={load}>Refresh</button>
+                  <button disabled className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Retry</button>
+                  <button disabled className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Resend</button>
+                  <Link href="/control/integrations" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white">Routing</Link>
+                </div>
+              </div>
+            }
+          />
+        </div>
+      </ControlSection>
+
+      <ControlSection title="Email templates and policy" description="Read-only policy context until a safe write editor is available.">
+        <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+          The backend already exposes the outbox queue, history, and branding snapshot. Template mutation and routing policy
+          writes remain split across existing contracts, so this surface keeps them readable and connected to the queue rather
+          than pretending there is a single editor.
+        </div>
+      </ControlSection>
+    </div>
+  );
+}
+
+function detailFields(row: any): ControlDetailField[] {
+  return [
+    { label: "ID", value: row.id },
+    { label: "Subject", value: row.subject || "Unknown" },
+    { label: "Status", value: row.status },
+    { label: "Recipients", value: Array.isArray(row.recipient_list) ? row.recipient_list.join(", ") : `${row.recipient_count || 0}` },
+    { label: "Source", value: row.source_record_type && row.source_record_id ? `${row.source_record_type}:${row.source_record_id}` : "Unlinked" },
+    { label: "History rows", value: "Loaded below" },
+  ];
+}
