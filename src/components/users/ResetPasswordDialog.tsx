@@ -60,15 +60,13 @@ export function ResetPasswordDialog({
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedUserId = user?.id ?? user?.user_id ?? null;
+  const selectedUserId = user?.id ?? null;
 
   if (process.env.NODE_ENV !== "production") {
     console.info("[reset-password.trace] render", {
       dialogMounted: true,
       organizationId,
-      userKeys: user ? Object.keys(user as Record<string, unknown>) : [],
       userId: user?.id,
-      userUserId: (user as { user_id?: string } | null)?.user_id,
       emailPresent: Boolean(user?.email),
     });
   }
@@ -147,7 +145,6 @@ export function ResetPasswordDialog({
           console.info("[reset-password.trace] open_clicked", {
             organizationId,
             userId: user?.id,
-            userUserId: (user as { user_id?: string } | null)?.user_id,
             emailPresent: Boolean(user?.email),
           });
           setIsOpen(true);

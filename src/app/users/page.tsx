@@ -560,7 +560,6 @@ export default function UsersPage() {
                          onSuccess={handlePasswordResetSuccess}
                          onError={setOperationMessage}
                          onPendingChange={(isPending) => setPendingAction(isPending ? "password-reset" : null)}
-                         disabled={pendingAction !== null}
                        />
                        <button
                          type="button"
