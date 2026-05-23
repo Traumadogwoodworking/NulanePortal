@@ -50,6 +50,20 @@ type RsaRailcarRow = {
   originalReport: ReportSummary;
 };
 
+function formatRsaDate(value?: string | null): string {
+  if (!value) return "Unknown date";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Unknown date";
+  return parsed.toLocaleString();
+}
+
+function formatRsaTime(value?: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleTimeString();
+}
+
 function normalizeVinEntry(entry: RsaDeckEntry): string | null {
   if (typeof entry === "string" || typeof entry === "number") {
     const vin = entry.toString().trim().toUpperCase();
@@ -219,6 +233,22 @@ export function RsaReportsManager() {
     return days;
   }, [flatRsaRailcars]);
 
+  const groupedRsaDayStats = useMemo(() => {
+    const stats: Record<string, { cars: number; vins: number }> = {};
+    Object.entries(groupedRsaRows).forEach(([date, tracks]) => {
+      let cars = 0;
+      let vins = 0;
+      Object.values(tracks).forEach((spots) => {
+        Object.values(spots).forEach((railcars) => {
+          cars += railcars.length;
+          vins += railcars.reduce((sum, rc) => sum + rc.vins.length, 0);
+        });
+      });
+      stats[date] = { cars, vins };
+    });
+    return stats;
+  }, [groupedRsaRows]);
+
   const facilityChoices = useMemo<FacilitySummary[]>(() => {
     const map = new Map<string, string>();
     rsaSummaries.forEach((summary) => {
@@ -245,20 +275,98 @@ export function RsaReportsManager() {
     setRsaEndDate("");
   }, []);
 
-  const exportToCsv = () => {
-    if (flatRsaRailcars.length === 0) return;
+  const csvEscape = useCallback((value: unknown) => {
+    const text = (value ?? "").toString();
+    return `"${text.replace(/"/g, '""')}"`;
+  }, []);
 
-    const content =
-      `Report ID,Railcar ID,VINs,Track,Spot,Facility,Created At
-` +
-      flatRsaRailcars
-        .map((c) => {
-          return `"${c.reportId}","${c.railcarId}","${c.vins.join(" | ")}","${c.track}","${c.spot}","${c.facilityName}","${c.createdAt || ""}"`;
-        })
-        .join("\n");
+  const buildDayDeckRows = useCallback((daySummaries: RsaRailcarRow[] = []) => {
+    return daySummaries.flatMap((summary) => {
+      const rows: Array<{
+        spot: string;
+        carId: string;
+        deck: string;
+        submittedAt: string | null;
+        count: number;
+        vins: string[];
+        track: string;
+      }> = [];
 
-    saveAs(new Blob([content], { type: "text/csv;charset=utf-8;" }), `Docudent_RSA_${new Date().toISOString().split("T")[0]}.csv`);
-  };
+      if (!summary.vins.length) {
+        rows.push({
+          spot: summary.spot || "",
+          carId: summary.railcarId || "",
+          deck: "",
+          submittedAt: summary.createdAt || null,
+          count: 0,
+          vins: [],
+          track: summary.track || "Uncategorized",
+        });
+        return rows;
+      }
+
+      const deckEntries = Object.entries(summary.deckVinsMap);
+      deckEntries.forEach(([deck, vins]) => {
+        rows.push({
+          spot: summary.spot || "",
+          carId: summary.railcarId || "",
+          deck,
+          submittedAt: summary.createdAt || null,
+          count: vins.length,
+          vins,
+          track: summary.track || "Uncategorized",
+        });
+      });
+
+      return rows;
+    });
+  }, []);
+
+  const exportDayToCsv = useCallback((dayKey: string) => {
+    const daySummaries = Object.values(groupedRsaRows[dayKey] || {}).flatMap((spots) =>
+      Object.values(spots).flat(),
+    );
+    if (!daySummaries.length) return;
+
+    const rows = buildDayDeckRows(daySummaries);
+    const header = ["Spot#", "Railcar", "Deck", "Submitted At", "Time", "VIN"];
+    const lines = [header.map(csvEscape).join(",")];
+
+    const trackMap = new Map<string, typeof rows>();
+    rows.forEach((row) => {
+      const track = row.track || "Uncategorized";
+      if (!trackMap.has(track)) {
+        trackMap.set(track, []);
+      }
+      trackMap.get(track)!.push(row);
+    });
+
+    const sortedTracks = Array.from(trackMap.keys()).sort((a, b) => {
+      if (a === "Uncategorized") return 1;
+      if (b === "Uncategorized") return -1;
+      return a.localeCompare(b);
+    });
+
+    sortedTracks.forEach((track) => {
+      const trackRows = trackMap.get(track) || [];
+      if (track !== "Uncategorized") {
+        lines.push(`Track ${track}`);
+      }
+      trackRows.forEach((row) => {
+        const formattedDate = formatRsaDate(row.submittedAt);
+        const formattedTime = formatRsaTime(row.submittedAt);
+        if (!row.vins.length) {
+          lines.push([row.spot || "", row.carId, row.deck, formattedDate, formattedTime, ""].map(csvEscape).join(","));
+          return;
+        }
+        row.vins.forEach((vin) => {
+          lines.push([row.spot || "", row.carId, row.deck, formattedDate, formattedTime, vin].map(csvEscape).join(","));
+        });
+      });
+    });
+
+    saveAs(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" }), `day-${dayKey || "report"}.csv`);
+  }, [buildDayDeckRows, csvEscape, groupedRsaRows]);
 
   const selectedRsaFullRow = useMemo(() => rsaReports.find(r => r.report_id === selectedRsaReportId) ?? null, [rsaReports, selectedRsaReportId]);
 
@@ -268,7 +376,7 @@ export function RsaReportsManager() {
   const rsaColumns = ["Asset Identifiers", "Track", "Spot", "Facility", "Created"];
 
   return (
-    <article className="max-w-7xl mx-auto w-full space-y-6 pb-12">
+    <article className="max-w-7xl mx-auto w-full space-y-6 pb-12 origin-top" style={{ zoom: 1.08 }}>
       <header className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="page-title text-[20px] font-black tracking-tight text-blue-800">
@@ -317,13 +425,6 @@ export function RsaReportsManager() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={exportToCsv}
-            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase tracking-wider text-slate-600 hover:border-slate-400 transition-all flex items-center gap-2 shadow-sm"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
-              Export
-            </button>
             <button type="button" onClick={loadRsaReports} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-500 transition-all">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -372,6 +473,7 @@ export function RsaReportsManager() {
               ) : (
                 Object.entries(groupedRsaRows).map(([date, tracks]) => {
                   const isDateExpanded = expandedDates[date] ?? true;
+                  const dayStats = groupedRsaDayStats[date] || { cars: 0, vins: 0 };
                   return (
                     <React.Fragment key={date}>
                       <tr className="cursor-pointer bg-slate-50/80 border-b border-slate-200/50" onClick={() => setExpandedDates(prev => ({ ...prev, [date]: !isDateExpanded }))}>
@@ -380,8 +482,24 @@ export function RsaReportsManager() {
                              <div className="flex items-center gap-2">
                                <Calendar className="w-4 h-4 text-slate-700" />
                                <h3 className="text-[12px] font-black text-slate-800 uppercase tracking-tight">{date}</h3>
+                               <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider shadow-sm">
+                                  {dayStats.cars} RC • {dayStats.vins} VINs
+                               </span>
                              </div>
-                             <ChevronRight className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isDateExpanded ? 'rotate-90' : ''}`} />
+                             <div className="flex items-center gap-2">
+                               <button
+                                 type="button"
+                                 onClick={(event) => {
+                                   event.stopPropagation();
+                                   exportDayToCsv(date);
+                                 }}
+                                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-sm transition-all hover:border-slate-400"
+                               >
+                                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                                 Export
+                               </button>
+                               <ChevronRight className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isDateExpanded ? 'rotate-90' : ''}`} />
+                             </div>
                            </div>
                         </td>
                       </tr>
@@ -464,6 +582,9 @@ export function RsaReportsManager() {
                                  </React.Fragment>
                                );
                             })}
+                            <tr aria-hidden="true">
+                              <td colSpan={rsaColumns.length} className="h-4 border-0 p-0" />
+                            </tr>
                           </React.Fragment>
                         );
                       })}
