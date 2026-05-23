@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { DataTableShell } from "@/components/ui/DataTableShell";
 import { FacilitySelector } from "@/components/ui/FacilitySelector";
 import { ReportsAdapter } from "@/lib/services/reportService";
+import { apiFetch } from "@/lib/apiClient";
 import { selectedRowStrokeClass } from "@/lib/severityTheme";
 import { saveAs } from "file-saver";
 import { 
@@ -16,6 +17,7 @@ import {
   Search, 
 } from "lucide-react";
 import { resolveRsaFacilityLabel, slugForFacilityLabel } from "@/lib/reportUtils";
+import { Button } from "@/components/ui/button";
 import type { FacilitySummary, RsaReportApiRow, ReportSummary } from "@/lib/types";
 
 const FACILITY_FILTER_ALL = "all";
@@ -92,6 +94,8 @@ export function RsaReportsManager() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [partialLoadError, setPartialLoadError] = useState<string | null>(null);
+  const [sendingEod, setSendingEod] = useState(false);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
   
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [expandedTracks, setExpandedTracks] = useState<Record<string, boolean>>({});
@@ -280,6 +284,26 @@ export function RsaReportsManager() {
     return `"${text.replace(/"/g, '""')}"`;
   }, []);
 
+  const handleSendEodRsa = useCallback(async () => {
+    setSendingEod(true);
+    setOperationMessage(null);
+    try {
+      await apiFetch("/railcar-scans/reports/eod", {
+        method: "POST",
+        body: JSON.stringify({
+          requestedAt: new Date().toISOString(),
+          requestedDateLocal: new Date().toISOString().slice(0, 10),
+          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+        }),
+      });
+      setOperationMessage("SUCCESS: EOD Report compiled and dispatched to notification list.");
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "ERROR: Unable to dispatch EOD report.");
+    } finally {
+      setSendingEod(false);
+    }
+  }, []);
+
   const buildDayDeckRows = useCallback((daySummaries: RsaRailcarRow[] = []) => {
     return daySummaries.flatMap((summary) => {
       const rows: Array<{
@@ -376,7 +400,7 @@ export function RsaReportsManager() {
   const rsaColumns = ["Asset Identifiers", "Track", "Spot", "Facility", "Created"];
 
   return (
-    <article className="max-w-7xl mx-auto w-full space-y-6 pb-12 origin-top" style={{ zoom: 1.08 }}>
+    <article className="rsa-reports-page max-w-7xl mx-auto w-full space-y-6 pb-12 origin-top" style={{ zoom: 1.08 }}>
       <header className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="page-title text-[20px] font-black tracking-tight text-blue-800">
@@ -425,11 +449,25 @@ export function RsaReportsManager() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => void handleSendEodRsa()}
+              disabled={sendingEod}
+              className="rsa-action-button rsa-action-button--primary"
+            >
+              {sendingEod ? "Dispatching..." : "Send Current Day RSA Report"}
+            </Button>
             <button type="button" onClick={loadRsaReports} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-500 transition-all">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
+
+        {operationMessage ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700">
+            {operationMessage}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-2 p-1.5 bg-slate-50/50 rounded-lg border border-slate-200/60 shadow-inner">
           <div className="xl:col-span-2 relative group">
@@ -451,11 +489,11 @@ export function RsaReportsManager() {
           />
           <select value={rsaTrackFilter || ""} onChange={(e) => setRsaTrackFilter(e.target.value)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px]">
             <option value="">All Tracks</option>
-            {rsaTrackOptions.map((t) => <option key={t || "unknown"} value={t || ""}>{t}</option>)}
+            {rsaTrackOptions.slice().sort((a, b) => String(a || "").localeCompare(String(b || ""))).map((t) => <option key={t || "unknown"} value={t || ""}>{t}</option>)}
           </select>
           <select value={rsaSpotFilter || ""} onChange={(e) => setRsaSpotFilter(e.target.value)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px]">
             <option value="">All Spots</option>
-            {rsaSpotOptions.map((s) => <option key={s || "unknown"} value={s || ""}>{s}</option>)}
+            {rsaSpotOptions.slice().sort((a, b) => String(a || "").localeCompare(String(b || ""))).map((s) => <option key={s || "unknown"} value={s || ""}>{s}</option>)}
           </select>
           <FacilitySelector facilities={facilityChoices} value={facilityFilter} onChange={setFacilityFilter} />
             <button onClick={clearFilters} className="py-1 bg-white border border-slate-200 rounded-md text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900">
@@ -476,13 +514,13 @@ export function RsaReportsManager() {
                   const dayStats = groupedRsaDayStats[date] || { cars: 0, vins: 0 };
                   return (
                     <React.Fragment key={date}>
-                      <tr className="cursor-pointer bg-slate-50/80 border-b border-slate-200/50" onClick={() => setExpandedDates(prev => ({ ...prev, [date]: !isDateExpanded }))}>
+                      <tr className="rsa-day-row cursor-pointer bg-slate-50/80 border-b border-slate-200/50" onClick={() => setExpandedDates(prev => ({ ...prev, [date]: !isDateExpanded }))}>
                         <td colSpan={rsaColumns.length} className="px-3 py-2">
                            <div className="flex items-center justify-between">
                              <div className="flex items-center gap-2">
                                <Calendar className="w-4 h-4 text-slate-700" />
                                <h3 className="text-[12px] font-black text-slate-800 uppercase tracking-tight">{date}</h3>
-                               <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider shadow-sm">
+                               <span className="rsa-pill px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider shadow-sm">
                                   {dayStats.cars} RC • {dayStats.vins} VINs
                                </span>
                              </div>
@@ -493,12 +531,12 @@ export function RsaReportsManager() {
                                    event.stopPropagation();
                                    exportDayToCsv(date);
                                  }}
-                                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-sm transition-all hover:border-slate-400"
+                                 className="rsa-action-button"
                                >
                                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
                                  Export
                                </button>
-                               <ChevronRight className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isDateExpanded ? 'rotate-90' : ''}`} />
+                               <ChevronRight className={`rsa-chevron w-3.5 h-3.5 text-slate-400 transition-transform ${isDateExpanded ? 'rotate-90' : ''}`} />
                              </div>
                            </div>
                         </td>
@@ -517,7 +555,7 @@ export function RsaReportsManager() {
 
                         return (
                           <React.Fragment key={trackName}>
-                            <tr className="cursor-pointer hover:bg-slate-50/50 border-b border-slate-100" onClick={() => setExpandedTracks(prev => ({ ...prev, [trackKey]: !isTrackExpanded }))}>
+                            <tr className="rsa-track-row cursor-pointer hover:bg-slate-50/50 border-b border-slate-100" onClick={() => setExpandedTracks(prev => ({ ...prev, [trackKey]: !isTrackExpanded }))}>
                               <td colSpan={rsaColumns.length} className="px-5 py-1.5 bg-slate-50/30 border-b border-slate-100">
                                  <div className="flex items-center justify-between">
                                    <div className="flex items-center gap-3">
@@ -526,7 +564,7 @@ export function RsaReportsManager() {
                                         {rcCount} RC • {vinCountSum} VINs
                                      </span>
                                    </div>
-                                   <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${isTrackExpanded ? 'rotate-90' : ''}`} />
+                                   <ChevronRight className={`rsa-chevron w-3 h-3 text-slate-400 transition-transform ${isTrackExpanded ? 'rotate-90' : ''}`} />
                                  </div>
                               </td>
                             </tr>
@@ -537,14 +575,14 @@ export function RsaReportsManager() {
                                const spotVinCount = railcars.reduce((acc, car) => acc + car.vins.length, 0);
                                return (
                                  <React.Fragment key={spotName}>
-                                    <tr className="cursor-pointer hover:bg-slate-50" onClick={() => setExpandedSpots(prev => ({ ...prev, [spotKey]: !isSpotExpanded }))}>
+                                    <tr className="rsa-spot-row cursor-pointer hover:bg-slate-50" onClick={() => setExpandedSpots(prev => ({ ...prev, [spotKey]: !isSpotExpanded }))}>
                                       <td colSpan={rsaColumns.length} className="px-8 py-1.5 bg-white border-b border-slate-100">
                                          <div className="flex items-center justify-between">
                                            <div className="flex items-center gap-2">
                                              <span className="text-[12px] font-bold text-slate-600 uppercase tracking-widest">{spotName}</span>
                                              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-2">{railcars.length} RC | {spotVinCount} VINs</span>
                                            </div>
-                                           <ChevronRight className={`w-3 h-3 text-slate-300 transition-transform ${isSpotExpanded ? 'rotate-90' : ''}`} />
+                                           <ChevronRight className={`rsa-chevron w-3 h-3 text-slate-300 transition-transform ${isSpotExpanded ? 'rotate-90' : ''}`} />
                                          </div>
                                       </td>
                                     </tr>
@@ -552,9 +590,9 @@ export function RsaReportsManager() {
                                       const isSelected = car.reportId === selectedRsaReportId;
                                       
                                       return (
-                                        <tr 
+                                        <tr
                                           key={`${car.reportId}-${car.railcarId}-${idx}`} 
-                                          className={`group transition-all cursor-pointer border-b border-slate-100 last:border-b-0 ${selectedRowStrokeClass(isSelected)} hover:bg-slate-50`}
+                                          className={`rsa-car-row group transition-all cursor-pointer border-b border-slate-100 last:border-b-0 ${selectedRowStrokeClass(isSelected)} hover:bg-slate-50`}
                                           onClick={() => setSelectedRsaReportId(car.reportId)}
                                         >
                                           <td className="pl-10 pr-3 py-3">
@@ -573,17 +611,17 @@ export function RsaReportsManager() {
                                           <td className="px-3 py-3 text-[10px] font-bold text-slate-400 whitespace-nowrap">
                                             <div className="flex items-center justify-between gap-2">
                                               <span>{car.createdAt ? new Date(car.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
-                                              <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? 'translate-x-1 text-slate-900 opacity-100' : 'opacity-0'}`} />
+                                              <ChevronRight className={`rsa-chevron w-4 h-4 transition-transform ${isSelected ? 'translate-x-1 text-slate-900 opacity-100' : 'opacity-0'}`} />
                                             </div>
                                           </td>
                                         </tr>
                                       );
                                     })}
-                                 </React.Fragment>
-                               );
+                                </React.Fragment>
+                              );
                             })}
                             <tr aria-hidden="true">
-                              <td colSpan={rsaColumns.length} className="h-4 border-0 p-0" />
+                              <td colSpan={rsaColumns.length} className="rsa-day-spacer border-0 p-0" />
                             </tr>
                           </React.Fragment>
                         );
@@ -623,12 +661,12 @@ export function RsaReportsManager() {
                     
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MapPin className="w-3 h-3 text-slate-400"/> TRACK</span>
-                        <span className="text-[20px] font-mono font-black text-slate-900 tracking-widest">{selectedRsaFullRow.track || "—"}</span>
+                        <span className="rsa-scope-label text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MapPin className="w-3 h-3 text-slate-400"/> TRACK</span>
+                        <span className="rsa-value-text text-[20px] font-mono text-slate-900 tracking-widest">{selectedRsaFullRow.track || "—"}</span>
                       </div>
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">DESIGNATED SPOT</span>
-                        <span className="text-[20px] font-mono font-black text-slate-900 tracking-widest">{selectedRsaFullRow.spot || "—"}</span>
+                        <span className="rsa-scope-label text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">DESIGNATED SPOT</span>
+                        <span className="rsa-value-text text-[20px] font-mono text-slate-900 tracking-widest">{selectedRsaFullRow.spot || "—"}</span>
                       </div>
                     </div>
 

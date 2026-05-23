@@ -550,6 +550,92 @@ main {
   gap: var(--space-lg);
 }
 
+.rsa-reports-page {
+  --rsa-divider-color: #cbd5e1;
+  --rsa-divider-strong: #94a3b8;
+  --rsa-arrow-width: 2.75;
+  --rsa-scale: 1.08;
+}
+
+.rsa-reports-page .rsa-day-row td,
+.rsa-reports-page .rsa-track-row td,
+.rsa-reports-page .rsa-spot-row td,
+.rsa-reports-page .rsa-car-row td {
+  border-bottom-width: 2px;
+}
+
+.rsa-reports-page .rsa-day-row {
+  border-bottom-width: 2px;
+}
+
+.rsa-reports-page .rsa-day-row svg,
+.rsa-reports-page .rsa-track-row svg,
+.rsa-reports-page .rsa-spot-row svg,
+.rsa-reports-page .rsa-car-row svg,
+.rsa-reports-page .rsa-chevron {
+  stroke-width: var(--rsa-arrow-width);
+}
+
+.rsa-reports-page .rsa-pill {
+  border-width: 2px;
+  font-weight: 900;
+}
+
+.rsa-reports-page .rsa-divider {
+  border-top-width: 2px;
+  border-color: var(--rsa-divider-color);
+}
+
+.rsa-reports-page .rsa-day-spacer {
+  height: 0.75rem;
+}
+
+.rsa-reports-page .rsa-action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #475569;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease, color 160ms ease;
+}
+
+.rsa-reports-page .rsa-action-button:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.rsa-reports-page .rsa-action-button--primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.rsa-reports-page .rsa-action-button--primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.rsa-reports-page .rsa-scope-label {
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.rsa-reports-page .rsa-value-text {
+  font-weight: 900;
+}
+
 .page-header {
   margin-bottom: var(--space-sm);
 }
