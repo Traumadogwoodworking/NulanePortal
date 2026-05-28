@@ -265,7 +265,7 @@ export function PortalSidebar() {
                       {item.icon === "pen" && <PenIcon />}
                       {isImageIcon && typeof item.icon === "string" && (
                         <Image
-                          src={item.brandLogo ?? item.icon}
+                          src={item.href === "/docudent" ? branding.appNavLogoUrl ?? item.icon : item.brandLogo ?? item.icon}
                           alt={item.label}
                           width={isDocudentIcon ? 260 : 180}
                           height={isDocudentIcon ? 260 : 180}

@@ -98,6 +98,7 @@ export interface ResolvedPortalBranding extends PortalBrandingPartial {
   topbarTextClassName: string;
   sidebarLogoShellClassName: string;
   sidebarLogoImageClassName: string;
+  appNavLogoUrl: string | null;
   sidebarShellClassName: string;
   sidebarHeaderClassName: string;
   sidebarHeaderStyle: CSSProperties;
@@ -196,6 +197,7 @@ export function resolvePortalBranding({
     topbarTextClassName: preset.topbarTextClassName,
     sidebarLogoShellClassName: preset.sidebarLogoShellClassName,
     sidebarLogoImageClassName: preset.sidebarLogoImageClassName,
+    appNavLogoUrl: preset.appNavLogoUrl,
     sidebarShellClassName: preset.sidebarShellClassName,
     sidebarHeaderClassName: preset.sidebarHeaderClassName,
     sidebarHeaderStyle: preset.sidebarHeaderStyle,

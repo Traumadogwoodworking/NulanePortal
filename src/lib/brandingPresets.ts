@@ -21,6 +21,7 @@ export interface PortalBrandPreset {
   topbarTextClassName: string;
   sidebarLogoShellClassName: string;
   sidebarLogoImageClassName: string;
+  appNavLogoUrl: string | null;
   sidebarShellClassName: string;
   sidebarHeaderClassName: string;
   sidebarHeaderStyle: CSSProperties;
@@ -57,6 +58,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     defaultLogoUrl: "/media/definian-sidebar-logo-white.png",
     staticLogoUrl: "/media/definian-sidebar-logo-white.png",
     staticLogoNormalizedKeys: ["definian inspection", "definianinspection"],
+    appNavLogoUrl: "/media/definian-sidebar-logo-white-trim.png",
     allowSnapshotLogoOverride: false,
     footerLogoUrl: null,
     showFooterLogo: false,
@@ -103,6 +105,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     defaultLogoUrl: "/media/Docudent.png",
     staticLogoUrl: "/media/inspection-trac-logo.png",
     staticLogoNormalizedKeys: ["awct.inc", "awc.inc", "signature vehicle logistics"],
+    appNavLogoUrl: "/media/inspection-trac-logo.png",
     allowSnapshotLogoOverride: true,
     footerLogoUrl: null,
     showFooterLogo: false,
