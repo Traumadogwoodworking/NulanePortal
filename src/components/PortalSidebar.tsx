@@ -8,7 +8,6 @@ import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
-import { PortalBrandMark } from "@/components/PortalBrandMark";
 import { Home, LayoutGrid, Mail } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
@@ -179,7 +178,7 @@ export function PortalSidebar() {
     });
   }, [brandingSnapshot, safePathname, session]);
 
-  const activeLogo = branding.logoUrl;
+  const activeLogo = branding.staticLogoUrl ?? branding.logoUrl;
 
   const accessInfo = useMemo(
     () => ({ isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission }),
@@ -208,21 +207,22 @@ export function PortalSidebar() {
         style={{
           ...branding.sidebarHeaderStyle,
           height: "auto",
-          minHeight: "156px",
+          minHeight: "176px",
           padding: "18px 14px",
         }}
       >
         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-        <div className="relative z-10 flex w-full items-center justify-center gap-3 transition-transform duration-300 group-hover:translate-y-px">
-          <PortalBrandMark
-            organizationName={branding.organizationName || branding.appLabel || "Portal"}
-            logoSrc={activeLogo}
-            alt={branding.appLabel || branding.organizationName || "Portal"}
-            fallbackLabel={branding.appLabel?.[0] || branding.organizationName?.[0] || "N"}
-            mode="sidebar"
-            className="mx-auto justify-center"
-            imageClassName="max-w-[320px] mx-auto scale-[1.55] origin-center"
-          />
+        <div className={branding.sidebarLogoShellClassName}>
+          {activeLogo ? (
+            <Image
+              src={activeLogo}
+              alt={branding.appLabel || branding.organizationName || "Portal"}
+              width={1254}
+              height={1254}
+              className={branding.sidebarLogoImageClassName}
+              priority
+            />
+          ) : null}
         </div>
       </div>
 
@@ -248,7 +248,7 @@ export function PortalSidebar() {
                       active ? branding.sidebarActiveLinkClassName : branding.sidebarInactiveLinkClassName
                     }`}
                   >
-                    <div className={`flex items-center justify-center ${isImageIcon ? (isDocudentIcon ? "nav-link-icon nav-link-icon--docudent -my-8" : "nav-link-icon nav-link-icon--large -my-5") : iconBoxClass}`}>
+                    <div className={`flex items-center justify-center ${isImageIcon ? (isDocudentIcon ? "nav-link-icon nav-link-icon--docudent -my-4" : "nav-link-icon nav-link-icon--large -my-4") : iconBoxClass}`}>
                       {item.icon === "home" && <HomeIcon />}
                       {item.icon === "dashboard" && <LayoutGrid className={sharedSidebarIconSize} />}
                       {item.icon === "reports" && <ReportsIcon />}
@@ -265,16 +265,16 @@ export function PortalSidebar() {
                       {item.icon === "pen" && <PenIcon />}
                       {isImageIcon && typeof item.icon === "string" && (
                         <Image
-                          src={item.icon}
+                          src={item.brandLogo ?? item.icon}
                           alt={item.label}
-                          width={isDocudentIcon ? 198 : 150}
-                          height={isDocudentIcon ? 198 : 150}
-                          className={isDocudentIcon ? "object-contain scale-[2.43]" : "object-contain scale-[2.55]"}
+                          width={isDocudentIcon ? 260 : 180}
+                          height={isDocudentIcon ? 260 : 180}
+                          className={isDocudentIcon ? "object-contain scale-[2.3]" : "object-contain scale-[2.25]"}
                         />
                       )}
                     </div>
-                    <div className="flex flex-col flex-1 min-w-0 ml-[5px]">
-                      <span className="text-sm font-semibold truncate leading-tight">
+                    <div className="flex min-w-0 flex-1 items-center justify-start ml-[5px]">
+                      <span className="truncate text-sm font-semibold leading-tight">
                         {item.label}
                       </span>
                     </div>
@@ -287,7 +287,7 @@ export function PortalSidebar() {
       </div>
 
       <div className={branding.sidebarFooterClassName}>
-        <Image src={branding.footerLogoUrl} alt="Nulane Systems" width={220} height={72} />
+        {branding.footerLogoUrl ? <Image src={branding.footerLogoUrl} alt="Nulane Systems" width={220} height={72} /> : null}
         <div className="relative w-full">
           {profileOpen ? (
             <div className={branding.sidebarProfilePopoverClassName}>

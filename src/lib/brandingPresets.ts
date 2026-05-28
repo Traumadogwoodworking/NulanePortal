@@ -6,8 +6,11 @@ export interface PortalBrandPreset {
   mode: PortalBrandingMode;
   defaultOrganizationName: string;
   defaultLogoUrl: string | null;
+  staticLogoUrl: string | null;
+  staticLogoNormalizedKeys: string[];
   allowSnapshotLogoOverride: boolean;
-  footerLogoUrl: string;
+  footerLogoUrl: string | null;
+  showFooterLogo: boolean;
   portalBrandColor: string;
   portalBrandAccentColor: string;
   portalBrandLightColor: string;
@@ -16,6 +19,8 @@ export interface PortalBrandPreset {
   sidebarLinkEnforced: string;
   sidebarLinkHoverEnforced: string;
   topbarTextClassName: string;
+  sidebarLogoShellClassName: string;
+  sidebarLogoImageClassName: string;
   sidebarShellClassName: string;
   sidebarHeaderClassName: string;
   sidebarHeaderStyle: CSSProperties;
@@ -50,8 +55,11 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     mode: "definianInspection",
     defaultOrganizationName: "Definian Inspection",
     defaultLogoUrl: "/media/definian-sidebar-logo-white.png",
+    staticLogoUrl: "/media/definian-sidebar-logo-white.png",
+    staticLogoNormalizedKeys: ["definian inspection", "definianinspection"],
     allowSnapshotLogoOverride: false,
-    footerLogoUrl: "/media/definian-logo-inverted-rgb.svg",
+    footerLogoUrl: null,
+    showFooterLogo: false,
     portalBrandColor: "#06af68",
     portalBrandAccentColor: "#048c57",
     portalBrandLightColor: "rgba(6, 175, 104, 0.12)",
@@ -60,6 +68,8 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     sidebarLinkEnforced: "#cbd5e1",
     sidebarLinkHoverEnforced: "#ffffff",
     topbarTextClassName: "text-slate-900",
+    sidebarLogoShellClassName: "relative z-10 flex w-full items-center justify-center transition-transform duration-300 group-hover:translate-y-px",
+    sidebarLogoImageClassName: "h-auto w-full max-w-[420px] object-contain",
     sidebarShellClassName: "border-r border-slate-800/70 bg-[#0b1624] transition-all duration-300",
     sidebarHeaderClassName:
       "group relative flex items-center overflow-hidden border-b border-white/10 transition-colors duration-500",
@@ -91,8 +101,11 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     mode: "docudent",
     defaultOrganizationName: "DocuDent",
     defaultLogoUrl: "/media/Docudent.png",
+    staticLogoUrl: "/media/inspection-trac-logo.png",
+    staticLogoNormalizedKeys: ["awct.inc", "awc.inc", "signature vehicle logistics"],
     allowSnapshotLogoOverride: true,
-    footerLogoUrl: "/media/powered_by_colorful.png",
+    footerLogoUrl: null,
+    showFooterLogo: false,
     portalBrandColor: "#2563eb",
     portalBrandAccentColor: "#1d4ed8",
     portalBrandLightColor: "rgba(37, 99, 235, 0.08)",
@@ -101,6 +114,9 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     sidebarLinkEnforced: "#1e293b",
     sidebarLinkHoverEnforced: "#020617",
     topbarTextClassName: "text-[color:var(--brand)]",
+    sidebarLogoShellClassName:
+      "relative z-10 flex w-full items-center justify-center rounded-[28px] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel-muted)] px-4 py-3 shadow-sm ring-1 ring-black/5 transition-transform duration-300 group-hover:translate-y-px",
+    sidebarLogoImageClassName: "h-auto w-full max-w-[260px] object-contain",
     sidebarShellClassName: "border-r border-slate-200 bg-white transition-all duration-300",
     sidebarHeaderClassName:
       "group relative flex items-center overflow-hidden border-b border-slate-200 transition-colors duration-500",
@@ -131,7 +147,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
 };
 
 export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
-  process.env.NEXT_PUBLIC_PORTAL_BRANDING === "definianInspection" ? "definianInspection" : "docudent";
+  process.env.NEXT_PUBLIC_PORTAL_BRANDING === "docudent" ? "docudent" : "definianInspection";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;

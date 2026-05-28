@@ -96,6 +96,8 @@ export interface ResolvedPortalBranding extends PortalBrandingPartial {
   sidebarLinkEnforced: string;
   sidebarLinkHoverEnforced: string;
   topbarTextClassName: string;
+  sidebarLogoShellClassName: string;
+  sidebarLogoImageClassName: string;
   sidebarShellClassName: string;
   sidebarHeaderClassName: string;
   sidebarHeaderStyle: CSSProperties;
@@ -110,7 +112,9 @@ export interface ResolvedPortalBranding extends PortalBrandingPartial {
   sidebarProfileLogoutButtonClassName: string;
   sidebarActiveLinkClassName: string;
   sidebarInactiveLinkClassName: string;
-  footerLogoUrl: string;
+  footerLogoUrl: string | null;
+  staticLogoUrl: string | null;
+  staticLogoNormalizedKeys: string[];
 }
 
 function normalizeOrgKey(value?: string | null): string {
@@ -165,9 +169,10 @@ export function resolvePortalBranding({
       definition.logoUrl ??
       preset.defaultLogoUrl
   );
+  const usesStaticLogo = preset.staticLogoUrl && preset.staticLogoNormalizedKeys.includes(normalizedKey);
   const logoUrl =
-    preset.mode === "definianInspection"
-      ? preset.defaultLogoUrl ?? null
+    usesStaticLogo
+      ? preset.staticLogoUrl
       : customLogo ?? fallbackLogo ?? null;
   return {
     mode: preset.mode,
@@ -189,6 +194,8 @@ export function resolvePortalBranding({
     sidebarLinkEnforced: preset.sidebarLinkEnforced,
     sidebarLinkHoverEnforced: preset.sidebarLinkHoverEnforced,
     topbarTextClassName: preset.topbarTextClassName,
+    sidebarLogoShellClassName: preset.sidebarLogoShellClassName,
+    sidebarLogoImageClassName: preset.sidebarLogoImageClassName,
     sidebarShellClassName: preset.sidebarShellClassName,
     sidebarHeaderClassName: preset.sidebarHeaderClassName,
     sidebarHeaderStyle: preset.sidebarHeaderStyle,
@@ -203,7 +210,9 @@ export function resolvePortalBranding({
     sidebarProfileLogoutButtonClassName: preset.sidebarProfileLogoutButtonClassName,
     sidebarActiveLinkClassName: preset.sidebarActiveLinkClassName,
     sidebarInactiveLinkClassName: preset.sidebarInactiveLinkClassName,
-    footerLogoUrl: preset.footerLogoUrl,
+    footerLogoUrl: preset.showFooterLogo ? preset.footerLogoUrl : null,
+    staticLogoUrl: preset.staticLogoUrl,
+    staticLogoNormalizedKeys: preset.staticLogoNormalizedKeys,
   };
 }
 

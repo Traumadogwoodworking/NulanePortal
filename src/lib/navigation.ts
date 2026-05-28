@@ -62,13 +62,13 @@ const portalRoutes: PortalRoute[] = [
 
   // Apps
   {
-    label: "DocuDent",
+    label: "Inspection Trac",
     href: "/docudent",
     description: "Damage capture and analysis",
     section: "apps",
-    icon: "/media/Docudent.png",
+    icon: "/media/inspection-trac-logo.png",
     brandColor: "#064e3b",
-    brandLogo: "/media/Docudent.png",
+    brandLogo: "/media/inspection-trac-logo.png",
     moduleKey: "docudent",
   },
   {
