@@ -481,7 +481,11 @@ export default function FacilitiesPage() {
               <EmptyState title="No facilities match the current view" description="Try adjusting search parameters. This is an empty filtered result, not a load failure." />
             ) : (
               <div className="-mx-4 -mb-4">
-                <DataTableShell columns={columns}>
+                <DataTableShell
+                  title="Facility Registry"
+                  description="Facilities currently returned by the directory snapshot."
+                  columns={columns}
+                >
                   {filteredFacilities.map((f) => {
                     const isSelected = f.id === selectedFacilityId;
                     return (

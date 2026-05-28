@@ -6,9 +6,8 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
-import { getPortalBranding, getAppBranding } from "@/lib/branding";
+import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
-import type { PortalSessionResponse } from "@/lib/types";
 import { PortalBrandMark } from "@/components/PortalBrandMark";
 import { Home, LayoutGrid, Mail } from "lucide-react";
 
@@ -173,20 +172,14 @@ export function PortalSidebar() {
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
 
   const branding = useMemo(() => {
-    if (!session) {
-      return brandingSnapshot
-        ? getPortalBranding({ branding_snapshot: brandingSnapshot } as PortalSessionResponse)
-        : null;
-    }
-    if (brandingSnapshot) {
-      return getPortalBranding({ ...session, branding_snapshot: brandingSnapshot } as PortalSessionResponse);
-    }
-    return getPortalBranding(session);
-  }, [brandingSnapshot, session]);
-  const appBranding = useMemo(() => getAppBranding(safePathname), [safePathname]);
-  
-  const activeLogo = branding?.logoUrl || appBranding.brandLogo || "/media/Nulane_Systems-removebg-preview-inv.png";
-  const hasCustomLogo = Boolean(branding?.logoUrl || appBranding.brandLogo);
+    return resolvePortalBranding({
+      session,
+      pathname: safePathname,
+      brandingSnapshot: brandingSnapshot ?? null,
+    });
+  }, [brandingSnapshot, safePathname, session]);
+
+  const activeLogo = branding.logoUrl;
 
   const accessInfo = useMemo(
     () => ({ isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission }),
@@ -203,47 +196,41 @@ export function PortalSidebar() {
     session?.user?.display_name ||
     [session?.user?.first_name, session?.user?.last_name].filter(Boolean).join(" ") ||
     session?.user?.email ||
-    branding?.organizationName ||
-    appBranding.appLabel ||
+    branding.organizationName ||
+    branding.appLabel ||
     "Portal";
   const profileInitial = (profileLabel?.[0] || "N").toUpperCase();
-  const NULANE_LOGO_LIGHT = "/media/powered_by_colorful.png";
-  const nulaneLogoSrc = NULANE_LOGO_LIGHT;
   return (
-    <aside id="sidebar" className="border-r border-slate-200 bg-white transition-all duration-300">
-        <div 
-          id="sidebar-header" 
-          className="group relative flex items-center overflow-hidden border-b border-slate-200 transition-colors duration-500"
-          style={{
-            backgroundColor: "var(--surface-panel-muted)",
-            backgroundImage: hasCustomLogo
-              ? "linear-gradient(135deg, rgba(255,255,255,0.82), rgba(248,250,252,0.94))"
-              : "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.8))",
-            height: "auto",
-            minHeight: "72px",
-            padding: "12px 14px",
-          }}
-        >
+    <aside id="sidebar" className={branding.sidebarShellClassName}>
+      <div
+        id="sidebar-header"
+        className={branding.sidebarHeaderClassName}
+        style={{
+          ...branding.sidebarHeaderStyle,
+          height: "auto",
+          minHeight: "156px",
+          padding: "18px 14px",
+        }}
+      >
         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
         <div className="relative z-10 flex w-full items-center justify-center gap-3 transition-transform duration-300 group-hover:translate-y-px">
           <PortalBrandMark
-            organizationName={branding?.organizationName || appBranding.appLabel || "Portal"}
+            organizationName={branding.organizationName || branding.appLabel || "Portal"}
             logoSrc={activeLogo}
-            alt={appBranding.appLabel || branding?.organizationName || "Portal"}
-            fallbackLabel={appBranding.appLabel?.[0] || branding?.organizationName?.[0] || "N"}
+            alt={branding.appLabel || branding.organizationName || "Portal"}
+            fallbackLabel={branding.appLabel?.[0] || branding.organizationName?.[0] || "N"}
             mode="sidebar"
             className="mx-auto justify-center"
-            imageClassName="max-w-[180px] mx-auto"
+            imageClassName="max-w-[320px] mx-auto scale-[1.55] origin-center"
           />
         </div>
-
       </div>
 
-      <div id="sidebar-content" className="flex-1 overflow-y-auto px-3 space-y-4 py-4 custom-scrollbar">
+      <div id="sidebar-content" className={branding.sidebarContentClassName}>
         {visibleSections.map((section) => (
           <div key={section.key} className="nav-section-container">
             {section.key !== "core" ? (
-              <div className="px-2 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <div className={branding.sidebarSectionLabelClassName}>
                 {section.title}
               </div>
             ) : null}
@@ -258,9 +245,7 @@ export function PortalSidebar() {
                     key={item.href}
                     href={item.href}
                     className={`nav-link group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200 ${
-                      active
-                        ? "bg-blue-100 text-blue-700 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.25)]"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      active ? branding.sidebarActiveLinkClassName : branding.sidebarInactiveLinkClassName
                     }`}
                   >
                     <div className={`flex items-center justify-center ${isImageIcon ? (isDocudentIcon ? "nav-link-icon nav-link-icon--docudent -my-8" : "nav-link-icon nav-link-icon--large -my-5") : iconBoxClass}`}>
@@ -289,7 +274,7 @@ export function PortalSidebar() {
                       )}
                     </div>
                     <div className="flex flex-col flex-1 min-w-0 ml-[5px]">
-                      <span className={`text-sm font-semibold truncate leading-tight ${item.href === "/email" ? "text-slate-900" : ""}`}>
+                      <span className="text-sm font-semibold truncate leading-tight">
                         {item.label}
                       </span>
                     </div>
@@ -301,17 +286,17 @@ export function PortalSidebar() {
         ))}
       </div>
 
-      <div className="sidebar-footer relative p-3 flex flex-col items-center justify-center gap-3 bg-transparent mt-2">
-        <Image src={nulaneLogoSrc} alt="Nulane Systems" width={220} height={72} />
+      <div className={branding.sidebarFooterClassName}>
+        <Image src={branding.footerLogoUrl} alt="Nulane Systems" width={220} height={72} />
         <div className="relative w-full">
           {profileOpen ? (
-            <div className="absolute bottom-full left-0 right-0 mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
+            <div className={branding.sidebarProfilePopoverClassName}>
               <div className="space-y-2 border-b border-slate-100 pb-3 text-center">
                 <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Account</p>
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-[18px] font-black uppercase tracking-[0.12em] text-white">
+                <div className={`mx-auto ${branding.sidebarProfileAvatarClassName}`}>
                   {profileInitial}
                 </div>
-                <p className="text-sm font-black text-slate-900">{profileLabel}</p>
+                <p className={`text-sm font-black ${branding.sidebarProfileMetaValueClassName}`}>{profileLabel}</p>
               </div>
               <div className="space-y-2 pt-3">
                 <button
@@ -319,7 +304,7 @@ export function PortalSidebar() {
                     setProfileOpen(false);
                     logout();
                   }}
-                  className="flex w-full items-center justify-between rounded-xl border border-rose-200 px-3 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50"
+                  className={branding.sidebarProfileLogoutButtonClassName}
                 >
                   <span>Logout</span>
                   <LogoutIcon />
@@ -329,14 +314,14 @@ export function PortalSidebar() {
           ) : null}
           <button
             onClick={() => setProfileOpen((prev) => !prev)}
-            className="flex w-full items-center justify-start gap-3 rounded-xl border-2 border-slate-100 bg-white px-3 py-3 text-[12px] font-black uppercase tracking-widest text-slate-600 hover:border-slate-200 hover:text-slate-900 transition-all group"
+            className={branding.sidebarProfileToggleClassName}
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-[18px] font-black uppercase tracking-[0.12em] text-white">
+            <div className={branding.sidebarProfileAvatarClassName}>
               {profileInitial}
             </div>
             <div className="flex min-w-0 flex-1 flex-col items-start text-left leading-tight overflow-hidden">
-              <span className="text-[10px] text-slate-400">Account</span>
-              <span className="truncate text-[12px] text-slate-800 normal-case tracking-normal max-w-full">{profileLabel}</span>
+              <span className={branding.sidebarProfileMetaLabelClassName}>Account</span>
+              <span className={branding.sidebarProfileMetaValueClassName}>{profileLabel}</span>
             </div>
           </button>
         </div>

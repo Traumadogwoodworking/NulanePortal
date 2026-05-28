@@ -1,23 +1,29 @@
 "use client";
 
+import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent } from "@/components/ui/Card";
 import { normalizeMediaUrl } from "@/lib/config";
 import type { ReportDamageApiRow } from "@/lib/types";
+import { MapPin } from "lucide-react";
 
 export function DamageMapCard({ report }: { report?: ReportDamageApiRow | null }) {
   const splatUrl = report?.splat_urls?.[0] ? normalizeMediaUrl(report.splat_urls[0]) : null;
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-sm">
-      <div className="border-b border-slate-100 bg-white p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Damage map</p>
-            <p className="text-lg font-black tracking-tight text-slate-950">Splat</p>
+    <Card className="overflow-hidden border-slate-200/80 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/80 px-5 py-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-blue-600" />
+            <p className="text-sm font-bold text-slate-900">Damage Map</p>
           </div>
-          <span className="text-[8px] font-black uppercase tracking-[0.4em] text-slate-500">Live</span>
+          <p className="text-xs font-medium text-slate-500">Splat overlay</p>
         </div>
+        <Badge variant="secondary" className="border-slate-200 bg-white text-slate-700">
+          {splatUrl ? "1 item" : "0 items"}
+        </Badge>
       </div>
-      <div className="bg-white p-4">
+      <CardContent className="p-5">
         {splatUrl ? (
           <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -28,7 +34,7 @@ export function DamageMapCard({ report }: { report?: ReportDamageApiRow | null }
             <p className="text-sm font-semibold text-slate-700">Splat unavailable</p>
           </div>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

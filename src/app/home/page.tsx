@@ -27,13 +27,22 @@ import {
 import { PageSection } from "@/components/ui/PageSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { DataTableShell } from "@/components/ui/DataTableShell";
 import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
-import { usePortalDirectorySnapshot } from "@/lib/portalData";
+import { usePortalDirectorySnapshot, usePortalReportsSnapshot } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
 import { buildFacilityDamageStats } from "@/lib/facilityDamageStats";
 import { chartTheme } from "@/lib/chartTheme";
 import { resolveDamageReportLocationName } from "@/lib/reportUtils";
-import { fetchDamageReportsUncached, fetchRsaReportsUncached } from "@/lib/services/reportService";
+import {
+  DEFAULT_HOME_REPORT_FILTERS,
+  matchesHomeDamageReportFilters,
+  matchesHomeInspectorEmailFilter,
+  matchesHomeRsaReportFilters,
+  normalizeHomeReportFilters,
+  normalizeLabel,
+  serializeHomeReportFilters,
+} from "@/lib/reportFilters";
 import type { FacilityDamageStats } from "@/lib/facilityDamageStats";
 import type { ReportDamageApiRow, RsaReportApiRow } from "@/lib/types";
 
@@ -126,6 +135,17 @@ function csvEscape(value: unknown): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+function exportLabel(value: string | null | undefined): string {
+  const normalized = (value ?? "").toString().trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return "";
+  }
+  return normalized
+    .split(" ")
+    .map((word) => (word && /[a-z]/.test(word[0]) ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
+
 function downloadCsv(filename: string, rows: unknown[][]): void {
   const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
@@ -165,14 +185,6 @@ function formatEvenDateKeyLabel(value: string): string {
     return "";
   }
   return formatDateKeyLabel(value);
-}
-
-function parseDateInputValue(value: string): Date {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) {
-    return new Date(value);
-  }
-  return new Date(year, month - 1, day);
 }
 
 function addDays(date: Date, amount: number): Date {
@@ -228,11 +240,6 @@ function getReportSeverity(report: ReportDamageApiRow): number | null {
     }
   }
   return highest;
-}
-
-function normalizeLabel(value: string | null | undefined): string {
-  const normalized = (value ?? "").toString().trim().replace(/\s+/g, " ");
-  return normalized || "Unavailable";
 }
 
 function getDamageEntryField(entry: Record<string, unknown>, keys: string[]): string {
@@ -467,29 +474,30 @@ function formatDamageEntries(entries: ReportDamageApiRow["damage_entries"]): str
 }
 
 function buildFilteredReportCsvRows(reports: ReportDamageApiRow[], primaryColumn: "facility" | "inspector"): unknown[][] {
-  const primaryHeader = primaryColumn === "facility" ? "Facility" : "Inspector";
-  const secondaryHeader = primaryColumn === "facility" ? "Inspector" : "Facility";
+  const primaryHeader = primaryColumn === "facility" ? exportLabel("Facility") : exportLabel("Inspector");
+  const secondaryHeader = primaryColumn === "facility" ? exportLabel("Inspector") : exportLabel("Facility");
   return [
     [
       primaryHeader,
       secondaryHeader,
-      "vin",
-      "make",
-      "model",
-      "year",
-      "status",
-      "inspector_email",
-      "comments",
-      "created_at",
-      "updated_at",
-      "overview_comments",
-      "bay_location",
-      "navigation",
-      "damage_entries",
+      exportLabel("VIN"),
+      exportLabel("Make"),
+      exportLabel("Model"),
+      exportLabel("Year"),
+      exportLabel("Status"),
+      exportLabel("Inspector Email"),
+      exportLabel("Comments"),
+      exportLabel("Created At"),
+      exportLabel("Updated At"),
+      exportLabel("Overview Comments"),
+      exportLabel("Bay Location"),
+      exportLabel("Navigation"),
+      exportLabel("Damage Entries"),
     ],
     ...reports.map((report) => {
-      const facility = getReportFacilityLabel(report);
+      const facility = exportLabel(getReportFacilityLabel(report));
       const inspector = report.inspector_email || "Unassigned";
+      const status = exportLabel(report.status || "");
       return [
         primaryColumn === "facility" ? facility : inspector,
         primaryColumn === "facility" ? inspector : facility,
@@ -497,14 +505,17 @@ function buildFilteredReportCsvRows(reports: ReportDamageApiRow[], primaryColumn
         report.make || "",
         report.model || "",
         report.year ?? "",
-        report.status || "",
+        status || report.status || "",
         report.inspector_email || "",
         report.comments || "",
         report.created_at || "",
         report.updated_at || "",
         getOverviewField(report, "comments"),
-        getOverviewField(report, "bay_location"),
-        getOverviewField(report, "navigation") || getOverviewField(report, "navigation_text") || getOverviewField(report, "navigationText"),
+        exportLabel(getOverviewField(report, "bay_location")) || getOverviewField(report, "bay_location"),
+        exportLabel(getOverviewField(report, "navigation") || getOverviewField(report, "navigation_text") || getOverviewField(report, "navigationText")) ||
+          getOverviewField(report, "navigation") ||
+          getOverviewField(report, "navigation_text") ||
+          getOverviewField(report, "navigationText"),
         formatDamageEntries(report.damage_entries),
       ];
     }),
@@ -670,22 +681,6 @@ function buildDashboardSummary(
   };
 }
 
-function reportWithinRange(report: ReportDamageApiRow, createdFrom: string, createdTo: string): boolean {
-  const createdAt = getReportDate(report);
-  if (!createdAt) return false;
-  if (createdFrom) {
-    const fromDate = parseDateInputValue(createdFrom);
-    fromDate.setHours(0, 0, 0, 0);
-    if (createdAt < fromDate) return false;
-  }
-  if (createdTo) {
-    const toDate = parseDateInputValue(createdTo);
-    toDate.setHours(23, 59, 59, 999);
-    if (createdAt > toDate) return false;
-  }
-  return true;
-}
-
 function MetricCard({
   label,
   value,
@@ -830,18 +825,30 @@ function FacilitySummaryCard({ facility }: { facility: DashboardFacilityItem }) 
 export default function HomePage() {
   const { organizationId, session } = usePortalSession();
   const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
+  const { data: reportsSnapshot } = usePortalReportsSnapshot();
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(organizationId ?? "");
-  const [selectedFacilityKey, setSelectedFacilityKey] = useState("all");
-  const [selectedInspectorEmail, setSelectedInspectorEmail] = useState("all");
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
-  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
-  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
+  const [selectedFacilityKey, setSelectedFacilityKey] = useState(DEFAULT_HOME_REPORT_FILTERS.selectedFacilityKey);
+  const [selectedInspectorEmail, setSelectedInspectorEmail] = useState(DEFAULT_HOME_REPORT_FILTERS.selectedInspectorEmail);
+  const [createdFrom, setCreatedFrom] = useState(DEFAULT_HOME_REPORT_FILTERS.createdFrom);
+  const [createdTo, setCreatedTo] = useState(DEFAULT_HOME_REPORT_FILTERS.createdTo);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<Error | null>(null);
 
   const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
   const facilitySource = facilities.length > 0 ? facilities : undefined;
+  const damageReports = reportsSnapshot?.damageReports ?? [];
+  const rsaReports = reportsSnapshot?.rsaReports ?? [];
+  const normalizedHomeFilters = useMemo(
+    () =>
+      normalizeHomeReportFilters({
+        selectedFacilityKey,
+        selectedInspectorEmail,
+        createdFrom,
+        createdTo,
+      }),
+    [createdFrom, createdTo, selectedFacilityKey, selectedInspectorEmail]
+  );
+  const homeFilterKey = useMemo(() => serializeHomeReportFilters(normalizedHomeFilters), [normalizedHomeFilters]);
   const facilityDamageStats = useMemo(
     () => buildFacilityDamageStats(damageReports, facilitySource).sort((a, b) => b.totalReports - a.totalReports),
     [damageReports, facilitySource]
@@ -871,42 +878,19 @@ export default function HomePage() {
   }, [selectedFacilityKey]);
 
   useEffect(() => {
-    let cancelled = false;
     if (!organizationId) {
-      setDamageReports([]);
-      setRsaReports([]);
       setReportsLoading(false);
       setReportsError(null);
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-    setReportsLoading(true);
-    setReportsError(null);
-    void (async () => {
-      try {
-        const [damageResult, rsaResult] = await Promise.all([
-          fetchDamageReportsUncached({ organization_id: organizationId }),
-          fetchRsaReportsUncached(),
-        ]);
-        if (cancelled) return;
-        setDamageReports(damageResult);
-        setRsaReports(rsaResult);
-      } catch (err) {
-        if (cancelled) return;
-        setDamageReports([]);
-        setRsaReports([]);
-        setReportsError(err instanceof Error ? err : new Error("Unable to load portal reports."));
-      } finally {
-        if (!cancelled) {
-          setReportsLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [organizationId]);
+    if (!reportsSnapshot) {
+      setReportsLoading(true);
+      setReportsError(null);
+      return;
+    }
+    setReportsLoading(false);
+    setReportsError(reportsSnapshot.partialError ? new Error(reportsSnapshot.partialError) : null);
+  }, [organizationId, reportsSnapshot]);
 
   const selectedFacilityStats = useMemo(
     () => (selectedFacilityKey === "all" ? null : facilityDamageStats.find((item) => item.key === selectedFacilityKey) ?? null),
@@ -922,35 +906,23 @@ export default function HomePage() {
 
   const inspectorScopedDamageReports = useMemo(() => {
     return damageReports.filter((report) => {
-      if (selectedFacilityKey !== "all") {
-        if (!selectedFacilityReportIds.has(report.report_id)) return false;
-      }
-      if (!reportWithinRange(report, createdFrom, createdTo)) return false;
-      return true;
+      return matchesHomeDamageReportFilters(report, normalizedHomeFilters, selectedFacilityReportIds);
     });
-  }, [createdFrom, createdTo, damageReports, selectedFacilityKey, selectedFacilityReportIds]);
+  }, [damageReports, homeFilterKey, normalizedHomeFilters, selectedFacilityReportIds]);
 
   const inspectorChoices = useMemo(() => buildInspectorSummaries(inspectorScopedDamageReports), [inspectorScopedDamageReports]);
 
   const filteredDamageReports = useMemo(() => {
     return inspectorScopedDamageReports.filter((report) => {
-      if (selectedInspectorEmail !== "all" && (report.inspector_email || "").trim().toLowerCase() !== selectedInspectorEmail.toLowerCase()) {
-        return false;
-      }
-      return true;
+      return matchesHomeInspectorEmailFilter(report, normalizedHomeFilters.selectedInspectorEmail);
     });
-  }, [inspectorScopedDamageReports, selectedInspectorEmail]);
+  }, [homeFilterKey, inspectorScopedDamageReports, normalizedHomeFilters.selectedInspectorEmail]);
 
   const filteredRsaReports = useMemo(() => {
     return rsaReports.filter((report) => {
-      if (selectedFacilityLabel) {
-        const reportLabel = normalizeLabel(report.facility || report.track || report.spot);
-        if (reportLabel.toLowerCase() !== selectedFacilityLabel.toLowerCase()) return false;
-      }
-      if (!reportWithinRange((report as unknown as ReportDamageApiRow), createdFrom, createdTo)) return false;
-      return true;
+      return matchesHomeRsaReportFilters(report, normalizedHomeFilters, selectedFacilityLabel);
     });
-  }, [createdFrom, createdTo, rsaReports, selectedFacilityLabel]);
+  }, [homeFilterKey, normalizedHomeFilters, rsaReports, selectedFacilityLabel]);
 
   const filteredFacilityStats = useMemo(
     () => buildFacilityDamageStats(filteredDamageReports, facilitySource).sort((a, b) => b.totalReports - a.totalReports),
@@ -1168,37 +1140,20 @@ export default function HomePage() {
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden">
-              <CardHeader title="Facility Damage Submissions" subtitle="Facility names and counts for the current filter." />
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left">
-                    <thead className="bg-slate-50">
-                      <tr className="border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Facility</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Damage submissions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {visibleFacilityStats.length ? (
-                        visibleFacilityStats.map((facility) => (
-                          <tr key={facility.key} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 text-sm font-medium text-slate-800">{facility.label}</td>
-                            <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{formatNumber(facility.totalReports)}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={2} className="px-4 py-8 text-center text-sm text-slate-500">
-                            No facility data available.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+            <DataTableShell
+              title="Facility Damage Submissions"
+              description="Facility names and counts for the current filter."
+              columns={["Facility", { id: "damage-submissions", label: "Damage submissions", align: "right" }]}
+              rowsCount={visibleFacilityStats.length}
+              emptyState={<div className="text-sm text-slate-500">No facility data available.</div>}
+            >
+              {visibleFacilityStats.map((facility) => (
+                <tr key={facility.key} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 text-sm font-medium text-slate-800">{facility.label}</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{formatNumber(facility.totalReports)}</td>
+                </tr>
+              ))}
+            </DataTableShell>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">

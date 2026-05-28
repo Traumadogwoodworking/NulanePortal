@@ -500,7 +500,11 @@ export default function UsersPage() {
               <EmptyState title="No users match the current view" description="Try adjusting search or facility filters. This is an empty filtered result, not a load failure." />
             ) : viewMode === VIEW_ACTIVE ? (
               <div className="-mx-4 -mb-4">
-                <DataTableShell columns={columns}>
+                <DataTableShell
+                  title="Active Users"
+                  description="Current users filtered by search and facility."
+                  columns={columns}
+                >
                   {filteredUsers.map((user) => {
                     const isSelected = user.id === selectedUser?.id;
                     const isActiveByLogin = user.isActive && (user.lastLogin ? isUserActiveFromLastLogin(user.lastLogin) : true);
@@ -546,7 +550,11 @@ export default function UsersPage() {
               <EmptyState title="Deleted users could not be loaded." description={deletedUsersError} tone="danger" action={<button type="button" onClick={() => void loadDeletedUsers()} className="rounded-full border border-current/20 px-4 py-2 text-sm font-black uppercase tracking-widest">Retry</button>} />
             ) : deletedUsersFiltered.length ? (
               <div className="-mx-4 -mb-4">
-                <DataTableShell columns={["Name", "Email", "Role", "Status", "Membership", "Facilities", "Deleted", "Actions"]}>
+                <DataTableShell
+                  title="Deleted Users"
+                  description="Deleted and deactivated accounts in the organization."
+                  columns={["Name", "Email", "Role", "Status", "Membership", "Facilities", "Deleted", "Actions"]}
+                >
                   {deletedUsersFiltered.map((user) => {
                     const isSelected = user.id === selectedDeletedUserId;
                     const deletedLabel = user.deletedAt || user.deactivatedAt || user.suspendedAt || user.lastUpdated;

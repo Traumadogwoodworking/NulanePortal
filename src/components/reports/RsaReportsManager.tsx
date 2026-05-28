@@ -17,9 +17,16 @@ import {
 } from "lucide-react";
 import { resolveRsaFacilityLabel, slugForFacilityLabel } from "@/lib/reportUtils";
 import { Button } from "@/components/ui/button";
+import { usePortalReportsSnapshot } from "@/lib/portalData";
+import {
+  DEFAULT_RSA_REPORT_FILTERS,
+  FACILITY_FILTER_ALL,
+  matchesRsaRailcarSearch,
+  matchesRsaSummaryFilters,
+  normalizeRsaReportFilters,
+  serializeRsaReportFilters,
+} from "@/lib/reportFilters";
 import type { FacilitySummary, RsaReportApiRow, ReportSummary } from "@/lib/types";
-
-const FACILITY_FILTER_ALL = "all";
 
 type RsaDeckEntry =
   | { vin?: unknown; value?: unknown }
@@ -82,38 +89,43 @@ function normalizeVinEntry(entry: RsaDeckEntry): string | null {
 }
 
 export function RsaReportsManager() {
-  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
-  const [facilityFilter, setFacilityFilter] = useState(FACILITY_FILTER_ALL);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [rsaTrackFilter, setRsaTrackFilter] = useState("");
-  const [rsaSpotFilter, setRsaSpotFilter] = useState("");
-  const [rsaStartDate, setRsaStartDate] = useState("");
-  const [rsaEndDate, setRsaEndDate] = useState("");
+  const { data: reportsSnapshot, mutate: refreshReportsSnapshot } = usePortalReportsSnapshot();
+  const [facilityFilter, setFacilityFilter] = useState(DEFAULT_RSA_REPORT_FILTERS.facilityFilter);
+  const [searchTerm, setSearchTerm] = useState(DEFAULT_RSA_REPORT_FILTERS.searchTerm);
+  const [rsaTrackFilter, setRsaTrackFilter] = useState(DEFAULT_RSA_REPORT_FILTERS.rsaTrackFilter);
+  const [rsaSpotFilter, setRsaSpotFilter] = useState(DEFAULT_RSA_REPORT_FILTERS.rsaSpotFilter);
+  const [rsaStartDate, setRsaStartDate] = useState(DEFAULT_RSA_REPORT_FILTERS.rsaStartDate);
+  const [rsaEndDate, setRsaEndDate] = useState(DEFAULT_RSA_REPORT_FILTERS.rsaEndDate);
   const [selectedRsaReportId, setSelectedRsaReportId] = useState<string | null>(null);
+  const [selectedRsaRailcarRow, setSelectedRsaRailcarRow] = useState<RsaRailcarRow | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [partialLoadError, setPartialLoadError] = useState<string | null>(null);
   const [sendingEod, setSendingEod] = useState(false);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
-
-  const loadRsaReports = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    setPartialLoadError(null);
-    try {
-      const response = await ReportsAdapter.fetchRsaReports();
-      setRsaReports(response);
-    } catch (err) {
-      console.error(err);
-      setPartialLoadError(err instanceof Error ? err.message : "Unable to load RSA reports.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadRsaReports = useCallback(() => {
+    void refreshReportsSnapshot();
+  }, [refreshReportsSnapshot]);
 
   useEffect(() => {
-    void loadRsaReports();
-  }, [loadRsaReports]);
+    setLoading(false);
+    setLoadError(null);
+    setPartialLoadError(reportsSnapshot?.partialError ?? null);
+  }, [reportsSnapshot?.partialError]);
+  const rsaReports = reportsSnapshot?.rsaReports ?? [];
+  const normalizedRsaFilters = useMemo(
+    () =>
+      normalizeRsaReportFilters({
+        facilityFilter,
+        searchTerm,
+        rsaTrackFilter,
+        rsaSpotFilter,
+        rsaStartDate,
+        rsaEndDate,
+      }),
+    [facilityFilter, rsaEndDate, rsaSpotFilter, rsaStartDate, rsaTrackFilter, searchTerm]
+  );
+  const rsaFilterKey = useMemo(() => serializeRsaReportFilters(normalizedRsaFilters), [normalizedRsaFilters]);
 
   const resolveCarDisplayInfo = (car: RsaCarRecord) => {
     const allVins: string[] = [];
@@ -166,35 +178,15 @@ export function RsaReportsManager() {
 
   // Flattened Data: one entry per Railcar explicitly (separating RC and VIN displays)
   const flatRsaRailcars = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    const startDate = rsaStartDate ? new Date(rsaStartDate) : null;
-    const endDate = rsaEndDate ? (() => { const d = new Date(rsaEndDate); d.setHours(23, 59, 59, 999); return d; })() : null;
-    
     const flat: RsaRailcarRow[] = [];
     rsaSummaries.forEach((summary) => {
-      // Apply filters first
-      if (facilityFilter !== FACILITY_FILTER_ALL) {
-        const slug = slugForFacilityLabel(summary.facilityName || summary.locationName || "RSA facility");
-        if (slug !== facilityFilter) return;
-      }
-      if (rsaTrackFilter && summary.track !== rsaTrackFilter) return;
-      if (rsaSpotFilter && summary.spot !== rsaSpotFilter) return;
-      if (startDate || endDate) {
-        const created = summary.createdAt ? new Date(summary.createdAt) : null;
-        if (!created) return;
-        if (startDate && created < startDate) return;
-        if (endDate && created > endDate) return;
-      }
+      if (!matchesRsaSummaryFilters(summary, normalizedRsaFilters)) return;
 
       summary.cars?.forEach((car) => {
         const rsaCar = car as RsaCarRecord;
         const { allVins, deckVinsMap, railcarId, decks } = resolveCarDisplayInfo(rsaCar);
         
-        // Search across RC or VINs
-        if (query) {
-          const haystack = [summary.id, summary.inspectorEmail, summary.track, rsaCar.spot, summary.spot, railcarId, ...allVins].filter(Boolean).join(" ").toLowerCase();
-          if (!haystack.includes(query)) return;
-        }
+        if (!matchesRsaRailcarSearch(summary, rsaCar.spot, railcarId, allVins, normalizedRsaFilters.searchTerm)) return;
 
         flat.push({
           reportId: summary.id,
@@ -214,7 +206,7 @@ export function RsaReportsManager() {
     });
     
     return flat.sort((a,b) => (b.createdAt && a.createdAt) ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() : 0);
-  }, [rsaSummaries, facilityFilter, rsaTrackFilter, rsaSpotFilter, rsaStartDate, rsaEndDate, searchTerm]);
+  }, [normalizedRsaFilters, rsaFilterKey, rsaSummaries]);
 
   const groupedRsaRows = useMemo(() => {
     const days: Record<string, Record<string, Record<string, RsaRailcarRow[]>>> = {};
@@ -292,12 +284,13 @@ export function RsaReportsManager() {
         }),
       });
       setOperationMessage("SUCCESS: EOD Report compiled and dispatched to notification list.");
+      void refreshReportsSnapshot();
     } catch (error) {
       setOperationMessage(error instanceof Error ? error.message : "ERROR: Unable to dispatch EOD report.");
     } finally {
       setSendingEod(false);
     }
-  }, []);
+  }, [refreshReportsSnapshot]);
 
   const buildDayDeckRows = useCallback((daySummaries: RsaRailcarRow[] = []) => {
     return daySummaries.flatMap((summary) => {
@@ -388,6 +381,10 @@ export function RsaReportsManager() {
   }, [buildDayDeckRows, csvEscape, groupedRsaRows]);
 
   const selectedRsaFullRow = useMemo(() => rsaReports.find(r => r.report_id === selectedRsaReportId) ?? null, [rsaReports, selectedRsaReportId]);
+  const selectedRsaRailcar = useMemo(
+    () => selectedRsaRailcarRow ?? flatRsaRailcars.find((row) => row.reportId === selectedRsaReportId) ?? null,
+    [flatRsaRailcars, selectedRsaRailcarRow, selectedRsaReportId],
+  );
 
   const rsaTrackOptions = useMemo(() => Array.from(new Set(rsaSummaries.map(s => s.track).filter(Boolean))).sort(), [rsaSummaries]);
   const rsaSpotOptions = useMemo(() => Array.from(new Set(rsaSummaries.map(s => s.spot).filter(Boolean))).sort(), [rsaSummaries]);
@@ -395,7 +392,7 @@ export function RsaReportsManager() {
   const rsaColumns = ["Asset Identifiers", "Track", "Spot", "Facility", "Created"];
 
   return (
-    <article className="rsa-reports-page max-w-7xl mx-auto w-full space-y-6 pb-12 origin-top" style={{ zoom: 1.08 }}>
+    <article className="rsa-reports-page space-y-6 pb-12">
       <header className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="page-title text-[20px] font-black tracking-tight text-blue-800">
@@ -496,9 +493,10 @@ export function RsaReportsManager() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2">
-            <DataTableShell columns={rsaColumns}>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.85fr)] xl:items-start">
+          <div className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-0 self-start">
+            <div className="h-full min-h-0 w-full overflow-y-auto">
+              <DataTableShell columns={rsaColumns}>
               {loading ? (
                 <tr><td colSpan={rsaColumns.length} className="py-12 text-center text-slate-400"><RefreshCw className="w-5 h-5 animate-spin mx-auto opacity-40 mb-2" /><p className="text-[10px] font-black uppercase tracking-widest">Processing Logistics...</p></td></tr>
               ) : flatRsaRailcars.length === 0 ? (
@@ -529,13 +527,14 @@ export function RsaReportsManager() {
                            </div>
                         </td>
                       </tr>
-                      {Object.entries(tracks).map(([, spots], trackIdx) => {
+                      {Object.entries(tracks).map(([trackName, spots], trackIdx) => {
                         let rcCount = 0;
                         let vinCountSum = 0;
                         Object.values(spots).forEach((railcars) => {
                           rcCount += railcars.length;
                           vinCountSum += railcars.reduce((sum, rc) => sum + rc.vins.length, 0);
                         });
+                        const trackLabel = trackName.startsWith("Track ") ? trackName.slice(6) : trackName;
 
                         return (
                           <React.Fragment key={`track-${trackIdx}`}>
@@ -543,7 +542,7 @@ export function RsaReportsManager() {
                               <td colSpan={rsaColumns.length} className="px-5 py-1.5">
                                  <div className="flex items-center justify-between">
                                    <div className="flex items-center gap-3">
-                                     <span className="font-bold text-[12px] text-slate-900 uppercase tracking-widest">Track</span>
+                                     <span className="font-bold text-[12px] text-slate-900 uppercase tracking-widest">Track {trackLabel}</span>
                                      <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider shadow-sm">
                                         {rcCount} RC • {vinCountSum} VINs
                                      </span>
@@ -570,8 +569,11 @@ export function RsaReportsManager() {
                                       return (
                                         <tr
                                           key={`${car.reportId}-${car.railcarId}-${idx}`}
-                                          className="rsa-car-row group transition-all cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
-                                          onClick={() => setSelectedRsaReportId(car.reportId)}
+                                          className={`rsa-car-row group cursor-pointer border-b border-slate-100 last:border-b-0 transition-all hover:bg-slate-50 ${isSelected ? "bg-blue-50/80 shadow-[inset_3px_0_0_0_rgba(37,99,235,0.45)]" : ""}`}
+                                          onClick={() => {
+                                            setSelectedRsaReportId(car.reportId);
+                                            setSelectedRsaRailcarRow(car);
+                                          }}
                                         >
                                           <td className="pl-10 pr-3 py-3">
                                             <div className="flex items-center gap-2">
@@ -605,13 +607,14 @@ export function RsaReportsManager() {
                   );
                 })
               )}
-            </DataTableShell>
+              </DataTableShell>
+            </div>
           </div>
 
           {/* Right Pane Sidebar for the Selected Report context block */}
-          <aside className="space-y-4">
+          <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-0 self-start">
             {selectedRsaFullRow ? (
-              <div className="sticky top-24 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-in fade-in duration-500">
+              <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl animate-in fade-in duration-500">
                 <header className="p-6 bg-slate-50/80 border-b border-slate-200">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200 shadow-sm"><FileText className="w-6 h-6" /></div>
@@ -628,7 +631,7 @@ export function RsaReportsManager() {
                   </div>
                 </header>
 
-                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                <div className="flex-1 min-h-0 space-y-6 overflow-y-auto p-6 custom-scrollbar">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Context Metadata</h4>
@@ -637,11 +640,11 @@ export function RsaReportsManager() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col">
                         <span className="rsa-scope-label text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MapPin className="w-3 h-3 text-slate-400"/> TRACK</span>
-                        <span className="rsa-value-text text-[20px] font-mono text-slate-900 tracking-widest">{selectedRsaFullRow.track || "—"}</span>
+                        <span className="rsa-value-text text-[20px] font-mono text-slate-900 tracking-widest">{selectedRsaRailcar?.track || selectedRsaFullRow.track || "—"}</span>
                       </div>
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col">
                         <span className="rsa-scope-label text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">DESIGNATED SPOT</span>
-                        <span className="rsa-value-text text-[20px] font-mono text-slate-900 tracking-widest">{selectedRsaFullRow.spot || "—"}</span>
+                        <span className="rsa-value-text text-[20px] font-mono text-slate-900 tracking-widest">{selectedRsaRailcar?.spot || selectedRsaFullRow.spot || "—"}</span>
                       </div>
                     </div>
 

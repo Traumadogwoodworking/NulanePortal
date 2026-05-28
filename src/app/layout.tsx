@@ -5,7 +5,6 @@ import "./globals.css";
 import { AppShellRouter } from "@/components/AppShellRouter";
 import { PortalSessionProvider } from "@/lib/portalSession";
 import { PortalDataProvider } from "@/lib/portalData";
-import { PortalReportsProvider } from "@/lib/portalReports";
 import { Suspense } from "react";
 
 const inter = Inter({
@@ -100,11 +99,9 @@ export default function RootLayout({
         ) : null}
         <PortalSessionProvider>
           <PortalDataProvider>
-            <PortalReportsProvider>
-              <Suspense fallback={null}>
-                <AppShellRouter>{children}</AppShellRouter>
-              </Suspense>
-            </PortalReportsProvider>
+            <Suspense fallback={null}>
+              <AppShellRouter>{children}</AppShellRouter>
+            </Suspense>
           </PortalDataProvider>
         </PortalSessionProvider>
       </body>

@@ -27,6 +27,8 @@ const REVALIDATE_ON_FOCUS = false;
 const REVALIDATE_ON_RECONNECT = true;
 const KEEP_PREVIOUS_DATA = true;
 const DIRECTORY_CACHE_KEY_PREFIX = "portalDirectoryCache";
+const BRANDING_CACHE_KEY_PREFIX = "portalBrandingCache";
+const REPORTS_CACHE_KEY_PREFIX_V2 = "portalReportsSnapshotCacheV2";
 const REPORTS_CACHE_KEY_PREFIX = "portalReportsSnapshotCache";
 const CACHE_TTL_MS = STALE_TIME_MS;
 
@@ -51,6 +53,14 @@ interface ReportsSnapshot {
   damageReports: ReportDamageApiRow[];
   rsaReports: RsaReportApiRow[];
   partialError: string | null;
+}
+
+export type ReportSnapshotKind = "damage" | "rsa";
+
+export function getPortalScopeKey(organizationId?: string | null, sessionId?: string | null) {
+  const orgId = ensureOrgId(organizationId);
+  const sessionScope = typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : "anonymous";
+  return orgId ? (["portal", sessionScope, orgId] as const) : null;
 }
 
 export interface ControlSnapshot {
@@ -193,8 +203,9 @@ export function usePortalBrandingSnapshot() {
   const { organizationId, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const sessionBranding = (session?.branding_snapshot as BrandingSnapshot | undefined) ?? null;
+  const scope = getPortalScopeKey(resolvedOrgId, session?.user?.user_id ?? null);
   return useSWR<BrandingSnapshot | null>(
-    resolvedOrgId ? ["portal/branding", resolvedOrgId] : null,
+    scope ? [...scope, "branding", "v1"] : null,
     async () => {
       if (!resolvedOrgId) return null;
       return fetchBranding(resolvedOrgId).catch(
@@ -245,6 +256,7 @@ export function usePortalControlSnapshots() {
 export function usePortalDirectorySnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
+  const scope = getPortalScopeKey(resolvedOrgId, null);
   const cachedValue = resolvedOrgId ? readCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId) : null;
   const usableCache = hasUsefulDirectoryData(cachedValue);
   if (process.env.NODE_ENV !== "production") {
@@ -257,7 +269,7 @@ export function usePortalDirectorySnapshot() {
     });
   }
   return useSWR<DirectorySnapshot | undefined>(
-    resolvedOrgId ? ["portal/directory", resolvedOrgId] : null,
+    scope ? [...scope, "directory", "v1"] : null,
     async () => {
       if (!resolvedOrgId) {
         return {
@@ -358,7 +370,8 @@ export function usePortalEmailListMembers(listId?: string | null) {
 export function usePortalReportsSnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
-  const cachedValue = resolvedOrgId ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId) : null;
+  const scope = getPortalScopeKey(resolvedOrgId, null);
+  const cachedValue = resolvedOrgId ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId) : null;
   const usableCache = hasUsefulReportsData(cachedValue);
   if (process.env.NODE_ENV !== "production") {
     console.debug("[portalData] usePortalReportsSnapshot", {
@@ -370,7 +383,7 @@ export function usePortalReportsSnapshot() {
     });
   }
   return useSWR<ReportsSnapshot | undefined>(
-    resolvedOrgId ? ["portal/reports-snapshot", resolvedOrgId] : null,
+    scope ? [...scope, "reports", "snapshot", "v2"] : null,
     async () => {
       if (!resolvedOrgId) {
         return { damageReports: [], rsaReports: [], partialError: null };
@@ -392,7 +405,7 @@ export function usePortalReportsSnapshot() {
         rsaReports: rsaReportsResult.status === "fulfilled" ? rsaReportsResult.value : [],
         partialError: partialErrors.length ? partialErrors.join(" | ") : null,
       };
-      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, snapshot);
+      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, snapshot);
       return snapshot;
     },
     {

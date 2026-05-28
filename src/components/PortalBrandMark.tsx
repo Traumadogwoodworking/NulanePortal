@@ -46,7 +46,7 @@ export function PortalBrandMark({
   const fallbackText = useMemo(() => fallbackLabel || getInitials(organizationName), [fallbackLabel, organizationName]);
   const showImage = Boolean(logoSrc) && failedLogoSrc !== logoSrc;
   const sidebarMode = mode === "sidebar";
-  const sizeClass = sidebarMode ? "h-14 w-full max-w-[180px]" : "h-12 w-12";
+  const sizeClass = sidebarMode ? "h-36 w-full max-w-[340px]" : "h-12 w-12";
 
   return (
     <div

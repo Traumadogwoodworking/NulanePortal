@@ -175,6 +175,10 @@ function buildReportQueryString(filters: ReportFilters = {}) {
   return queryString ? `?${queryString}` : "";
 }
 
+export function buildNormalizedReportQueryString(filters: ReportFilters = {}) {
+  return buildReportQueryString(filters);
+}
+
 function getDamageReportOrganizationId(filters: ReportFilters = {}): string | null {
   const candidate = filters.organization_id ?? filters.org_id;
   const normalized = candidate?.toString().trim();
@@ -321,21 +325,6 @@ function matchesDamageReportOrganization(report: ReportDamageApiRow, currentOrga
   return candidates.some((candidate) => resolveOrgFieldString(candidate) === currentOrganizationId);
 }
 
-const CACHE_TTL = 300000; // 5 minutes
-const reportCache = new Map<string, { data: unknown; timestamp: number }>();
-
-function getCached(key: string) {
-  const entry = reportCache.get(key);
-  if (entry && (Date.now() - entry.timestamp < CACHE_TTL)) {
-    return entry.data;
-  }
-  return null;
-}
-
-function setCache(key: string, data: unknown) {
-  reportCache.set(key, { data, timestamp: Date.now() });
-}
-
 export async function fetchDamageReportsUncached(filters: ReportFilters = {}): Promise<ReportDamageApiRow[]> {
   const damageFilters = { ...filters };
   const currentOrganizationId = getDamageReportOrganizationId(damageFilters);
@@ -392,7 +381,7 @@ export async function fetchRsaReportsUncached(): Promise<RsaReportApiRow[]> {
 
 export class ReportsAdapter {
   static clearCache() {
-    reportCache.clear();
+    return;
   }
 
   static async updateDamageReport(reportId: string, payload: Record<string, unknown>): Promise<unknown> {
@@ -417,9 +406,6 @@ export class ReportsAdapter {
     delete damageFilters.organization_id;
     delete damageFilters.org_id;
     const queryString = buildReportQueryString(damageFilters);
-    const cacheKey = `damage_${currentOrganizationId ?? "no-org"}_${queryString}`;
-    const cached = getCached(cacheKey);
-    if (cached) return cached as ReportDamageApiRow[];
 
     try {
       const resolvedUrl = buildApiUrl(`${REPORTS_ENDPOINT}${queryString}`);
@@ -477,7 +463,6 @@ export class ReportsAdapter {
           });
         }
       }
-      setCache(cacheKey, results);
       return results;
     } catch (err) {
       const responseError = err as { status?: number; message?: string };
@@ -495,14 +480,9 @@ export class ReportsAdapter {
   }
 
   static async fetchRsaReports(): Promise<RsaReportApiRow[]> {
-    const cacheKey = "rsa_reports";
-    const cached = getCached(cacheKey);
-    if (cached) return cached as RsaReportApiRow[];
-
     try {
       const response = await apiFetch<unknown>(RSA_REPORTS_ENDPOINT);
       const results = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
-      setCache(cacheKey, results);
       return results;
     } catch (err) {
       const responseError = err as { status?: number; message?: string };
@@ -518,13 +498,8 @@ export class ReportsAdapter {
     if (isDevMockEnabled()) {
       return [];
     }
-    const cacheKey = "milestones";
-    const cached = getCached(cacheKey);
-    if (cached) return cached as unknown[];
-
     const response = await apiFetch<unknown>(MILESTONE_FETCH_ENDPOINT);
     const results = extractReportsArray<unknown>(response);
-    setCache(cacheKey, results);
     return results;
   }
 
@@ -536,8 +511,6 @@ export class ReportsAdapter {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    // Invalidate milestones cache on submit
-    reportCache.delete("milestones");
     return result;
   }
  

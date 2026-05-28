@@ -9,14 +9,17 @@ import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
 import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
-import { getAppBranding } from "@/lib/branding";
+import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalThemeMode } from "@/lib/portalTheme";
 
 export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const { status, error, refetch } = usePortalSession();
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
-  const appBranding = useMemo(() => getAppBranding(safePathname), [safePathname]);
+  const branding = useMemo(
+    () => resolvePortalBranding({ session: null, pathname: safePathname }),
+    [safePathname]
+  );
   const { mode: themeMode } = usePortalThemeMode();
 
   const pageMetadata = useMemo(() => {
@@ -27,17 +30,19 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     };
   }, [safePathname]);
 
-  // Dynamic branding tokens injected as CSS variables for Tailwind 4 @theme consumption
   const brandingStyles = useMemo(() => {
-    const color = appBranding.brandColor || "#2563eb";
     return {
-      "--brand": color,
-      "--brand-accent": color,
-      "--brand-light": `${color}1a`,
+      "--brand": branding.portalBrandColor,
+      "--brand-accent": branding.portalBrandAccentColor,
+      "--brand-light": branding.portalBrandLightColor,
+      "--sidebar-bg-enforced": branding.sidebarBgEnforced,
+      "--sidebar-text-enforced": branding.sidebarTextEnforced,
+      "--sidebar-link-enforced": branding.sidebarLinkEnforced,
+      "--sidebar-link-hover-enforced": branding.sidebarLinkHoverEnforced,
       "--portal-theme-mode": themeMode,
       colorScheme: themeMode === "light" ? "light" : "dark",
     } as React.CSSProperties;
-  }, [appBranding, themeMode]);
+  }, [branding, themeMode]);
 
   if (status === "unauthenticated") {
     return (

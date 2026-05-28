@@ -10,14 +10,19 @@ type ColumnDef = {
 };
 
 interface DataTableShellProps {
-  columns: (string | ColumnDef)[];
+  columns?: (string | ColumnDef)[];
   title?: string;
   description?: string;
   density?: "compact" | "comfortable";
+  metrics?: ReactNode;
+  filters?: ReactNode;
   actions?: ReactNode;
   loading?: boolean;
   rowsCount?: number;
   emptyState?: ReactNode;
+  errorState?: ReactNode;
+  loadingState?: ReactNode;
+  content?: ReactNode;
   sortField?: string;
   sortDirection?: "asc" | "desc";
   onSort?: (columnId: string) => void;
@@ -30,22 +35,27 @@ export function DataTableShell({
   title,
   description,
   density = "comfortable",
+  metrics,
+  filters,
   actions,
   loading = false,
   rowsCount,
   emptyState,
+  errorState,
+  loadingState,
+  content,
   sortField,
   sortDirection,
   onSort,
   onRowClick,
   children,
 }: DataTableShellProps) {
-  const resolvedColumns: ColumnDef[] = columns.map((column) =>
+  const resolvedColumns: ColumnDef[] = (columns ?? []).map((column) =>
     typeof column === "string" ? { id: column, label: column } : column
   );
   const headerPaddingClass = density === "compact" ? "px-3 py-2.5" : "px-4 py-3";
   const cellPaddingClass = density === "compact" ? "px-3 py-2" : "px-4 py-3";
-  const hasRows = rowsCount !== undefined ? rowsCount > 0 : Children.count(children) > 0;
+  const hasRows = rowsCount !== undefined ? rowsCount > 0 : content ? true : Children.count(children) > 0;
   const shouldShowEmpty = !loading && !hasRows;
 
   const handleRowClick = (event: MouseEvent<HTMLTableSectionElement>) => {
@@ -107,44 +117,59 @@ export function DataTableShell({
           </div>
         </header>
       )}
-      <div className="overflow-x-auto relative">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b-2 border-slate-200 bg-slate-50">
-              {resolvedColumns.map((column) => (
-                <th
-                  key={column.id}
-                  scope="col"
-                  className={`${headerPaddingClass} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"} text-sm font-semibold uppercase tracking-wider leading-none text-slate-500 cursor-${column.sortable ? "pointer" : "default"}`}
-                  onClick={() => sortColumn(column)}
-                >
-                  <div className="flex items-center">
-                    {column.label}
-                    {renderSortIndicator(column)}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody
-            className="divide-y divide-slate-100"
-            onClick={handleRowClick}
-            role={onRowClick ? "button" : undefined}
-          >
-            {loading ? (
-              renderLoadingRows()
-            ) : shouldShowEmpty ? (
-              <tr>
-                <td colSpan={resolvedColumns.length} className={`${cellPaddingClass} py-8 text-center text-sm text-slate-500`}>
-                  {renderEmptyState()}
-                </td>
+      {metrics ? <div className="border-b border-slate-200 bg-white px-4 py-3">{metrics}</div> : null}
+      {filters ? <div className="border-b border-slate-200 bg-slate-50/40 px-4 py-3">{filters}</div> : null}
+      {errorState ? <div className="border-b border-slate-200 bg-white px-4 py-3">{errorState}</div> : null}
+      {content ? (
+        <div className="relative">
+          {loading ? (
+            loadingState ?? <div className="px-4 py-8 text-center text-sm text-slate-500">Loading...</div>
+          ) : shouldShowEmpty ? (
+            emptyState ?? <div className="px-4 py-8 text-center text-sm text-slate-500">{renderEmptyState()}</div>
+          ) : (
+            content
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto relative">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b-2 border-slate-200 bg-slate-50">
+                {resolvedColumns.map((column) => (
+                  <th
+                    key={column.id}
+                    scope="col"
+                    className={`${headerPaddingClass} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"} text-sm font-semibold uppercase tracking-wider leading-none text-slate-500 cursor-${column.sortable ? "pointer" : "default"}`}
+                    onClick={() => sortColumn(column)}
+                  >
+                    <div className="flex items-center">
+                      {column.label}
+                      {renderSortIndicator(column)}
+                    </div>
+                  </th>
+                ))}
               </tr>
-            ) : (
-              children
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody
+              className="divide-y divide-slate-100"
+              onClick={handleRowClick}
+              role={onRowClick ? "button" : undefined}
+            >
+              {loading ? (
+                renderLoadingRows()
+              ) : shouldShowEmpty ? (
+                <tr>
+                  <td colSpan={resolvedColumns.length} className={`${cellPaddingClass} py-8 text-center text-sm text-slate-500`}>
+                    {renderEmptyState()}
+                  </td>
+                </tr>
+              ) : (
+                children
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
