@@ -266,7 +266,7 @@ export function PortalSidebar() {
                       {isImageIcon && typeof item.icon === "string" && (
                         <Image
                           src={item.href === "/docudent" ? branding.appNavLogoUrl ?? item.icon : item.brandLogo ?? item.icon}
-                          alt={item.label}
+                          alt={item.href === "/docudent" ? branding.appLabel ?? item.label : item.label}
                           width={isDocudentIcon ? 260 : 180}
                           height={isDocudentIcon ? 260 : 180}
                           className={isDocudentIcon ? "object-contain scale-[2.3]" : "object-contain scale-[2.25]"}
@@ -275,7 +275,7 @@ export function PortalSidebar() {
                     </div>
                     <div className="flex min-w-0 flex-1 items-center justify-start ml-[5px]">
                       <span className="truncate text-sm font-semibold leading-tight">
-                        {item.label}
+                        {item.href === "/docudent" ? branding.appLabel ?? item.label : item.label}
                       </span>
                     </div>
                   </Link>

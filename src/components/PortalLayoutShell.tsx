@@ -25,10 +25,10 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const pageMetadata = useMemo(() => {
     const route = getRouteByPath(safePathname);
     return {
-      title: route?.label ?? "Portal",
+      title: route?.href === "/docudent" ? branding.appLabel ?? route?.label ?? "Portal" : route?.label ?? "Portal",
       subtitle: route?.description ?? "",
     };
-  }, [safePathname]);
+  }, [branding.appLabel, safePathname]);
 
   const brandingStyles = useMemo(() => {
     return {

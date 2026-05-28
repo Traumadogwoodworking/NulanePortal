@@ -99,6 +99,7 @@ export interface ResolvedPortalBranding extends PortalBrandingPartial {
   sidebarLogoShellClassName: string;
   sidebarLogoImageClassName: string;
   appNavLogoUrl: string | null;
+  appNavLabel: string;
   sidebarShellClassName: string;
   sidebarHeaderClassName: string;
   sidebarHeaderStyle: CSSProperties;
@@ -184,7 +185,7 @@ export function resolvePortalBranding({
     badgeLabel: definition.badgeLabel ?? null,
     powerBiEmbedUrl: definition.powerBiEmbedUrl ?? null,
     isPaid: Boolean(definition.isPaid),
-    appLabel: getAppBranding(pathname).appLabel ?? preset.defaultOrganizationName,
+    appLabel: preset.appNavLabel ?? getAppBranding(pathname).appLabel ?? preset.defaultOrganizationName,
     customLogoUrl: customLogo,
     hasCustomLogo: Boolean(customLogo),
     portalBrandColor: preset.portalBrandColor,
@@ -198,6 +199,7 @@ export function resolvePortalBranding({
     sidebarLogoShellClassName: preset.sidebarLogoShellClassName,
     sidebarLogoImageClassName: preset.sidebarLogoImageClassName,
     appNavLogoUrl: preset.appNavLogoUrl,
+    appNavLabel: preset.appNavLabel,
     sidebarShellClassName: preset.sidebarShellClassName,
     sidebarHeaderClassName: preset.sidebarHeaderClassName,
     sidebarHeaderStyle: preset.sidebarHeaderStyle,

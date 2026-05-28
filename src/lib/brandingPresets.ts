@@ -22,6 +22,7 @@ export interface PortalBrandPreset {
   sidebarLogoShellClassName: string;
   sidebarLogoImageClassName: string;
   appNavLogoUrl: string | null;
+  appNavLabel: string;
   sidebarShellClassName: string;
   sidebarHeaderClassName: string;
   sidebarHeaderStyle: CSSProperties;
@@ -72,6 +73,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     topbarTextClassName: "text-slate-900",
     sidebarLogoShellClassName: "relative z-10 flex w-full items-center justify-center transition-transform duration-300 group-hover:translate-y-px",
     sidebarLogoImageClassName: "h-auto w-full max-w-[420px] object-contain",
+    appNavLabel: "Definian Inspection",
     sidebarShellClassName: "border-r border-slate-800/70 bg-[#0b1624] transition-all duration-300",
     sidebarHeaderClassName:
       "group relative flex items-center overflow-hidden border-b border-white/10 transition-colors duration-500",
@@ -120,6 +122,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     sidebarLogoShellClassName:
       "relative z-10 flex w-full items-center justify-center rounded-[28px] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel-muted)] px-4 py-3 shadow-sm ring-1 ring-black/5 transition-transform duration-300 group-hover:translate-y-px",
     sidebarLogoImageClassName: "h-auto w-full max-w-[260px] object-contain",
+    appNavLabel: "Inspection Trac",
     sidebarShellClassName: "border-r border-slate-200 bg-white transition-all duration-300",
     sidebarHeaderClassName:
       "group relative flex items-center overflow-hidden border-b border-slate-200 transition-colors duration-500",

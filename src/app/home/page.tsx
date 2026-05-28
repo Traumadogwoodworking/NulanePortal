@@ -24,7 +24,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { PageSection } from "@/components/ui/PageSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { DataTableShell } from "@/components/ui/DataTableShell";
@@ -1016,8 +1015,6 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <PageSection title="Home" description="DocuDent and RSA command dashboard." variant="panel">
-        <div className="space-y-6">
           <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-26px_rgba(15,23,42,0.2)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(300px,0.9fr)]">
             <label className="flex flex-col gap-1.5">
               <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Organization</span>
@@ -1338,8 +1335,6 @@ export default function HomePage() {
             ))}
           </div>
 
-        </div>
-      </PageSection>
     </div>
   );
 }
