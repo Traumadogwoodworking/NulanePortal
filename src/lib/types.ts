@@ -43,6 +43,17 @@ export interface UserSummary {
   createdAt?: string;
 }
 
+export interface DeletedUserSummary extends UserSummary {
+  organizationMembership: OrganizationMembership | null;
+  locationMemberships: LocationMembership[];
+  deletedAt?: string | null;
+  deactivatedAt?: string | null;
+  suspendedAt?: string | null;
+  isDeleted?: boolean;
+  isDeactivated?: boolean;
+  isSuspended?: boolean;
+}
+
 export interface PortalUserRecord {
   id?: string;
   user_id: string;

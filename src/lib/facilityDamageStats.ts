@@ -20,6 +20,11 @@ export type FacilityDamageStats = {
   reportIds: string[];
 };
 
+export type FacilityTrendPoint = {
+  date: string;
+  [facilityLabel: string]: string | number;
+};
+
 type FacilityLike = {
   id?: string;
   name?: string;
@@ -322,4 +327,59 @@ export function buildFacilityDamageStats(
   }
 
   return facilityStats.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function buildFacilityDamageTrendData(
+  reports: ReportDamageApiRow[],
+  facilities?: FacilityLike[],
+  days = 30
+): { data: FacilityTrendPoint[]; keys: string[] } {
+  const facilityEntries = Array.isArray(facilities) ? facilities : [];
+  const facilityIndex = facilityEntries.reduce<Record<string, { key: string; label: string }>>((acc, facility) => {
+    const keys = facilityCandidates(facility);
+    const key = keys[0] || canonicalValue(facility.name || facility.location_name || facility.location_label || facility.id || "Unknown facility");
+    const label = normalizeFacilityLabel(facility.name || facility.location_name || facility.location_label || facility.code || facility.slug || facility.id || "Unknown facility");
+    keys.forEach((candidate) => {
+      acc[candidate] = { key, label };
+    });
+    return acc;
+  }, {});
+
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - (days - 1));
+
+  const facilityLabels = [
+    ...new Set(
+      facilityEntries
+        .map((facility) => normalizeFacilityLabel(facility.name || facility.location_name || facility.location_label || facility.code || facility.slug || facility.id || "Unknown facility"))
+        .filter(Boolean)
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+
+  const rows = new Map<string, FacilityTrendPoint>();
+  for (let offset = 0; offset < days; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    const key = date.toISOString().slice(0, 10);
+    rows.set(key, { date: key, ...Object.fromEntries(facilityLabels.map((label) => [label, 0])) });
+  }
+
+  for (const report of reports || []) {
+    const reportDate = normalizeReportDate(report.created_at || report.updated_at || report.overview?.created_at || report.overview?.updated_at || undefined);
+    if (!reportDate) continue;
+    const bucket = rows.get(reportDate.toISOString().slice(0, 10));
+    if (!bucket) continue;
+
+    const reportFacilityKey = getReportFacilityKey(report);
+    const matchedFacility = facilityIndex[reportFacilityKey];
+    if (!matchedFacility) continue;
+
+    bucket[matchedFacility.label] = Number(bucket[matchedFacility.label] || 0) + 1;
+  }
+
+  return {
+    data: [...rows.values()],
+    keys: facilityLabels,
+  };
 }

@@ -123,7 +123,7 @@ export function FacilityModal({
             <Input
               id="facility-name"
               type="text"
-              placeholder="North Yard"
+              placeholder="Facility name"
               value={form.name}
               onChange={(event) => {
                 const nextName = event.target.value;
@@ -140,7 +140,7 @@ export function FacilityModal({
             <Input
               id="facility-slug"
               type="text"
-              placeholder="north-yard"
+              placeholder="facility-name"
               value={form.slug}
               onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
             />

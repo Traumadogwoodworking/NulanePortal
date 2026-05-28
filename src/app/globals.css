@@ -553,12 +553,11 @@ main {
 .rsa-reports-page {
   --rsa-divider-color: #cbd5e1;
   --rsa-divider-strong: #94a3b8;
-  --rsa-arrow-width: 2.75;
-  --rsa-scale: 1.08;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .rsa-reports-page .rsa-day-row td,
-.rsa-reports-page .rsa-track-row td,
 .rsa-reports-page .rsa-spot-row td,
 .rsa-reports-page .rsa-car-row td {
   border-bottom-width: 2px;
@@ -568,16 +567,8 @@ main {
   border-bottom-width: 2px;
 }
 
-.rsa-reports-page .rsa-day-row svg,
-.rsa-reports-page .rsa-track-row svg,
-.rsa-reports-page .rsa-spot-row svg,
-.rsa-reports-page .rsa-car-row svg,
-.rsa-reports-page .rsa-chevron {
-  stroke-width: var(--rsa-arrow-width);
-}
-
 .rsa-reports-page .rsa-pill {
-  border-width: 2px;
+  border-width: 1px;
   font-weight: 900;
 }
 
@@ -603,7 +594,7 @@ main {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #475569;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease, color 160ms ease;
 }
 
@@ -626,7 +617,7 @@ main {
 }
 
 .rsa-reports-page .rsa-scope-label {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 900;
   letter-spacing: 0.2em;
   text-transform: uppercase;

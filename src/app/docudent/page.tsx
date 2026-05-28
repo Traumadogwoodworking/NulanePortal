@@ -1,8 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { History } from "lucide-react";
+import {
+  ArrowUpRight,
+  CircleGauge,
+  ClipboardList,
+  FileText,
+  History,
+  PackageSearch,
+  ShieldAlert,
+  SquareStack,
+  Wrench,
+} from "lucide-react";
 import { ModuleNotice } from "@/components/ui/ModuleNotice";
 import { Card, CardHeader, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -13,6 +23,7 @@ import { FileUploadPanel } from "@/components/docudent/FileUploadPanel";
 import { hasOrganizationScope, isModuleEnabled } from "@/lib/modules";
 import { usePortalSession } from "@/lib/portalSession";
 import { ReportsAdapter } from "@/lib/services/reportService";
+import { getPortalBranding } from "@/lib/branding";
 import type { ReportDamageApiRow } from "@/lib/types";
 import {
   docuDentSteps,
@@ -33,10 +44,12 @@ import { uploadAttachments, type UploadSummary } from "@/lib/docudent/uploadAtta
 import { PersistenceService, type StashedReport } from "@/lib/docudent/persistenceService";
 import { RefreshCw } from "lucide-react";
 
+const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
 
 export default function DocuDentPage() {
   const moduleEnabled = isModuleEnabled("docudent");
   const { session, organizationId } = usePortalSession();
+  const portalBranding = useMemo(() => getPortalBranding(session), [session]);
   const hasScope = hasOrganizationScope(session);
   const [reports, setReports] = useState<ReportDamageApiRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,19 +92,23 @@ export default function DocuDentPage() {
     loadData();
     const draft = PersistenceService.loadDraft();
     if (draft && JSON.stringify(draft) !== JSON.stringify(formState)) {
-      if (window.confirm("An unfinished inspection draft was found. Would you like to restore it?")) {
-        setFormState(draft);
-      } else {
-        PersistenceService.clearDraft();
-      }
+      setFormState(draft);
+    }
+    const storedStep = window.localStorage.getItem(DOCUDENT_STEP_STORAGE_KEY);
+    const restoredStep = storedStep ? Number(storedStep) : 0;
+    if (Number.isInteger(restoredStep) && restoredStep >= 0 && restoredStep < docuDentSteps.length) {
+      setCurrentStep(restoredStep);
     }
     setStashedReports(PersistenceService.listStashed());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadData]);
 
   useEffect(() => {
-    if (currentStep > 0 && submissionState.status !== "success") {
+    if (submissionState.status !== "success") {
       PersistenceService.saveDraft(formState);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(DOCUDENT_STEP_STORAGE_KEY, String(currentStep));
+      }
     }
   }, [formState, currentStep, submissionState.status]);
 
@@ -169,6 +186,15 @@ export default function DocuDentPage() {
       : submissionState.status === "error"
         ? "danger"
         : "neutral";
+  const stepIcons: Record<string, ReactNode> = {
+    vehicle: <Wrench className="h-4 w-4" />,
+    area: <PackageSearch className="h-4 w-4" />,
+    type: <ShieldAlert className="h-4 w-4" />,
+    severity: <CircleGauge className="h-4 w-4" />,
+    notes: <FileText className="h-4 w-4" />,
+    files: <SquareStack className="h-4 w-4" />,
+    review: <ClipboardList className="h-4 w-4" />,
+  };
 
   const isCurrentStepValid = (index: number) => {
     const key = docuDentSteps[index].id;
@@ -221,6 +247,7 @@ export default function DocuDentPage() {
       setSubmissionState({ status: "idle", message: "Submitting report...", reportId, attachments: attachmentsSummary });
       const result = await submitInspection(formState, { reportId, attachments: attachmentsSummary });
       PersistenceService.clearDraft();
+      window.localStorage.removeItem(DOCUDENT_STEP_STORAGE_KEY);
       setSubmissionState({
         status: "success",
         message: `Report ${result.reportId} submitted (${files.length} attachment${files.length === 1 ? "" : "s"}).`,
@@ -466,31 +493,83 @@ export default function DocuDentPage() {
         return null;
     }
   };
+  const firstInvalidStep = docuDentSteps.findIndex((_, index) => !isCurrentStepValid(index));
+  const completedThrough = firstInvalidStep === -1 ? docuDentSteps.length - 1 : Math.max(0, firstInvalidStep - 1);
 
   return (
     <article className="space-y-6">
       {loadError ? <ErrorPanel error={loadError} title="Recent inspections unavailable" /> : null}
       <Card>
-        <CardHeader title="Damage inspection" subtitle="Web-native equivalent of the mobile inspection workflow." />
+        <CardHeader
+          title="Damage inspection"
+          subtitle="Web-native equivalent of the mobile inspection workflow."
+          actions={
+            portalBranding.logoUrl ? (
+              <img
+                src={portalBranding.logoUrl}
+                alt={portalBranding.organizationName}
+                className="h-10 max-w-36 object-contain"
+              />
+            ) : null
+          }
+        />
         <CardContent>
-          <div className="grid gap-6 lg:grid-cols-[260px,1fr]">
-            <nav className="space-y-3">
+          <div className="space-y-6">
+            <nav className="sticky top-0 z-20 rounded-2xl border border-blue-100 bg-white/95 p-3 shadow-sm backdrop-blur">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-7">
               {docuDentSteps.map((step, index) => (
-                <button
-                  key={step.id}
-                  type="button"
-                  onClick={() => index <= currentStep && setCurrentStep(index)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                    index === currentStep
-                      ? "border-slate-300 bg-slate-50 text-slate-900"
-                      : "border-slate-200 bg-white text-slate-600"
-                  }`}
-                >
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em]">Step {index + 1}</p>
-                  <p className="text-sm font-black tracking-tight">{step.label}</p>
-                  <p className="text-[9px] uppercase tracking-[0.4em] text-slate-400">{step.description}</p>
-                </button>
+                <div key={step.id} className="relative min-w-0">
+                  {index < docuDentSteps.length - 1 ? (
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-0 hidden h-1 w-[calc(1rem+0.5rem)] -translate-y-1/2 rounded-full xl:block ${
+                        index < currentStep ? "bg-blue-500" : "bg-blue-100"
+                      }`}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(index)}
+                    className={`relative z-10 h-28 w-full rounded-xl border px-3 py-2 text-center transition ${
+                      index === currentStep
+                        ? "border-blue-500 bg-blue-50 text-blue-950 shadow-sm"
+                        : index <= completedThrough
+                          ? "border-blue-200 bg-blue-500 text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50"
+                    }`}
+                  >
+                    <div className="relative flex h-full flex-col items-center justify-center gap-2">
+                      <p
+                        className={`absolute right-0 top-0 text-[13px] font-black uppercase leading-none tracking-[0.24em] ${
+                          index <= completedThrough && index !== currentStep ? "text-white/80" : "text-blue-500"
+                        }`}
+                      >
+                        {index + 1}
+                      </p>
+                      <div
+                        className={`flex h-16 w-16 items-center justify-center rounded-full border ${
+                          index <= completedThrough && index !== currentStep
+                            ? "border-white/25 bg-white/10 text-white"
+                            : "border-blue-200 bg-white text-blue-500"
+                        }`}
+                      >
+                        <span className="scale-200">{stepIcons[step.id] ?? <ArrowUpRight className="h-4 w-4" />}</span>
+                      </div>
+                      <div className="w-full pt-1">
+                        <p className="truncate text-sm font-black tracking-tight">{step.label}</p>
+                        <p
+                          className={`mt-1 line-clamp-2 text-[10px] uppercase tracking-[0.24em] ${
+                            index <= completedThrough && index !== currentStep ? "text-white/75" : "text-slate-400"
+                          }`}
+                        >
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
               ))}
+              </div>
             </nav>
             <section className="space-y-6">
               <div className="rounded-3xl border border-slate-200 bg-white p-6">
@@ -571,14 +650,15 @@ export default function DocuDentPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="flex min-h-[34rem] flex-col">
         <CardHeader title="Recent inspections" subtitle="Mirror of the last 5 findings from the mobile feed." />
-        <CardContent>
+        <CardContent className="flex min-h-0 flex-1 flex-col space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <StatCard label="Loaded reports" value={stats.total} detail="Total inspections" />
             <StatCard label="Pending" value={stats.pending} detail="Awaiting review" />
           </div>
-          <div className="mt-4 grid gap-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            <div className="grid gap-3">
             {loading ? (
               <div className="py-8 text-center text-sm text-slate-400">Loading recent scans…</div>
             ) : (
@@ -601,6 +681,7 @@ export default function DocuDentPage() {
                 </Link>
               ))
             )}
+            </div>
           </div>
         </CardContent>
       </Card>

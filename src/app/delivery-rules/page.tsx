@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CirclePlus, Search, Trash2 } from "lucide-react";
+import { CirclePlus, Lock, Search, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -175,6 +175,10 @@ function isDraftDirty(draft: RuleDraft | null, selectedRule: DeliveryRule | null
   return !draftsEqual(draft, makeDraft(selectedRule));
 }
 
+function isLockedRule(rule: DeliveryRule | null) {
+  return Boolean(rule?.source?.readOnly || rule?.source?.migrationRequired);
+}
+
 export default function DeliveryRulesPage() {
   const { organizationId } = usePortalSession();
   const { data: directory } = usePortalDirectorySnapshot();
@@ -184,7 +188,6 @@ export default function DeliveryRulesPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | DeliveryRuleCategory>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -226,20 +229,17 @@ export default function DeliveryRulesPage() {
     const needle = search.trim().toLowerCase();
     return rules.filter((rule) => {
       const matchesKind = kindFilter === "all" || rule.category === kindFilter;
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "enabled" && rule.enabled) ||
-        (statusFilter === "disabled" && !rule.enabled);
       const matchesSearch =
         !needle ||
         [rule.name, rule.source?.displayLabel, rule.facilityTrigger?.facilityName, rule.damageTrigger?.area?.label, rule.damageTrigger?.damageType?.label, rule.damageTrigger?.severity?.label, ...rule.actions.cc, ...rule.actions.bcc]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(needle));
-      return matchesKind && matchesStatus && matchesSearch;
+      return matchesKind && matchesSearch;
     });
-  }, [rules, search, kindFilter, statusFilter]);
+  }, [rules, search, kindFilter]);
 
   const selectedRule = useMemo(() => rules.find((rule) => rule.id === selectedId) ?? null, [rules, selectedId]);
+  const selectedRuleLocked = isLockedRule(selectedRule);
   const draftDirty = isDraftDirty(draft, selectedRule);
 
   useEffect(() => {
@@ -297,6 +297,10 @@ export default function DeliveryRulesPage() {
 
   const persistDraft = async (mode: "create" | "update") => {
     if (!draft) return;
+    if (selectedRuleLocked) {
+      setEditorError("Locked rules are managed by Nulane and cannot be modified here.");
+      return;
+    }
     setEditorError(null);
     const validation = validateDraft(draft);
     if (validation.errors.length) {
@@ -332,6 +336,10 @@ export default function DeliveryRulesPage() {
 
   const handleDelete = async () => {
     if (!selectedRule) return;
+    if (selectedRuleLocked) {
+      setEditorError("Locked rules are managed by Nulane and cannot be deleted here.");
+      return;
+    }
     if (!window.confirm(`Delete "${selectedRule.name}"?`)) return;
     try {
       await deleteDeliveryRule(selectedRule.id);
@@ -361,59 +369,66 @@ export default function DeliveryRulesPage() {
       </div>
 
       <Card className="border-slate-200 bg-white shadow-sm">
-        <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_180px_180px]">
-          <div className="relative">
+        <CardContent className="flex flex-wrap items-end gap-3 p-4">
+          <div className="relative min-w-72 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search delivery rules" className="pl-9" />
           </div>
-          <Select value={kindFilter} onValueChange={(value) => setKindFilter(value as "all" | DeliveryRuleCategory)}>
-            <SelectTrigger className="w-full bg-white">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="facility">Facility</SelectItem>
-              <SelectItem value="general">General</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | "enabled" | "disabled")}>
-            <SelectTrigger className="w-full bg-white">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="enabled">Enabled</SelectItem>
-              <SelectItem value="disabled">Disabled</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="w-56 space-y-1">
+            <Label className="text-[11px] font-black uppercase tracking-widest text-slate-500">Delivery Type</Label>
+            <Select value={kindFilter} onValueChange={(value) => setKindFilter(value as "all" | DeliveryRuleCategory)}>
+              <SelectTrigger className="w-full bg-white">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="facility">Facility</SelectItem>
+                <SelectItem value="general">General</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
       {error ? <EmptyState title="Delivery Rules unavailable" description={error} tone="danger" /> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <Card className="border-slate-200 bg-white shadow-sm">
+        <Card className="border-2 border-slate-300 bg-white shadow-sm">
           <CardContent className="space-y-3 p-4">
             {loading ? (
               <div className="py-16 text-center text-sm text-slate-400">Loading delivery rules...</div>
             ) : visibleRules.length ? (
-              visibleRules.map((rule) => (
-                <button
-                  key={rule.id}
-                  type="button"
-                  onClick={() => {
-                    if (draftDirty && !window.confirm("You have unsaved changes. Continue to this rule and discard your current changes?")) {
-                      return;
-                    }
+              visibleRules.map((rule) => {
+                const locked = isLockedRule(rule);
+                return (
+	                <button
+	                  key={rule.id}
+	                  type="button"
+	                  onClick={() => {
+	                    if (locked) return;
+	                    if (draftDirty && !window.confirm("You have unsaved changes. Continue to this rule and discard your current changes?")) {
+	                      return;
+	                    }
                     setSelectedId(rule.id);
                     setDraft(makeDraft(rule));
                     setEditorError(null);
                   }}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                    selectedId === rule.id ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-300"
-                  }`}
+	                  aria-disabled={locked}
+	                  className={`relative w-full rounded-2xl border px-4 py-3 text-left transition ${
+	                    locked
+	                      ? "cursor-not-allowed border-blue-200 bg-blue-50/30"
+	                      : selectedId === rule.id
+	                        ? "border-slate-900 bg-slate-50"
+	                        : "border-slate-200 hover:border-slate-300"
+	                  }`}
                 >
+                  {locked ? (
+                    <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-blue-700">
+                      <Lock className="h-3 w-3" />
+                      Locked rule
+                    </span>
+                  ) : null}
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -426,23 +441,22 @@ export default function DeliveryRulesPage() {
                       <p className="text-sm text-slate-600">{triggerSummary(rule, options)}</p>
                       <p className="text-sm text-slate-600">{recipientsSummary(rule)}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="text-xs text-slate-500">{rule.source?.displayLabel ?? "Unknown source"}</span>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {rule.source?.migrationRequired ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Existing source</span> : null}
-                        {rule.source?.kind === "email_delivery_rules" ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Delivery rule</span> : null}
-                      </div>
+	                    <div className="flex flex-col items-end gap-2 pr-28">
+	                      <div className="flex flex-wrap justify-end gap-2">
+	                        {!locked && rule.source?.migrationRequired ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Existing source</span> : null}
+	                        {!locked && rule.source?.kind === "email_delivery_rules" ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Delivery rule</span> : null}
+	                      </div>
                     </div>
                   </div>
                 </button>
-              ))
+              );})
             ) : (
               <EmptyState title="No delivery rules found" description="Create a rule or widen the filters." />
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 bg-white shadow-sm">
+        <Card className="border-2 border-slate-300 bg-white shadow-sm">
           <CardContent className="space-y-5 p-5">
             {!draft ? (
               <EmptyState title="Select a rule" description="Create a new rule or choose one from the list." />
@@ -452,13 +466,19 @@ export default function DeliveryRulesPage() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rule editor</p>
                           <p className="mt-1 text-sm text-slate-500">Changes are saved explicitly from the top-right action.</p>
+                          {selectedRuleLocked ? (
+                            <p className="mt-2 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black uppercase tracking-widest text-blue-700">
+                              <Lock className="h-3 w-3" />
+                              Locked rule
+                            </p>
+                          ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => persistDraft(draft.id === EMPTY_RULE_ID ? "create" : "update")} className="border-slate-200 bg-white">
+                    <Button type="button" variant="outline" onClick={() => persistDraft(draft.id === EMPTY_RULE_ID ? "create" : "update")} disabled={selectedRuleLocked} className="border-slate-200 bg-white">
                       Save
                     </Button>
                     {selectedRule ? (
-                      <Button type="button" variant="destructive" onClick={handleDelete}>
+                      <Button type="button" variant="destructive" onClick={handleDelete} disabled={selectedRuleLocked}>
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>

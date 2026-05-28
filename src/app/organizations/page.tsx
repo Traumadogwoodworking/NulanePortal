@@ -7,11 +7,9 @@ import { usePortalSession } from "@/lib/portalSession";
 import { usePortalDirectorySnapshot } from "@/lib/portalData";
 import { Building2, Shield, Users } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 
 export default function OrganizationsPage() {
-  const { session, organizationId, isSuperAdmin } = usePortalSession();
+  const { session, organizationId } = usePortalSession();
   const { data: directory } = usePortalDirectorySnapshot();
 
   const currentOrganizationName = session?.organization?.name || "Not assigned";
@@ -19,8 +17,7 @@ export default function OrganizationsPage() {
   const userCount = directory?.users?.length ?? 0;
 
   return (
-    <TooltipProvider>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <PageTitle
           title="Organizations"
           subtitle="Manage your connected organizations and tenant data."
@@ -59,49 +56,6 @@ export default function OrganizationsPage() {
             </CardContent>
           </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
-          <Card>
-            <CardHeader title="Organization Connections" subtitle="Organizations your account is assigned to." />
-            <CardContent className="p-6">
-              <div className="text-sm text-slate-500 italic">
-                Backend does not currently return assigned organization list for this session.
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <TooltipProvider>
-                  <Tooltip delayDuration={0}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1"
-                        disabled={!isSuperAdmin}
-                        title={isSuperAdmin ? "Backend action pending" : "Super admin required"}
-                      >
-                        Add Organization
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{isSuperAdmin ? "Backend action pending" : "Super admin required"}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip delayDuration={0}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1"
-                        disabled={!isSuperAdmin}
-                        title={isSuperAdmin ? "Backend action pending" : "Super admin required"}
-                      >
-                        Link Organization
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{isSuperAdmin ? "Backend action pending" : "Super admin required"}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         <Card>
           <CardHeader title="Facilities Under Current Organization" subtitle="All facilities managed by this organization." />
           <CardContent className="p-6">
@@ -126,6 +80,6 @@ export default function OrganizationsPage() {
           </CardContent>
         </Card>
 
-      </div>    </TooltipProvider>
+      </div>
   );
 }

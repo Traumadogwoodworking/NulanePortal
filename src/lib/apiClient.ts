@@ -79,6 +79,53 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
   return fetchJson(url, { ...options, headers });
 }
 
+export async function apiFetchResponse(path: string, options: RequestInit = {}): Promise<Response> {
+  console.info("[reset-password.trace] apiFetch.enter", {
+    path,
+    method: (options.method || "GET").toUpperCase(),
+    responseType: "raw",
+  });
+  const url = buildApiUrl(path);
+  console.info("[reset-password.trace] apiFetch.url", {
+    path,
+    resolvedUrl: url,
+    apiBase: portalConfig.apiBase,
+    responseType: "raw",
+  });
+  const token = await getPortalAccessToken();
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  } as Record<string, string>;
+  if (!token) {
+    console.warn("[reset-password.trace] apiFetch.noToken");
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const isFormDataBody = typeof FormData !== "undefined" && options.body instanceof FormData;
+  console.info("[reset-password.trace] apiFetch.realFetch", {
+    resolvedUrl: url,
+    method: (options.method || "GET").toUpperCase(),
+    authorizationPresent: Boolean(headers.Authorization || headers.authorization),
+    responseType: "raw",
+  });
+  const response = await fetch(url, {
+    headers: isFormDataBody
+      ? {
+          ...(options.headers || {}),
+        }
+      : headers,
+    ...options,
+  });
+  console.info("[reset-password.trace] apiFetch.response", {
+    status: response.status,
+    ok: response.ok,
+    responseType: "raw",
+  });
+  return response;
+}
+
 export async function docuFitFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const url = buildDocuFitUrl(path);
   return fetchJson(url, options);

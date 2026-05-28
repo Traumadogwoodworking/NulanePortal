@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/apiClient";
 import {
+  DeletedUserSummary,
   LocationMembership,
   OrganizationMembership,
   PortalUserRecord,
@@ -14,6 +15,9 @@ const USER_BY_EMAIL_STATUS_ENDPOINT = (organizationId: string, email: string) =>
   `/admin/organizations/${organizationId}/users/by-email/${encodeURIComponent(email)}/status`;
 const USER_BY_EMAIL_ENDPOINT = (organizationId: string, email: string) =>
   `/admin/organizations/${organizationId}/users/by-email/${encodeURIComponent(email)}`;
+const DELETED_USERS_ENDPOINT = (organizationId: string) => `/organizations/${organizationId}/users/deleted`;
+const USER_REACTIVATE_ENDPOINT = (organizationId: string, userId: string) =>
+  `/organizations/${organizationId}/users/${userId}/reactivate`;
 const USER_ROLES_ENDPOINT = (userId: string) => `/users/${userId}/roles`;
 const USER_FACILITIES_ENDPOINT = (organizationId: string, userId: string) => `/admin/organizations/${organizationId}/users/${userId}/facilities`;
 const USER_FACILITY_DETAIL_ENDPOINT = (organizationId: string, userId: string, facilityId: string) => `${USER_FACILITIES_ENDPOINT(organizationId, userId)}/${facilityId}`;
@@ -98,6 +102,35 @@ function mapUserRecord(user: PortalUserRecord): UserSummary {
   };
 }
 
+function mapDeletedUserRecord(
+  user: PortalUserRecord & {
+    organization_membership?: OrganizationMembership | null;
+    location_memberships?: LocationMembership[] | null;
+    deleted_at?: string | null;
+    deactivated_at?: string | null;
+    suspended_at?: string | null;
+    deletedAt?: string | null;
+    deactivatedAt?: string | null;
+    suspendedAt?: string | null;
+    is_deleted?: boolean;
+    is_deactivated?: boolean;
+    is_suspended?: boolean;
+  }
+): DeletedUserSummary {
+  const mapped = mapUserRecord(user);
+  return {
+    ...mapped,
+    organizationMembership: user.organization_membership ?? null,
+    locationMemberships: Array.isArray(user.location_memberships) ? user.location_memberships : [],
+    deletedAt: user.deleted_at ?? user.deletedAt ?? null,
+    deactivatedAt: user.deactivated_at ?? user.deactivatedAt ?? null,
+    suspendedAt: user.suspended_at ?? user.suspendedAt ?? null,
+    isDeleted: user.is_deleted ?? false,
+    isDeactivated: user.is_deactivated ?? false,
+    isSuspended: user.is_suspended ?? false,
+  };
+}
+
 function mapRoleRecord(row: Partial<RoleCatalog> & { role_key?: string; role_name?: string; role_scope?: string; is_active?: boolean; permissions?: string[] }): RoleCatalog {
   return {
     key: (row.role_key || "member").toString(),
@@ -144,6 +177,27 @@ export async function fetchOrganizationUsers(organizationId: string): Promise<Us
   const payload = await apiFetch<unknown>(USERS_ENDPOINT(organizationId));
   const records = readArrayFromPayload<PortalUserRecord>(payload, ["users", "data", "results", "rows"]);
   return records.map((user) => mapUserRecord(user));
+}
+
+export async function fetchDeletedOrganizationUsers(organizationId: string): Promise<DeletedUserSummary[]> {
+  if (!organizationId) {
+    return [];
+  }
+  const payload = await apiFetch<unknown>(DELETED_USERS_ENDPOINT(organizationId));
+  const records = readArrayFromPayload<PortalUserRecord & {
+    organization_membership?: OrganizationMembership | null;
+    location_memberships?: LocationMembership[] | null;
+    deleted_at?: string | null;
+    deactivated_at?: string | null;
+    suspended_at?: string | null;
+    deletedAt?: string | null;
+    deactivatedAt?: string | null;
+    suspendedAt?: string | null;
+    is_deleted?: boolean;
+    is_deactivated?: boolean;
+    is_suspended?: boolean;
+  }>(payload, ["users", "data", "results", "rows"]);
+  return records.map((user) => mapDeletedUserRecord(user));
 }
 
 export async function fetchOrganizationRoles(organizationId: string): Promise<RoleCatalog[]> {
@@ -284,6 +338,15 @@ export async function deleteUserByEmail(
   });
 }
 
+export async function restoreDeletedUser(
+  organizationId: string,
+  userId: string
+): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(USER_REACTIVATE_ENDPOINT(organizationId, userId), {
+    method: "POST",
+  });
+}
+
 export async function resetUserPassword(
   organizationId: string,
   userId: string,
@@ -392,6 +455,10 @@ export class UsersAdapter {
     return fetchOrganizationUsers(organizationId);
   }
 
+  static async getDeletedUsers(organizationId: string): Promise<DeletedUserSummary[]> {
+    return fetchDeletedOrganizationUsers(organizationId);
+  }
+
   static async getUserDetail(
     organizationId: string,
     userId: string
@@ -475,6 +542,13 @@ export class UsersAdapter {
     email: string
   ): Promise<{ success: boolean }> {
     return deleteUserByEmail(organizationId, email);
+  }
+
+  static async restoreUser(
+    organizationId: string,
+    userId: string
+  ): Promise<{ success: boolean }> {
+    return restoreDeletedUser(organizationId, userId);
   }
 
   static async resetUserPassword(

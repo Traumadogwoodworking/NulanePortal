@@ -5,7 +5,6 @@ import { DataTableShell } from "@/components/ui/DataTableShell";
 import { FacilitySelector } from "@/components/ui/FacilitySelector";
 import { ReportsAdapter } from "@/lib/services/reportService";
 import { apiFetch } from "@/lib/apiClient";
-import { selectedRowStrokeClass } from "@/lib/severityTheme";
 import { saveAs } from "file-saver";
 import { 
   ChevronRight, 
@@ -96,10 +95,6 @@ export function RsaReportsManager() {
   const [partialLoadError, setPartialLoadError] = useState<string | null>(null);
   const [sendingEod, setSendingEod] = useState(false);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
-  
-  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
-  const [expandedTracks, setExpandedTracks] = useState<Record<string, boolean>>({});
-  const [expandedSpots, setExpandedSpots] = useState<Record<string, boolean>>({});
 
   const loadRsaReports = useCallback(async () => {
     setLoading(true);
@@ -510,11 +505,10 @@ export function RsaReportsManager() {
                 <tr><td colSpan={rsaColumns.length} className="py-12 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">No telemetry found in timeline.</td></tr>
               ) : (
                 Object.entries(groupedRsaRows).map(([date, tracks]) => {
-                  const isDateExpanded = expandedDates[date] ?? true;
                   const dayStats = groupedRsaDayStats[date] || { cars: 0, vins: 0 };
                   return (
                     <React.Fragment key={date}>
-                      <tr className="rsa-day-row cursor-pointer bg-slate-50/80 border-b border-slate-200/50" onClick={() => setExpandedDates(prev => ({ ...prev, [date]: !isDateExpanded }))}>
+                      <tr className="rsa-day-row bg-slate-50/80 border-b border-slate-200/50">
                         <td colSpan={rsaColumns.length} className="px-3 py-2">
                            <div className="flex items-center justify-between">
                              <div className="flex items-center gap-2">
@@ -524,101 +518,82 @@ export function RsaReportsManager() {
                                   {dayStats.cars} RC • {dayStats.vins} VINs
                                </span>
                              </div>
-                             <div className="flex items-center gap-2">
-                               <button
-                                 type="button"
-                                 onClick={(event) => {
-                                   event.stopPropagation();
-                                   exportDayToCsv(date);
-                                 }}
-                                 className="rsa-action-button"
-                               >
-                                 <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
-                                 Export
-                               </button>
-                               <ChevronRight className={`rsa-chevron w-3.5 h-3.5 text-slate-400 transition-transform ${isDateExpanded ? 'rotate-90' : ''}`} />
-                             </div>
+                             <button
+                               type="button"
+                               onClick={() => exportDayToCsv(date)}
+                               className="rsa-action-button"
+                             >
+                               <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                               Export
+                             </button>
                            </div>
                         </td>
                       </tr>
-                      {isDateExpanded && Object.entries(tracks).map(([trackName, spots]) => {
-                        const trackKey = `${date}-${trackName}`;
-                        const isTrackExpanded = expandedTracks[trackKey] ?? true;
-                        
-                        // Count Railcars and VINs accurately!
+                      {Object.entries(tracks).map(([, spots], trackIdx) => {
                         let rcCount = 0;
                         let vinCountSum = 0;
-                        Object.values(spots).forEach(railcars => {
+                        Object.values(spots).forEach((railcars) => {
                           rcCount += railcars.length;
                           vinCountSum += railcars.reduce((sum, rc) => sum + rc.vins.length, 0);
                         });
 
                         return (
-                          <React.Fragment key={trackName}>
-                            <tr className="rsa-track-row cursor-pointer hover:bg-slate-50/50 border-b border-slate-100" onClick={() => setExpandedTracks(prev => ({ ...prev, [trackKey]: !isTrackExpanded }))}>
-                              <td colSpan={rsaColumns.length} className="px-5 py-1.5 bg-slate-50/30 border-b border-slate-100">
+                          <React.Fragment key={`track-${trackIdx}`}>
+                            <tr className="rsa-track-row border-b border-slate-100">
+                              <td colSpan={rsaColumns.length} className="px-5 py-1.5">
                                  <div className="flex items-center justify-between">
                                    <div className="flex items-center gap-3">
-                                     <span className="font-bold text-[12px] text-slate-900 uppercase tracking-widest">{trackName}</span>
+                                     <span className="font-bold text-[12px] text-slate-900 uppercase tracking-widest">Track</span>
                                      <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider shadow-sm">
                                         {rcCount} RC • {vinCountSum} VINs
                                      </span>
                                    </div>
-                                   <ChevronRight className={`rsa-chevron w-3 h-3 text-slate-400 transition-transform ${isTrackExpanded ? 'rotate-90' : ''}`} />
                                  </div>
                               </td>
                             </tr>
-                            {isTrackExpanded && Object.entries(spots).map(([spotName, railcars]) => {
-                               const spotKey = `${trackKey}-${spotName}`;
-                               const isSpotExpanded = expandedSpots[spotKey] ?? true;
-                               
+                            {Object.entries(spots).map(([spotName, railcars]) => {
                                const spotVinCount = railcars.reduce((acc, car) => acc + car.vins.length, 0);
                                return (
                                  <React.Fragment key={spotName}>
-                                    <tr className="rsa-spot-row cursor-pointer hover:bg-slate-50" onClick={() => setExpandedSpots(prev => ({ ...prev, [spotKey]: !isSpotExpanded }))}>
-                                      <td colSpan={rsaColumns.length} className="px-8 py-1.5 bg-white border-b border-slate-100">
+                                    <tr className="rsa-spot-row cursor-pointer border-b border-slate-100">
+                                      <td colSpan={rsaColumns.length} className="px-5 py-1.5">
                                          <div className="flex items-center justify-between">
                                            <div className="flex items-center gap-2">
                                              <span className="text-[12px] font-bold text-slate-600 uppercase tracking-widest">{spotName}</span>
-                                             <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-2">{railcars.length} RC | {spotVinCount} VINs</span>
+                                             <span className="text-[10px] font-bold text-slate-500 px-1.5 py-0.5">{railcars.length} RC | {spotVinCount} VINs</span>
                                            </div>
-                                           <ChevronRight className={`rsa-chevron w-3 h-3 text-slate-300 transition-transform ${isSpotExpanded ? 'rotate-90' : ''}`} />
                                          </div>
                                       </td>
                                     </tr>
-                                    {isSpotExpanded && railcars.map((car, idx) => {
+                                    {railcars.map((car, idx) => {
                                       const isSelected = car.reportId === selectedRsaReportId;
-                                      
                                       return (
                                         <tr
-                                          key={`${car.reportId}-${car.railcarId}-${idx}`} 
-                                          className={`rsa-car-row group transition-all cursor-pointer border-b border-slate-100 last:border-b-0 ${selectedRowStrokeClass(isSelected)} hover:bg-slate-50`}
+                                          key={`${car.reportId}-${car.railcarId}-${idx}`}
+                                          className="rsa-car-row group transition-all cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
                                           onClick={() => setSelectedRsaReportId(car.reportId)}
                                         >
                                           <td className="pl-10 pr-3 py-3">
-                                            <div className="flex flex-col min-w-0">
                                             <div className="flex items-center gap-2">
-                                                 <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${isSelected ? 'bg-slate-200 text-slate-900' : 'bg-slate-200 text-slate-600'}`}>Railcar</span>
-                                                 <span className={`text-[16px] font-mono font-black tracking-widest ${isSelected ? 'text-slate-900' : 'text-slate-900'}`}>
+                                                 <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">Railcar</span>
+                                                 <span className="text-[16px] font-mono font-black tracking-widest text-slate-900">
                                                     {car.railcarId || 'UNASSIGNED'}
                                                  </span>
-                                               </div>
                                             </div>
                                           </td>
-                                          <td className="px-3 py-3 text-[12px] font-black text-slate-700 uppercase tracking-tight border-l border-slate-100/50">{car.track}</td>
+                                          <td className="px-3 py-3 text-[12px] font-black text-slate-700 uppercase tracking-tight">{car.track}</td>
                                           <td className="px-3 py-3 text-[12px] font-black text-slate-700 uppercase tracking-tight">{car.spot}</td>
-                                          <td className="px-3 py-3 text-[10px] font-bold text-slate-500 uppercase">{car.facilityName}</td>
-                                          <td className="px-3 py-3 text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                                          <td className="px-3 py-3 text-[12px] font-black text-slate-700 uppercase tracking-tight">{car.facilityName}</td>
+                                          <td className="px-3 py-3 text-[12px] font-black text-slate-700 uppercase tracking-tight whitespace-nowrap">
                                             <div className="flex items-center justify-between gap-2">
                                               <span>{car.createdAt ? new Date(car.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
-                                              <ChevronRight className={`rsa-chevron w-4 h-4 transition-transform ${isSelected ? 'translate-x-1 text-slate-900 opacity-100' : 'opacity-0'}`} />
                                             </div>
                                           </td>
                                         </tr>
                                       );
                                     })}
-                                </React.Fragment>
-                              );
+                                  </React.Fragment>
+                               );
                             })}
                             <tr aria-hidden="true">
                               <td colSpan={rsaColumns.length} className="rsa-day-spacer border-0 p-0" />
@@ -671,7 +646,6 @@ export function RsaReportsManager() {
                     </div>
 
                     <div className="space-y-5 pt-4">
-                      {/* Detailed Railcar Breakdowns under this Report */}
                       {((selectedRsaFullRow.cars ?? []) as RsaCarRecord[]).map((car, carIdx) => {
                         const allVins: string[] = [];
                         const deckVinsMap: Record<string, string[]> = {};
@@ -692,7 +666,7 @@ export function RsaReportsManager() {
                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-slate-100 px-2 py-0.5 rounded">{railcarNum}</span>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{allVins.length} Total VINs</span>
                              </div>
-                             <div className="grid grid-cols-1 gap-2 ml-2">
+                             <div className="grid grid-cols-1 gap-2">
                                 {Object.entries(deckVinsMap).map(([deckType, vins]) => (
                                     <div key={deckType} className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                                         <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
@@ -701,10 +675,8 @@ export function RsaReportsManager() {
                                         <div className="grid grid-cols-1 gap-1.5">
                                             {vins.map((vin, vIdx) => (
                                               <div key={vIdx} className="flex items-center gap-2">
-                                                  <div className="w-5 h-5 rounded-md bg-white border border-slate-200 shadow-sm flex items-center justify-center text-[10px] font-black text-slate-500">{vIdx + 1}</div>
-                                                  <span className="text-[12px] font-mono font-black text-slate-800 tracking-wider">
-                                                    {vin}
-                                                  </span>
+                                                  <div className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500">{vIdx + 1}</div>
+                                                  <span className="text-[12px] font-mono font-black text-slate-800 tracking-wider">{vin}</span>
                                               </div>
                                             ))}
                                         </div>

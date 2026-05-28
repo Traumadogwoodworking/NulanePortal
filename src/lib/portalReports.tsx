@@ -8,6 +8,7 @@ import type { ReportDamageApiRow, ReportFilters, RsaReportApiRow } from "@/lib/t
 
 const PORTAL_REPORTS_CACHE_KEY = "portalReportsCache";
 const CACHE_TTL_MS = 1000 * 60 * 3; // 3 minutes
+let memoryCache: PortalReportsCache | null = null;
 
 type PortalReportsCache = {
   damageReports: ReportDamageApiRow[];
@@ -16,6 +17,9 @@ type PortalReportsCache = {
 };
 
 function readPortalReportsCache(): PortalReportsCache | null {
+  if (memoryCache) {
+    return memoryCache;
+  }
   if (typeof window === "undefined") {
     return null;
   }
@@ -30,6 +34,7 @@ function readPortalReportsCache(): PortalReportsCache | null {
     ) {
       return null;
     }
+    memoryCache = parsed;
     return parsed;
   } catch {
     return null;
@@ -46,6 +51,7 @@ function writePortalReportsCache(damageReports: ReportDamageApiRow[], rsaReports
       rsaReports,
       timestamp: Date.now(),
     };
+    memoryCache = payload;
     window.sessionStorage.setItem(PORTAL_REPORTS_CACHE_KEY, JSON.stringify(payload));
   } catch {
     // ignore cache write failures
@@ -53,7 +59,11 @@ function writePortalReportsCache(damageReports: ReportDamageApiRow[], rsaReports
 }
 
 function isCacheFresh(cache: PortalReportsCache | null): cache is PortalReportsCache {
-  return Boolean(cache && Date.now() - cache.timestamp <= CACHE_TTL_MS);
+  return Boolean(
+    cache &&
+      Date.now() - cache.timestamp <= CACHE_TTL_MS &&
+      (cache.damageReports.length > 0 || cache.rsaReports.length > 0)
+  );
 }
 
 interface PortalReportsValue {
@@ -78,7 +88,21 @@ export function PortalReportsProvider({ children }: { children: ReactNode }) {
   const [rsaError, setRsaError] = useState<Error | null>(null);
   const [cacheHydrated, setCacheHydrated] = useState(false);
 
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[portalReports] provider render", {
+      organizationId,
+      cacheHydrated,
+      cachedValuePresent: Boolean(readPortalReportsCache()),
+      usableCache: isCacheFresh(readPortalReportsCache()),
+    });
+  }
+
   const loadReports = useCallback(async () => {
+    if (process.env.NODE_ENV !== "production") {
+      console.debug("[portalReports] loadReports invoked", {
+        organizationId,
+      });
+    }
     setLoading(true);
     setError(null);
     setDamageError(null);
@@ -130,6 +154,13 @@ export function PortalReportsProvider({ children }: { children: ReactNode }) {
       return;
     }
     const cache = readPortalReportsCache();
+    if (process.env.NODE_ENV !== "production") {
+      console.debug("[portalReports] hydrate cache", {
+        organizationId,
+        cachedValuePresent: Boolean(cache),
+        usableCache: isCacheFresh(cache),
+      });
+    }
     if (isCacheFresh(cache)) {
       setDamageReports(cache.damageReports);
       setRsaReports(cache.rsaReports);
@@ -139,6 +170,21 @@ export function PortalReportsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!cacheHydrated) return;
+    const cache = readPortalReportsCache();
+    if (process.env.NODE_ENV !== "production") {
+      console.debug("[portalReports] post-hydration effect", {
+        organizationId,
+        cachedValuePresent: Boolean(cache),
+        usableCache: isCacheFresh(cache),
+      });
+    }
+    if (isCacheFresh(cache)) {
+      setError(null);
+      setDamageError(null);
+      setRsaError(null);
+      setLoading(false);
+      return;
+    }
     void loadReports();
   }, [cacheHydrated, loadReports]);
 

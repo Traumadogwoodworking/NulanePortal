@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, apiFetchResponse } from "@/lib/apiClient";
 import { isDevMockEnabled } from "@/lib/devMockApi";
 import { buildApiUrl, normalizeMediaUrl } from "@/lib/config";
 import { getPortalAccessToken } from "@/lib/portalAuth";
@@ -181,6 +181,89 @@ function getDamageReportOrganizationId(filters: ReportFilters = {}): string | nu
   return normalized ? normalized : null;
 }
 
+function resolveStringCandidate(...candidates: unknown[]): string | null {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const normalized = candidate.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeDamageReportRow(report: ReportDamageApiRow | Record<string, unknown>): ReportDamageApiRow {
+  const record = report as Record<string, unknown>;
+  const reportId = resolveStringCandidate(
+    record.report_id,
+    record.reportId,
+    record.id,
+    (record.report as Record<string, unknown> | undefined)?.report_id,
+    (record.report as Record<string, unknown> | undefined)?.reportId
+  );
+  const organizationId = resolveStringCandidate(
+    record.organization_id,
+    record.organizationId,
+    record.org_id,
+    record.orgId,
+    record.tenant_id,
+    record.tenantId
+  );
+  const createdAt = resolveStringCandidate(
+    record.created_at,
+    record.createdAt,
+    record.submitted_at,
+    record.submittedAt,
+    record.updated_at,
+    record.updatedAt
+  );
+  const updatedAt = resolveStringCandidate(
+    record.updated_at,
+    record.updatedAt,
+    record.created_at,
+    record.createdAt,
+    record.submitted_at,
+    record.submittedAt
+  );
+  return {
+    ...(report as ReportDamageApiRow),
+    report_id: reportId || (record.report_id as string) || "",
+    ...(organizationId ? { organization_id: organizationId } : {}),
+    ...(createdAt ? { created_at: createdAt } : {}),
+    ...(updatedAt ? { updated_at: updatedAt } : {}),
+  };
+}
+
+function normalizeRsaReportRow(report: RsaReportApiRow | Record<string, unknown>): RsaReportApiRow {
+  const record = report as Record<string, unknown>;
+  const reportId = resolveStringCandidate(record.report_id, record.reportId, record.id);
+  const organizationId = resolveStringCandidate(record.organization_id, record.organizationId, record.org_id, record.orgId);
+  const createdAt = resolveStringCandidate(
+    record.created_at,
+    record.createdAt,
+    record.submitted_at,
+    record.submittedAt,
+    record.updated_at,
+    record.updatedAt
+  );
+  const updatedAt = resolveStringCandidate(
+    record.updated_at,
+    record.updatedAt,
+    record.created_at,
+    record.createdAt,
+    record.submitted_at,
+    record.submittedAt
+  );
+  return {
+    ...(report as RsaReportApiRow),
+    report_id: reportId || (record.report_id as string) || "",
+    ...(organizationId ? { organization_id: organizationId } : {}),
+    ...(createdAt ? { created_at: createdAt } : {}),
+    ...(updatedAt ? { updated_at: updatedAt } : {}),
+  };
+}
+
 function getReportOrgFields(report: ReportDamageApiRow): DamageReportOrgFields {
   const payload = report as unknown as Record<string, unknown>;
   return {
@@ -253,6 +336,60 @@ function setCache(key: string, data: unknown) {
   reportCache.set(key, { data, timestamp: Date.now() });
 }
 
+export async function fetchDamageReportsUncached(filters: ReportFilters = {}): Promise<ReportDamageApiRow[]> {
+  const damageFilters = { ...filters };
+  const currentOrganizationId = getDamageReportOrganizationId(damageFilters);
+  delete damageFilters.organization_id;
+  delete damageFilters.org_id;
+  const queryString = buildReportQueryString(damageFilters);
+  const response = await apiFetch<unknown>(`${REPORTS_ENDPOINT}${queryString}`);
+  const parsedReports = extractDamageReportsArray(response);
+  const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
+  const results = currentOrganizationId
+    ? normalizedReports.filter((report) => matchesDamageReportOrganization(report, currentOrganizationId))
+    : normalizedReports;
+  if (process.env.NODE_ENV === "development") {
+    console.info("[damage-reports] uncached", {
+      reportPullCount: parsedReports.length,
+      normalizedDamageReportCount: normalizedReports.length,
+      filteredDamageReportCount: results.length,
+      firstFields: normalizedReports[0]
+        ? {
+            report_id: normalizedReports[0].report_id,
+            organization_id: normalizedReports[0].organization_id,
+            created_at: normalizedReports[0].created_at,
+            updated_at: normalizedReports[0].updated_at,
+            reportId: (normalizedReports[0] as unknown as Record<string, unknown>).reportId,
+            createdAt: (normalizedReports[0] as unknown as Record<string, unknown>).createdAt,
+            submitted_at: (normalizedReports[0] as unknown as Record<string, unknown>).submitted_at,
+            submittedAt: (normalizedReports[0] as unknown as Record<string, unknown>).submittedAt,
+          }
+        : {},
+    });
+  }
+  return results;
+}
+
+export async function fetchRsaReportsUncached(): Promise<RsaReportApiRow[]> {
+  const response = await apiFetch<unknown>(RSA_REPORTS_ENDPOINT);
+  const results = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
+  if (process.env.NODE_ENV === "development") {
+    console.info("[rsa-reports] uncached", {
+      reportPullCount: results.length,
+      normalizedRsaReportCount: results.length,
+      firstFields: results[0]
+        ? {
+            report_id: results[0].report_id,
+            organization_id: results[0].organization_id,
+            created_at: results[0].created_at,
+            updated_at: results[0].updated_at,
+          }
+        : {},
+    });
+  }
+  return results;
+}
+
 export class ReportsAdapter {
   static clearCache() {
     reportCache.clear();
@@ -300,9 +437,10 @@ export class ReportsAdapter {
       }
       const response = await apiFetch<unknown>(`${REPORTS_ENDPOINT}${queryString}`);
       const parsedReports = extractDamageReportsArray(response);
+      const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
       const results = currentOrganizationId
-        ? parsedReports.filter((report) => matchesDamageReportOrganization(report, currentOrganizationId))
-        : parsedReports;
+        ? normalizedReports.filter((report) => matchesDamageReportOrganization(report, currentOrganizationId))
+        : normalizedReports;
       if (process.env.NODE_ENV === "development") {
         console.info("[damage-reports] parsed reports", {
           rawCount: parsedReports.length,
@@ -312,6 +450,23 @@ export class ReportsAdapter {
               ? Object.keys(results[0] as unknown as Record<string, unknown>)
               : [],
         });
+        if (normalizedReports.length > 0) {
+          const first = normalizedReports[0] as unknown as Record<string, unknown>;
+          console.info("[damage-reports] normalized sample", {
+            reportPullCount: parsedReports.length,
+            normalizedDamageReportCount: normalizedReports.length,
+            firstFields: {
+              report_id: first.report_id,
+              organization_id: first.organization_id,
+              created_at: first.created_at,
+              updated_at: first.updated_at,
+              reportId: first.reportId,
+              createdAt: first.createdAt,
+              submitted_at: first.submitted_at,
+              submittedAt: first.submittedAt,
+            },
+          });
+        }
         if (parsedReports.length > 0 && results.length === 0) {
           console.warn("Backend returned reports, but none matched current organization ID", {
             currentOrganizationId,
@@ -346,7 +501,7 @@ export class ReportsAdapter {
 
     try {
       const response = await apiFetch<unknown>(RSA_REPORTS_ENDPOINT);
-      const results = extractReportsArray<RsaReportApiRow>(response);
+      const results = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
       setCache(cacheKey, results);
       return results;
     } catch (err) {
@@ -419,15 +574,27 @@ export class ReportsAdapter {
     if (!reportId) {
       throw new Error("This report does not have a valid report id.");
     }
-    const response = (await apiFetch(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(reportId)}/photos/archive`)) as Response;
+    const response = await apiFetchResponse(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(reportId)}/photos/archive`, {
+      method: "GET",
+    });
     if (!response.ok) {
-      throw new Error(`Unable to download report photos (${response.status}).`);
+      let message = `Unable to download report photos (${response.status}).`;
+      try {
+        const body = await response.json();
+        if (body && typeof body === "object" && "error" in body && typeof (body as { error?: unknown }).error === "string") {
+          message = (body as { error: string }).error;
+        }
+      } catch {
+        // Keep the status-based message.
+      }
+      throw new Error(message);
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${report.vin || report.report_id || "report"}_photos.zip`;
+    const reportLabel = `${report.vin || report.report_id || "report"}`.trim().replace(/[^a-z0-9_-]+/gi, "_");
+    anchor.download = `${reportLabel}_photos.zip`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

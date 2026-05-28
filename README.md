@@ -52,6 +52,16 @@ npm run start           # Run the build locally for smoke checks
 
 If Turbopack build hangs in restricted environments (as seen in this sandbox), run these commands on a machine/CI that can execute `npm run build` and capture the standard `next build` output. After building, use `npm run start` to exercise the compiled server.
 
+## Workflow philosophy
+
+- Inspect first, then patch the narrowest real cause.
+- Prefer simple code, local logic, and one obvious place for a style or behavior decision.
+- Preserve working render paths unless simplification clearly improves correctness or debug speed.
+- Avoid adding wrappers, helper layers, or reusable abstractions for one-off fixes.
+- When a visual issue appears in a row, cell, line, or table, inspect the surrounding render tree and stylesheet sources before changing markup.
+- Favor additive edits over rewrite-heavy refactors.
+- Keep future debugging fast: fewer layers, fewer hidden side effects, and fewer places where a change can be lost.
+
 ## Rollback guidance
 
 If `portal-next` fails to boot or the config is invalid, revert the gateway/traffic routing back to the legacy portal entry point:

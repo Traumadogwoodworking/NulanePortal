@@ -29,5 +29,5 @@ export function severityPillClass(value?: string | number | null) {
 }
 
 export function selectedRowStrokeClass(isSelected: boolean) {
-  return isSelected ? "bg-slate-50 shadow-[inset_0_0_0_2px_#334155]" : "";
+  return isSelected ? "bg-slate-50" : "";
 }

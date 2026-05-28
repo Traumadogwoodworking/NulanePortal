@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { DataTableShell } from "@/components/ui/DataTableShell";
 import { EmptySelectionPanel } from "@/components/ui/EmptySelectionPanel";
 import { FacilitySelector } from "@/components/ui/FacilitySelector";
+import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DamageMapCard } from "@/components/reports/DamageMapCard";
@@ -23,6 +24,7 @@ import {
 import { buildReportGallery } from "@/lib/reportGallery";
 import { normalizeMediaUrl } from "@/lib/config";
 import { ReportsAdapter } from "@/lib/services/reportService";
+import { usePortalDirectorySnapshot } from "@/lib/portalData";
 import { AuthRedirectError } from "@/lib/portalAuth";
 import { saveAs } from "file-saver";
 import { 
@@ -36,7 +38,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Maximize2,
-  Calendar,
   User,
   MapPin,
   RefreshCw,
@@ -76,12 +77,46 @@ interface ReportsManagerProps {
   mode: string;
 }
 
+type DamageFilterKey =
+  | "facility"
+  | "report_id"
+  | "vin"
+  | "make"
+  | "model"
+  | "inspector_email"
+  | "status"
+  | "date_range";
+
+const DAMAGE_FILTER_OPTIONS: Array<{ key: DamageFilterKey; label: string }> = [
+  { key: "facility", label: "Facility" },
+  { key: "report_id", label: "Report ID" },
+  { key: "vin", label: "VIN" },
+  { key: "make", label: "Make" },
+  { key: "model", label: "Model" },
+  { key: "inspector_email", label: "Inspector Email" },
+  { key: "status", label: "Status" },
+  { key: "date_range", label: "Date" },
+];
+
 function getDamageReportGalleryUrls(report: ReportDamageApiRow | null): string[] {
   return report ? buildReportGallery(report).galleryUrls.filter(Boolean) : [];
 }
 
 function getDamageReportPhotoUrls(report: ReportDamageApiRow | null): string[] {
   return report ? buildReportGallery(report).photoUrls.filter(Boolean) : [];
+}
+
+function toDateInputValue(value: Date): string {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateInputValue(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return new Date(value);
+  return new Date(year, month - 1, day);
 }
 
 type DamageReportEditEntryDraft = {
@@ -226,14 +261,20 @@ function severitySortValue(value?: string | number | null): number {
 
 export function ReportsManager({ mode }: ReportsManagerProps) {
   const { organizationId, status: sessionStatus, isPortalAccessAllowed } = usePortalSession();
+  const { data: directory } = usePortalDirectorySnapshot();
   const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
   const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
   const [statusFilter, setStatusFilter] = useState<ReportStatus | "">("");
   const [facilityFilter, setFacilityFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [reportIdFilter, setReportIdFilter] = useState("");
   const [vinFilter, setVinFilter] = useState("");
+  const [makeFilter, setMakeFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [inspectorEmailFilter, setInspectorEmailFilter] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
+  const [activeDamageFilterKeys, setActiveDamageFilterKeys] = useState<DamageFilterKey[]>([]);
   const [damageSortField, setDamageSortField] = useState<"severity" | "created">("created");
   const [damageSortDirections, setDamageSortDirections] = useState<Record<"severity" | "created", "asc" | "desc">>({
     severity: "desc",
@@ -243,6 +284,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const [isDamageEditOpen, setIsDamageEditOpen] = useState(false);
   const [damageEditDraft, setDamageEditDraft] = useState<DamageReportEditDraft | null>(null);
   const [damageEditStatus, setDamageEditStatus] = useState<string | null>(null);
+  const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -324,25 +366,33 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   const filteredDamageSummaries = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
+    const reportIdQuery = reportIdFilter.trim().toLowerCase();
+    const makeQuery = makeFilter.trim().toLowerCase();
+    const modelQuery = modelFilter.trim().toLowerCase();
+    const inspectorEmailQuery = inspectorEmailFilter.trim().toLowerCase();
     return damageSummaries.filter((summary) => {
       if (facilityFilter !== "all") {
         const slug = slugForFacilityLabel(summary.locationName || summary.facilityName || "Unknown facility");
         if (slug !== facilityFilter) return false;
       }
+      if (reportIdQuery && !summary.id.toLowerCase().includes(reportIdQuery)) return false;
       if (statusFilter && summary.status !== statusFilter) return false;
       if (vinFilter.trim()) {
         if (!summary.vin?.toLowerCase().includes(vinFilter.trim().toLowerCase())) {
           return false;
         }
       }
+      if (makeQuery && !summary.make?.toLowerCase().includes(makeQuery)) return false;
+      if (modelQuery && !summary.model?.toLowerCase().includes(modelQuery)) return false;
+      if (inspectorEmailQuery && !summary.inspectorEmail?.toLowerCase().includes(inspectorEmailQuery)) return false;
       if (createdFrom && summary.createdAt) {
         const createdAt = new Date(summary.createdAt);
-        const fromDate = new Date(createdFrom);
+        const fromDate = parseDateInputValue(createdFrom);
         if (createdAt < fromDate) return false;
       }
       if (createdTo && summary.createdAt) {
         const createdAt = new Date(summary.createdAt);
-        const toDate = new Date(createdTo);
+        const toDate = parseDateInputValue(createdTo);
         toDate.setHours(23, 59, 59, 999);
         if (createdAt > toDate) return false;
       }
@@ -352,7 +402,19 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       }
       return true;
     });
-  }, [damageSummaries, facilityFilter, searchTerm, statusFilter, vinFilter, createdFrom, createdTo]);
+  }, [
+    damageSummaries,
+    facilityFilter,
+    searchTerm,
+    reportIdFilter,
+    statusFilter,
+    vinFilter,
+    makeFilter,
+    modelFilter,
+    inspectorEmailFilter,
+    createdFrom,
+    createdTo,
+  ]);
 
   const sortedDamageSummaries = useMemo(() => {
     const withIndex = filteredDamageSummaries.map((summary, index) => ({ summary, index }));
@@ -386,6 +448,78 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     () => (selectedDamageFullRow && Array.isArray(selectedDamageFullRow.damage_entries) ? selectedDamageFullRow.damage_entries : []),
     [selectedDamageFullRow]
   );
+  const facilityChoices = useMemo<FacilitySummary[]>(() => {
+    const choices = new Map<string, string>();
+    damageSummaries.forEach((summary) => {
+      const label = summary.locationName || summary.facilityName || "Unknown facility";
+      const slug = slugForFacilityLabel(label);
+      if (!choices.has(slug)) choices.set(slug, label);
+    });
+    return Array.from(choices.entries()).map(([slug, label]) => ({
+      id: slug,
+      name: label,
+      slug,
+      active: true,
+      locationCount: 1,
+    }));
+  }, [damageSummaries]);
+  const inspectorChoices = useMemo(() => {
+    const usersByEmail = new Map<string, { email: string; label: string }>();
+    (directory?.users ?? []).forEach((user) => {
+      if (!user.email) return;
+      usersByEmail.set(user.email.toLowerCase(), {
+        email: user.email,
+        label: user.name ? `${user.name} (${user.email})` : user.email,
+      });
+    });
+    damageSummaries.forEach((summary) => {
+      const email = summary.inspectorEmail?.trim();
+      if (!email || usersByEmail.has(email.toLowerCase())) return;
+      usersByEmail.set(email.toLowerCase(), { email, label: email });
+    });
+    return Array.from(usersByEmail.values()).sort((left, right) => left.label.localeCompare(right.label));
+  }, [damageSummaries, directory?.users]);
+  const reportDateBounds = useMemo(() => {
+    const dates = damageSummaries
+      .map((summary) => (summary.createdAt ? new Date(summary.createdAt) : null))
+      .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()))
+      .sort((left, right) => left.getTime() - right.getTime());
+    return {
+      minDate: dates[0] ? toDateInputValue(dates[0]) : null,
+      maxDate: dates[dates.length - 1] ? toDateInputValue(dates[dates.length - 1]) : null,
+    };
+  }, [damageSummaries]);
+  const clearDamageFilters = useCallback(() => {
+    setActiveDamageFilterKeys([]);
+    setFacilityFilter("all");
+    setSearchTerm("");
+    setReportIdFilter("");
+    setVinFilter("");
+    setMakeFilter("");
+    setModelFilter("");
+    setInspectorEmailFilter("");
+    setStatusFilter("");
+    setCreatedFrom("");
+    setCreatedTo("");
+  }, []);
+  const availableDamageFilterOptions = useMemo(
+    () => DAMAGE_FILTER_OPTIONS.filter((option) => !activeDamageFilterKeys.includes(option.key)),
+    [activeDamageFilterKeys]
+  );
+  const removeDamageFilter = useCallback((key: DamageFilterKey) => {
+    setActiveDamageFilterKeys((current) => current.filter((filterKey) => filterKey !== key));
+    if (key === "facility") setFacilityFilter("all");
+    if (key === "report_id") setReportIdFilter("");
+    if (key === "vin") setVinFilter("");
+    if (key === "make") setMakeFilter("");
+    if (key === "model") setModelFilter("");
+    if (key === "inspector_email") setInspectorEmailFilter("");
+    if (key === "status") setStatusFilter("");
+    if (key === "date_range") {
+      setCreatedFrom("");
+      setCreatedTo("");
+    }
+  }, []);
   const selectedDamageReportComment = useMemo(() => {
     if (!selectedDamageFullRow) {
       return "";
@@ -520,6 +654,78 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     });
     setDamageSortField(columnId);
   }, []);
+  const damageFilterInputClass =
+    "h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300";
+  const wideDamageFilterInputClass =
+    "h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300";
+  const renderDamageFilterControl = (key: DamageFilterKey) => {
+    if (key === "facility") {
+      return (
+        <div className="w-52">
+          <FacilitySelector facilities={facilityChoices} value={facilityFilter} onChange={setFacilityFilter} />
+        </div>
+      );
+    }
+    if (key === "report_id") {
+      return (
+        <input type="search" placeholder="Report ID" value={reportIdFilter} onChange={(event) => setReportIdFilter(event.target.value)} className={damageFilterInputClass} />
+      );
+    }
+    if (key === "vin") {
+      return (
+        <input type="search" placeholder="VIN" value={vinFilter} onChange={(event) => setVinFilter(event.target.value.toUpperCase())} className={damageFilterInputClass} />
+      );
+    }
+    if (key === "make") {
+      return (
+        <input type="search" placeholder="Make" value={makeFilter} onChange={(event) => setMakeFilter(event.target.value)} className={damageFilterInputClass} />
+      );
+    }
+    if (key === "model") {
+      return (
+        <input type="search" placeholder="Model" value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} className={damageFilterInputClass} />
+      );
+    }
+    if (key === "inspector_email") {
+      return (
+        <select value={inspectorEmailFilter} onChange={(event) => setInspectorEmailFilter(event.target.value)} className={wideDamageFilterInputClass}>
+          <option value="">All inspectors</option>
+          {inspectorChoices.map((user) => (
+            <option key={user.email} value={user.email}>
+              {user.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    if (key === "status") {
+      return (
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ReportStatus | "")} className={damageFilterInputClass}>
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="review">Review</option>
+          <option value="closed">Closed</option>
+          <option value="verified">Verified</option>
+          <option value="archived">Archived</option>
+        </select>
+      );
+    }
+    if (key === "date_range") {
+      return (
+        <ReportDateRangeFilter
+          value={{ createdFrom, createdTo }}
+          onChange={({ createdFrom: nextFrom, createdTo: nextTo }) => {
+            setCreatedFrom(nextFrom);
+            setCreatedTo(nextTo);
+          }}
+          label="Select date"
+          minDate={reportDateBounds.minDate}
+          maxDate={reportDateBounds.maxDate}
+        />
+      );
+    }
+    return null;
+  };
 
   if (sessionStatus === "unauthenticated") {
     return (
@@ -552,39 +758,72 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             sortDirection={damageSortDirections[damageSortField]}
             onSort={handleDamageSort}
             actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
+              <div className="flex w-full min-w-[min(100%,48rem)] flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative min-w-56 flex-1">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     type="search"
                     placeholder="Search reports..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 shadow-sm"
+                    className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
                   />
+                  </div>
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      const key = event.target.value as DamageFilterKey;
+                      if (!key) return;
+                      setActiveDamageFilterKeys((current) => (current.includes(key) ? current : [...current, key]));
+                      event.target.value = "";
+                    }}
+                    className="min-h-8 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+                  >
+                    <option value="">Add filter...</option>
+                    {availableDamageFilterOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={clearDamageFilters}
+                    className="flex min-h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-slate-500 shadow-sm transition-all hover:text-slate-900"
+                  >
+                    <FilterX className="h-4 w-4" />
+                    Clear
+                  </button>
+                  <button
+                    onClick={() => void fetchReports()}
+                    disabled={loading}
+                    title={loading ? "Refresh in progress" : "Refresh reports"}
+                    className="flex min-h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
                 </div>
-                <input
-                  type="date"
-                  value={createdFrom}
-                  onChange={(e) => setCreatedFrom(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-300 shadow-sm"
-                  title="Created from"
-                />
-                <input
-                  type="date"
-                  value={createdTo}
-                  onChange={(e) => setCreatedTo(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-300 shadow-sm"
-                  title="Created to"
-                />
-                <button
-                  onClick={() => void fetchReports()}
-                  disabled={loading}
-                  title={loading ? "Refresh in progress" : "Refresh reports"}
-                  className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-900 transition-all shadow-sm disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                {activeDamageFilterKeys.length ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activeDamageFilterKeys.map((key) => {
+                      const label = DAMAGE_FILTER_OPTIONS.find((option) => option.key === key)?.label ?? key;
+                      return (
+                        <div key={key} className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
+                          <span className="w-24 shrink-0 truncate text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+                          {renderDamageFilterControl(key)}
+                          <button
+                            type="button"
+                            onClick={() => removeDamageFilter(key)}
+                            className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
+                            aria-label={`Remove ${label} filter`}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             }
           >
@@ -635,7 +874,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         <div className="lg:col-span-2">
           <div className="sticky top-24">
             {selectedDamageFullRow ? (
-              <Card>
+              <Card className="flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden">
                 <div className="px-6 pt-4">
                   <div className="flex items-center justify-center">
                     <p className="text-[16px] font-semibold text-blue-700">Report Details</p>
@@ -652,6 +891,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     <ReportActions
                       className="min-w-[10rem] max-w-[12rem]"
                       onEdit={openDamageReportEditor}
+                      photosLoading={isDownloadingPhotos}
                       photosDisabledReason={
                         !selectedDamageFullRow.report_id
                           ? "Backend action pending"
@@ -661,8 +901,15 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                       }
                       pdfDisabledReason={!selectedDamagePdfUrl ? "Backend action pending" : undefined}
                       onDownloadPhotos={async () => {
-                        if (!selectedDamageFullRow.report_id) return;
-                        await ReportsAdapter.downloadDamageReportPhotosZip(selectedDamageFullRow);
+                        if (!selectedDamageFullRow.report_id || isDownloadingPhotos) return;
+                        setIsDownloadingPhotos(true);
+                        try {
+                          await ReportsAdapter.downloadDamageReportPhotosZip(selectedDamageFullRow);
+                        } catch (error) {
+                          setDamageEditStatus(error instanceof Error ? error.message : "Unable to download report photos.");
+                        } finally {
+                          setIsDownloadingPhotos(false);
+                        }
                       }}
                       onDownloadPdf={() => {
                         if (!selectedDamagePdfUrl) return;
@@ -673,7 +920,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     />
                   </div>
                 </div>
-                <CardContent className="space-y-5">
+                <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain">
                   <div className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between gap-2">
                         <div>

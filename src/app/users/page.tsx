@@ -13,18 +13,21 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorPanel } from "@/components/ui/ErrorPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ConfirmActionDialog } from "@/components/ui/ConfirmActionDialog";
 import { InviteUserModal } from "@/components/users/InviteUserModal";
 import { ResetPasswordDialog } from "@/components/users/ResetPasswordDialog";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { usePortalSession } from "@/lib/portalSession";
 import { refreshControlPlaneBootstrap, useControlPlaneBootstrap, usePortalDirectorySnapshot } from "@/lib/portalData";
-import { RefreshCw, UserPlus, Search, Shield, ChevronDown, User } from "lucide-react";
+import { RefreshCw, UserPlus, Search, Shield, ChevronDown, User, Pencil } from "lucide-react";
 import type { ChangeEvent } from "react";
-import type { EmailListSummary, FacilitySummary } from "@/lib/types";
+import type { DeletedUserSummary, FacilitySummary } from "@/lib/types";
 import { selectedRowStrokeClass } from "@/lib/severityTheme";
 
 const columns = ["User Identity", "Security Role", "Status", "Last Login"];
 const FACILITY_ALL = "all";
+const VIEW_ACTIVE = "active";
+const VIEW_DELETED = "deleted";
 const ACTIVE_LOGIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const facilityRecipientAliases: Record<string, string> = {
   jn: "jnap",
@@ -52,54 +55,6 @@ function canonicalFacilityKey(value: string | null | undefined): string {
   return normalizeFacilityRecipientKey(value);
 }
 
-function getFacilityKeys(facility: FacilitySummary): string[] {
-  return [
-    facility.id,
-    facility.slug,
-    facility.name,
-    (facility as Partial<{ location_id: string }>).location_id ?? "",
-    (facility as Partial<{ location_name: string }>).location_name ?? "",
-    (facility as Partial<{ location_label: string }>).location_label ?? "",
-  ]
-    .map((value) => canonicalFacilityKey(value))
-    .filter((value): value is string => Boolean(value));
-}
-
-function getListKeys(list: EmailListSummary): string[] {
-  return [
-    list.location_id ?? "",
-    list.list_key ?? "",
-    (list as Partial<{ key: string }>).key ?? "",
-    list.list_name ?? "",
-    (list as Partial<{ name: string }>).name ?? "",
-    (list as Partial<{ list_name: string }>).list_name ?? "",
-    (list as Partial<{ navigation_label: string }>).navigation_label ?? "",
-    (list.metadata && typeof list.metadata === "object" ? (list.metadata as Record<string, unknown>).location_key : "") as string,
-    (list.metadata && typeof list.metadata === "object" ? (list.metadata as Record<string, unknown>).location_id : "") as string,
-  ]
-    .map((value) => canonicalFacilityKey(typeof value === "string" ? value : ""))
-    .filter((value): value is string => Boolean(value));
-}
-
-function userMatchesRecipientEntry(
-  selectedUser: { id: string; email: string; name: string },
-  member: { email: string; user_id?: string; display_name?: string }
-): boolean {
-  const candidateKeys = [
-    canonicalFacilityKey(member.email),
-    canonicalFacilityKey(member.user_id || ""),
-    canonicalFacilityKey(member.display_name || ""),
-  ].filter((value): value is string => Boolean(value));
-  const userKeys = [
-    canonicalFacilityKey(selectedUser.id),
-    canonicalFacilityKey(selectedUser.email),
-    canonicalFacilityKey(selectedUser.name),
-  ].filter((value): value is string => Boolean(value));
-  return candidateKeys.some((candidateKey) =>
-    userKeys.some((userKey) => userKey === candidateKey || userKey.includes(candidateKey) || candidateKey.includes(userKey))
-  );
-}
-
 function isUserActiveFromLastLogin(lastLogin?: string | null): boolean {
   if (!lastLogin) {
     return false;
@@ -113,9 +68,15 @@ function isUserActiveFromLastLogin(lastLogin?: string | null): boolean {
 
 type UserFacilityAssignmentDisplay = {
   facility: FacilitySummary;
-  source: "location" | "email";
+  source: "api";
   roleLabel: string;
-  membershipId?: string;
+};
+
+type DeletedUserDetailSnapshot = DeletedUserSummary & {
+  membershipStateLabel: string;
+  facilityCount: number;
+  priorRoleLabel: string;
+  activeFlagLabel: string;
 };
 
 export default function UsersPage() {
@@ -123,9 +84,16 @@ export default function UsersPage() {
   const searchParams = useSearchParams();
   const { data: bootstrap } = useControlPlaneBootstrap();
   const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const [viewMode, setViewMode] = useState<typeof VIEW_ACTIVE | typeof VIEW_DELETED>(VIEW_ACTIVE);
   const [facilityFilter, setFacilityFilter] = useState<string>(FACILITY_ALL);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(searchParams?.get("user") ?? null);
+  const [deletedUsers, setDeletedUsers] = useState<DeletedUserSummary[]>([]);
+  const [deletedUsersLoading, setDeletedUsersLoading] = useState(true);
+  const [deletedUsersError, setDeletedUsersError] = useState<string | null>(null);
+  const [selectedDeletedUserId, setSelectedDeletedUserId] = useState<string | null>(null);
+  const [restoreCandidate, setRestoreCandidate] = useState<DeletedUserSummary | null>(null);
+  const [restorePendingUserId, setRestorePendingUserId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"invite" | "identity" | "status" | "password-reset" | null>(null);
@@ -136,8 +104,6 @@ export default function UsersPage() {
   const users = useMemo(() => directory?.users ?? [], [directory]);
   const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
   const locationMemberships = useMemo(() => directory?.locationMemberships ?? [], [directory]);
-  const emailLists = useMemo(() => directory?.emailLists ?? [], [directory]);
-  const emailListMembersByListId = useMemo(() => directory?.emailListMembersByListId ?? {}, [directory]);
   const directoryPartialError = directory?.partialError ?? null;
   const capabilities = bootstrap?.capabilities;
   const inviteDisabledReason = !isOrgAdmin ? "Organization admin permission is required to add users." : null;
@@ -148,19 +114,30 @@ export default function UsersPage() {
     await refreshDirectory();
   };
 
+  const loadDeletedUsers = async () => {
+    if (!organizationId) {
+      setDeletedUsers([]);
+      return;
+    }
+    setDeletedUsersLoading(true);
+    setDeletedUsersError(null);
+    try {
+      const records = await UsersAdapter.getDeletedUsers(organizationId);
+      setDeletedUsers(records);
+    } catch (error) {
+      setDeletedUsersError(error instanceof Error ? error.message : "Deleted users could not be loaded.");
+      setDeletedUsers([]);
+    } finally {
+      setDeletedUsersLoading(false);
+    }
+  };
+
   const facilityLookup = useMemo(() => {
     return facilities.reduce<Record<string, FacilitySummary>>((acc, facility) => {
       acc[facility.id] = facility;
       return acc;
     }, {});
   }, [facilities]);
-  const userLookupByEmail = useMemo(() => {
-    return users.reduce<Record<string, (typeof users)[number]>>((acc, user) => {
-      acc[user.email.toLowerCase()] = user;
-      return acc;
-    }, {});
-  }, [users]);
-
   useEffect(() => {
     const userFromQuery = searchParams?.get("user");
     if (userFromQuery && userFromQuery !== selectedUserId) {
@@ -168,43 +145,24 @@ export default function UsersPage() {
     }
   }, [searchParams, selectedUserId]);
 
+  useEffect(() => {
+    void loadDeletedUsers();
+  }, [organizationId]);
+
   const userFacilityIdsByUserId = useMemo(() => {
     const assignments = new Map<string, Set<string>>();
-    const addAssignment = (userId: string | undefined, facilityId: string | undefined) => {
-      if (!userId || !facilityId) return;
-      const existing = assignments.get(userId) ?? new Set<string>();
-      existing.add(facilityId);
-      assignments.set(userId, existing);
-    };
-
+    users.forEach((user) => {
+      const assignedFacilities = Array.isArray(user.facilityIds) ? user.facilityIds.filter(Boolean) : [];
+      assignments.set(user.id, new Set(assignedFacilities));
+    });
     locationMemberships.forEach((membership) => {
-      addAssignment(membership.user_id, membership.location_id);
+      if (!membership.user_id || !membership.location_id) return;
+      const existing = assignments.get(membership.user_id) ?? new Set<string>();
+      existing.add(membership.location_id);
+      assignments.set(membership.user_id, existing);
     });
-
-    facilities.forEach((facility) => {
-      const facilityKeys = getFacilityKeys(facility);
-      const matchedLists = emailLists.filter((list) =>
-        getListKeys(list).some((listKey) =>
-          facilityKeys.some((facilityKey) => facilityKey === listKey || facilityKey.includes(listKey) || listKey.includes(facilityKey))
-        )
-      );
-
-      matchedLists.forEach((list) => {
-        const members = emailListMembersByListId[list.email_list_id] ?? [];
-        members.forEach((member) => {
-          const resolvedUser =
-            (member.user_id && users.find((user) => user.id === member.user_id)) ||
-            userLookupByEmail[member.email.toLowerCase()] ||
-            null;
-          if (resolvedUser && userMatchesRecipientEntry(resolvedUser, member)) {
-            addAssignment(resolvedUser.id, facility.id);
-          }
-        });
-      });
-    });
-
     return assignments;
-  }, [emailListMembersByListId, emailLists, facilities, locationMemberships, userLookupByEmail, users]);
+  }, [locationMemberships, users]);
 
   const filteredUsers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -227,47 +185,56 @@ export default function UsersPage() {
     : false;
   const selectedFacilityAssignments = useMemo(() => {
     if (!selectedUser) return [];
-    const seen = new Set<string>();
-    const membershipAssignments = (locationMemberships
-      .filter((membership) => membership.user_id === selectedUser.id)
-      .map((membership) => {
-        const facility = facilityLookup[membership.location_id];
+    const facilityIds = Array.from(userFacilityIdsByUserId.get(selectedUser.id) ?? []);
+    const resolvedFacilityIds = facilityIds.length ? facilityIds : facilities.map((facility) => facility.id);
+    return resolvedFacilityIds
+      .map((facilityId) => {
+        const facility = facilityLookup[facilityId];
         return facility
           ? {
               facility,
-              membershipId: membership.location_membership_id,
-              source: "location" as const,
-              roleLabel: membership.role || "member",
+              source: "api" as const,
+              roleLabel: "assigned",
             }
           : null;
       })
-      .filter(Boolean) as UserFacilityAssignmentDisplay[])
-      .filter((entry) => {
-        if (seen.has(entry.facility.id)) return false;
-        seen.add(entry.facility.id);
-        return true;
-      });
-    const emailRecipientAssignments: UserFacilityAssignmentDisplay[] = facilities
-      .filter((facility) => {
-        const facilityKeys = getFacilityKeys(facility);
-        return emailLists.some((list) => {
-          const listKeys = getListKeys(list);
-          const facilityMatched = listKeys.some((listKey) =>
-            facilityKeys.some((facilityKey) => facilityKey === listKey || facilityKey.includes(listKey) || listKey.includes(facilityKey))
-          );
-          if (!facilityMatched) return false;
-          const members = emailListMembersByListId[list.email_list_id] ?? [];
-          return members.some((member) => userMatchesRecipientEntry(selectedUser, member));
-        });
-      })
-      .map((facility) => ({ facility, source: "email" as const, roleLabel: "recipient" }))
-      .filter((entry) => {
-        if (seen.has(entry.facility.id)) return false;
-        seen.add(entry.facility.id);
-        return true;
-      });
-    return [...membershipAssignments, ...emailRecipientAssignments];
-  }, [emailListMembersByListId, emailLists, facilityLookup, locationMemberships, selectedUser, facilities]);
+      .filter((entry): entry is UserFacilityAssignmentDisplay => Boolean(entry));
+  }, [facilityLookup, facilities, selectedUser, userFacilityIdsByUserId]);
+
+  const deletedUserDetails = useMemo<DeletedUserDetailSnapshot | null>(() => {
+    if (!selectedDeletedUserId) {
+      return deletedUsers[0]
+        ? {
+            ...deletedUsers[0],
+            membershipStateLabel: deletedUsers[0].organizationMembership?.is_active === false ? "Inactive membership" : "Membership snapshot",
+            facilityCount: deletedUsers[0].locationMemberships.length,
+            priorRoleLabel: deletedUsers[0].organizationMembership?.role || deletedUsers[0].role || "Unknown",
+            activeFlagLabel: deletedUsers[0].isActive ? "Active" : "Inactive",
+          }
+        : null;
+    }
+    const match = deletedUsers.find((user) => user.id === selectedDeletedUserId) ?? null;
+    if (!match) return null;
+    return {
+      ...match,
+      membershipStateLabel: match.organizationMembership?.is_active === false ? "Inactive membership" : "Membership snapshot",
+      facilityCount: match.locationMemberships.length,
+      priorRoleLabel: match.organizationMembership?.role || match.role || "Unknown",
+      activeFlagLabel: match.isActive ? "Active" : "Inactive",
+    };
+  }, [deletedUsers, selectedDeletedUserId]);
+
+  const deletedUsersFiltered = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return deletedUsers.filter((user) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        user.name.toLowerCase().includes(normalizedSearch) ||
+        user.email.toLowerCase().includes(normalizedSearch) ||
+        user.id.toLowerCase().includes(normalizedSearch);
+      return matchesSearch;
+    });
+  }, [deletedUsers, searchTerm]);
 
   const activeUsers = users.filter((user) => user.isActive && (user.lastLogin ? isUserActiveFromLastLogin(user.lastLogin) : true)).length;
   const adminUsers = users.filter((user) => user.role === "admin").length;
@@ -304,6 +271,35 @@ export default function UsersPage() {
     }
   };
 
+  const handleUpdateSelectedUser = async (payload: {
+    email: string;
+    display_name?: string;
+    role: string;
+    facility_ids: string[];
+    invite: boolean;
+  }) => {
+    if (!organizationId || !selectedUser || !isOrgAdmin) {
+      throw new Error("Organization admin permission is required.");
+    }
+    setOperationMessage(null);
+    setPendingAction("identity");
+    try {
+      await UsersAdapter.updateUser(organizationId, selectedUser.id, {
+        display_name: payload.display_name || selectedUser.name,
+        email: selectedUser.email,
+        role: payload.role,
+      });
+      await UsersAdapter.updateUserFacilities(organizationId, selectedUser.id, payload.facility_ids);
+      setOperationMessage(`${selectedUser.name} updated.`);
+      await loadDirectory();
+      await refreshControlPlaneBootstrap(organizationId);
+    } catch {
+      throw new Error("User update failed.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   const handleDeleteUser = async () => {
     if (!organizationId || !selectedUser) return;
     if (!window.confirm(`Delete ${selectedUser.name}? This cannot be undone.`)) return;
@@ -323,6 +319,22 @@ export default function UsersPage() {
   const handlePasswordResetSuccess = async (message: string) => {
     setOperationMessage(message);
     await loadDirectory();
+  };
+
+  const handleRestoreDeletedUser = async (user: DeletedUserSummary) => {
+    if (!organizationId || !isOrgAdmin) return;
+    setRestorePendingUserId(user.id);
+    try {
+      await UsersAdapter.restoreUser(organizationId, user.id);
+      setOperationMessage(`${user.email || user.name} restored to active access.`);
+      setRestoreCandidate(null);
+      setSelectedDeletedUserId(null);
+      await Promise.all([loadDirectory(), loadDeletedUsers(), refreshControlPlaneBootstrap(organizationId)]);
+    } catch (error) {
+      setOperationMessage(error instanceof Error ? error.message : "Restore failed.");
+    } finally {
+      setRestorePendingUserId(null);
+    }
   };
 
   const handleRoleChange = async (event: ChangeEvent<HTMLSelectElement>) => {
@@ -347,7 +359,10 @@ export default function UsersPage() {
     if (!selectedAssignmentFacilityId.trim()) return;
     setPendingAction("identity");
     try {
-      await UsersAdapter.addFacilityMembership(organizationId, selectedUser.id, selectedAssignmentFacilityId.trim(), selectedAssignmentRole.trim() || "member");
+      const nextFacilityIds = Array.from(
+        new Set([...selectedFacilityAssignments.map((assignment) => assignment.facility.id), selectedAssignmentFacilityId.trim()])
+      );
+      await UsersAdapter.updateUserFacilities(organizationId, selectedUser.id, nextFacilityIds);
       setOperationMessage(`Assigned ${selectedUser.name} to ${selectedAssignmentFacilityId.trim()}.`);
       await loadDirectory();
       await refreshControlPlaneBootstrap(organizationId);
@@ -382,6 +397,7 @@ export default function UsersPage() {
   }
 
   const directoryError = error ? "Directory load failed." : null;
+  const canRestoreDeletedUser = isOrgAdmin;
 
   return (
     <article className="space-y-4">
@@ -411,6 +427,26 @@ export default function UsersPage() {
         variant="panel"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setViewMode(VIEW_ACTIVE)}
+                className={`rounded-md px-3 py-1.5 text-xs font-black uppercase tracking-widest ${
+                  viewMode === VIEW_ACTIVE ? "bg-slate-900 text-white" : "text-slate-500"
+                }`}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode(VIEW_DELETED)}
+                className={`rounded-md px-3 py-1.5 text-xs font-black uppercase tracking-widest ${
+                  viewMode === VIEW_DELETED ? "bg-slate-900 text-white" : "text-slate-500"
+                }`}
+              >
+                Deleted
+              </button>
+            </div>
             <div className="relative group">
                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-slate-900 transition-colors" />
                <input
@@ -421,11 +457,9 @@ export default function UsersPage() {
                  className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-300 transition-all shadow-sm"
                />
             </div>
-            <FacilitySelector
-              facilities={facilities}
-              value={facilityFilter}
-              onChange={setFacilityFilter}
-            />
+            {viewMode === VIEW_ACTIVE ? (
+              <FacilitySelector facilities={facilities} value={facilityFilter} onChange={setFacilityFilter} />
+            ) : null}
             <button
               onClick={() => void loadDirectory()}
               disabled={isLoading}
@@ -434,35 +468,37 @@ export default function UsersPage() {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-            <InviteUserModal
-              facilities={facilities}
-              canInviteUser={true}
-              organizationMissingReason={!organizationId ? "Organization context missing." : null}
-              onInvite={handleInviteUser}
-              trigger={
-                <button
-                  type="button"
-                  disabled={pendingAction !== null || Boolean(inviteDisabledReason)}
-                  title={inviteDisabledReason ?? undefined}
-                  className="flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-sm font-black uppercase tracking-widest text-white shadow-md shadow-slate-900/10 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  {pendingAction === "invite" ? "Adding..." : "Add Users"}
-                </button>
-              }
-            />
+            {viewMode === VIEW_ACTIVE ? (
+              <InviteUserModal
+                facilities={facilities}
+                canInviteUser={true}
+                organizationMissingReason={!organizationId ? "Organization context missing." : null}
+                onInvite={handleInviteUser}
+                trigger={
+                  <button
+                    type="button"
+                    disabled={pendingAction !== null || Boolean(inviteDisabledReason)}
+                    title={inviteDisabledReason ?? undefined}
+                    className="flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-sm font-black uppercase tracking-widest text-white shadow-md shadow-slate-900/10 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    {pendingAction === "invite" ? "Adding..." : "Add Users"}
+                  </button>
+                }
+              />
+            ) : null}
           </div>
         }
       >
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="lg:col-span-3">
-            {isLoading ? (
+            {viewMode === VIEW_ACTIVE && isLoading ? (
               <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-slate-400" /></div>
-            ) : statusMessage ? (
+            ) : viewMode === VIEW_ACTIVE && statusMessage ? (
               <EmptyState title="Directory error" description={statusMessage} tone="danger" action={<button type="button" onClick={() => void loadDirectory()} className="rounded-full border border-current/20 px-4 py-2 text-sm font-black uppercase tracking-widest">Retry</button>} />
-            ) : showEmptyState ? (
+            ) : viewMode === VIEW_ACTIVE && showEmptyState ? (
               <EmptyState title="No users match the current view" description="Try adjusting search or facility filters. This is an empty filtered result, not a load failure." />
-            ) : (
+            ) : viewMode === VIEW_ACTIVE ? (
               <div className="-mx-4 -mb-4">
                 <DataTableShell columns={columns}>
                   {filteredUsers.map((user) => {
@@ -504,27 +540,115 @@ export default function UsersPage() {
                   })}
                 </DataTableShell>
               </div>
+            ) : deletedUsersLoading ? (
+              <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-slate-400" /></div>
+            ) : deletedUsersError ? (
+              <EmptyState title="Deleted users could not be loaded." description={deletedUsersError} tone="danger" action={<button type="button" onClick={() => void loadDeletedUsers()} className="rounded-full border border-current/20 px-4 py-2 text-sm font-black uppercase tracking-widest">Retry</button>} />
+            ) : deletedUsersFiltered.length ? (
+              <div className="-mx-4 -mb-4">
+                <DataTableShell columns={["Name", "Email", "Role", "Status", "Membership", "Facilities", "Deleted", "Actions"]}>
+                  {deletedUsersFiltered.map((user) => {
+                    const isSelected = user.id === selectedDeletedUserId;
+                    const deletedLabel = user.deletedAt || user.deactivatedAt || user.suspendedAt || user.lastUpdated;
+                    const membershipState = user.organizationMembership
+                      ? (user.organizationMembership.is_active ? "Member snapshot" : "Membership inactive")
+                      : "Membership unavailable";
+                    return (
+                      <tr
+                        key={user.id}
+                        onClick={() => setSelectedDeletedUserId(user.id)}
+                        className={`group transition-all duration-150 cursor-pointer ${selectedRowStrokeClass(isSelected)} hover:bg-slate-50`}
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-sm font-black ${isSelected ? 'text-slate-900' : 'text-slate-500'}`}>
+                              {user.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-bold truncate text-slate-900">{user.name}</span>
+                              <span className="text-sm text-slate-500 font-medium truncate">{user.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-700">{user.email}</td>
+                        <td className="px-4 py-2">
+                          <StatusBadge label={user.organizationMembership?.role || user.role || "unknown"} tone="neutral" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <StatusBadge label={user.isDeactivated ? "Deactivated" : user.isSuspended ? "Suspended" : user.isDeleted ? "Deleted" : user.status || "Inactive"} tone="danger" />
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-600">{membershipState}</td>
+                        <td className="px-4 py-2 text-sm text-slate-600">{user.locationMemberships.length}</td>
+                        <td className="px-4 py-2 text-sm font-bold text-slate-400 uppercase tracking-tighter">
+                          {deletedLabel ? new Date(deletedLabel).toLocaleDateString([], { month: "short", day: "numeric" }) : "N/A"}
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedDeletedUserId(user.id);
+                              }}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                            >
+                              View details
+                            </button>
+                            {canRestoreDeletedUser ? (
+                              <button
+                                type="button"
+                                disabled={restorePendingUserId === user.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setRestoreCandidate(user);
+                                }}
+                                className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-black uppercase tracking-widest text-white hover:bg-slate-800 disabled:opacity-50"
+                              >
+                                {restorePendingUserId === user.id ? "Restoring..." : "Restore access"}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </DataTableShell>
+              </div>
+            ) : (
+              <EmptyState title="No deleted users found for this organization." description="Deleted and deactivated accounts will appear here when the backend returns them." />
             )}
           </div>
 
           <aside className="lg:border-l border-slate-100 pl-4 py-2">
              <div className="sticky top-4 space-y-6">
-                {selectedUser ? (
+                {viewMode === VIEW_ACTIVE && selectedUser ? (
                   <>
                     <header className="space-y-3">
-                       <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-lg bg-slate-100 text-slate-900 flex items-center justify-center text-xl font-black shadow-inner">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-lg bg-slate-100 text-slate-900 flex items-center justify-center text-xl font-black shadow-inner">
                             {selectedUser.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                             <h3 className="text-sm font-black text-slate-950 leading-none truncate uppercase tracking-tight">{selectedUser.name}</h3>
-                          <p className="text-sm text-slate-500 font-bold mt-1 truncate">{selectedUser.email}</p>
+                            <h3 className="text-sm font-black text-slate-950 leading-none truncate uppercase tracking-tight">{selectedUser.name}</h3>
+                            <p className="text-sm text-slate-500 font-bold mt-1 truncate">{selectedUser.email}</p>
                           </div>
-                       </div>
-                          <div className="flex gap-1.5">
-                          <StatusBadge label={selectedUser.role} tone="neutral" />
-                          <StatusBadge label={selectedUserIsActive ? "Sync: Active" : "Sync: Inactive"} tone={selectedUserIsActive ? "positive" : "danger"} />
-                       </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsAssignDialogOpen(true)}
+                          disabled={!isOrgAdmin || pendingAction !== null}
+                          title={assignDisabledReason ?? "Edit user facilities"}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                      </div>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <StatusBadge label={selectedUser.role} tone="neutral" />
+                        <StatusBadge label={selectedUserIsActive ? "Sync: Active" : "Sync: Inactive"} tone={selectedUserIsActive ? "positive" : "danger"} />
+                      </div>
                     </header>
 
                     <nav className="space-y-4">
@@ -532,7 +656,7 @@ export default function UsersPage() {
                           <p className="text-sm font-black text-slate-400 uppercase tracking-widest px-1">Facility Assignments</p>
                           <div className="grid grid-cols-1 gap-1">
                              {selectedFacilityAssignments.length ? selectedFacilityAssignments.map((assignment) => {
-                               const key = assignment.source === "email" ? `${assignment.facility.id}-email` : assignment.membershipId || assignment.facility.id;
+                               const key = assignment.facility.id;
                                return (
                                <Link
                                  key={key}
@@ -587,49 +711,30 @@ export default function UsersPage() {
                              </select>
                           </div>
                        </div>
-                       <button
-                         type="button"
-                         onClick={() => {
-                           setAssignError(null);
-                           setIsAssignDialogOpen(true);
-                           if (!selectedAssignmentFacilityId && facilities[0]?.id) {
-                             setSelectedAssignmentFacilityId(facilities[0].id);
-                           }
+                       <InviteUserModal
+                         facilities={facilities}
+                         canInviteUser={isOrgAdmin}
+                         mode="update"
+                         initialUser={{
+                           email: selectedUser.email,
+                           displayName: selectedUser.name,
+                           role: selectedUser.role,
+                           facilityIds: selectedFacilityAssignments.map((assignment) => assignment.facility.id),
                          }}
-                         disabled={!isOrgAdmin || pendingAction !== null}
-                         title={assignDisabledReason ?? "Assign facility"}
-                         className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 text-sm font-black uppercase tracking-widest text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
-                       >
-                         Add Facility Assignment
-                         <ChevronDown className="w-3.5 h-3.5" />
-                       </button>
-                       {selectedFacilityAssignments.length ? (
-                         <div className="space-y-2">
-                           {selectedFacilityAssignments.map((assignment) => (
-                             <div key={assignment.membershipId || `${assignment.facility.id}-${assignment.source}`} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2">
-                               <Link href={`/facilities?facility=${encodeURIComponent(assignment.facility.id)}`} className="min-w-0">
-                                 <p className="truncate text-sm font-bold text-slate-800">{assignment.facility.name}</p>
-                                 <p className="truncate text-sm text-slate-500">{assignment.facility.slug}</p>
-                               </Link>
-                               {assignment.source === "location" && assignment.membershipId ? (
-                                 <button
-                                   type="button"
-                                   onClick={() => void handleRemoveFacilityAssignment(assignment.membershipId!)}
-                                   disabled={!isOrgAdmin || pendingAction !== null}
-                                   title={assignDisabledReason ?? "Remove facility assignment"}
-                                   className="rounded-full border border-slate-200 px-2 py-1 text-sm font-black uppercase tracking-widest text-slate-600 disabled:opacity-50"
-                                 >
-                                   Remove
-                                 </button>
-                               ) : (
-                                 <span className="rounded-full border border-slate-200 px-2 py-1 text-sm font-black uppercase tracking-widest text-slate-500">
-                                   Recipient
-                                 </span>
-                               )}
-                             </div>
-                           ))}
-                         </div>
-                       ) : null}
+                         organizationMissingReason={!organizationId ? "Organization context missing." : null}
+                         onInvite={handleUpdateSelectedUser}
+                         trigger={
+                           <button
+                             type="button"
+                             disabled={!isOrgAdmin || pendingAction !== null}
+                             title={assignDisabledReason ?? "Update user facilities"}
+                             className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 text-sm font-black uppercase tracking-widest text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
+                           >
+                             Add Facility Assignment
+                             <ChevronDown className="w-3.5 h-3.5" />
+                           </button>
+                         }
+                       />
                        {operationMessage && (
                          <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-black text-slate-700 uppercase tracking-widest text-center animate-in fade-in zoom-in-95">
                            {operationMessage}
@@ -704,6 +809,47 @@ export default function UsersPage() {
                       </DialogContent>
                     </Dialog>
                   </>
+                ) : viewMode === VIEW_DELETED && deletedUserDetails ? (
+                  <section className="space-y-4">
+                    <header className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-slate-100 text-slate-900 flex items-center justify-center text-xl font-black shadow-inner">
+                          {deletedUserDetails.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-slate-950 leading-none truncate uppercase tracking-tight">{deletedUserDetails.name}</h3>
+                          <p className="text-sm text-slate-500 font-semibold mt-1 truncate">{deletedUserDetails.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <StatusBadge label={deletedUserDetails.priorRoleLabel} tone="neutral" />
+                        <StatusBadge label={deletedUserDetails.activeFlagLabel} tone="danger" />
+                        <StatusBadge label={deletedUserDetails.membershipStateLabel} tone="neutral" />
+                      </div>
+                    </header>
+                    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="text-sm font-black uppercase tracking-widest text-slate-400">Snapshot</p>
+                      <div className="space-y-2 text-sm text-slate-700">
+                        <p><span className="font-black text-slate-900">User ID:</span> {deletedUserDetails.id}</p>
+                        <p><span className="font-black text-slate-900">Deleted/Deactivated:</span> {deletedUserDetails.deletedAt || deletedUserDetails.deactivatedAt || deletedUserDetails.suspendedAt || "Unavailable"}</p>
+                        <p><span className="font-black text-slate-900">Org membership:</span> {deletedUserDetails.organizationMembership ? "Present" : "Unavailable"}</p>
+                        <p><span className="font-black text-slate-900">Facility/location count:</span> {deletedUserDetails.facilityCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+                        Reports by this user: backend endpoint not wired yet.
+                      </div>
+                    </div>
+                    {canRestoreDeletedUser ? (
+                      <button
+                        type="button"
+                        onClick={() => setRestoreCandidate(deletedUserDetails)}
+                        disabled={restorePendingUserId === deletedUserDetails.id}
+                        className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-black uppercase tracking-widest text-white hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {restorePendingUserId === deletedUserDetails.id ? "Restoring..." : "Restore access"}
+                      </button>
+                    ) : null}
+                  </section>
                 ) : (
                   <div className="py-20 text-center space-y-4">
                      <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mx-auto">
@@ -716,6 +862,24 @@ export default function UsersPage() {
           </aside>
         </div>
       </PageSection>
+
+      <ConfirmActionDialog
+        isOpen={Boolean(restoreCandidate)}
+        onClose={() => setRestoreCandidate(null)}
+        onConfirm={() => {
+          if (restoreCandidate) {
+            void handleRestoreDeletedUser(restoreCandidate);
+          }
+        }}
+        title="Restore access"
+        message={
+          restoreCandidate
+            ? `Restore access for this user to this organization? This restores organization access only. Facility access may need to be reassigned separately.`
+            : ""
+        }
+        confirmLabel="Restore access"
+        isPending={Boolean(restoreCandidate && restorePendingUserId === restoreCandidate.id)}
+      />
     </article>
   );
 }

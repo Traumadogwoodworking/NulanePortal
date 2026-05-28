@@ -28,6 +28,13 @@ interface InviteUserModalProps {
   trigger: ReactNode;
   canInviteUser: boolean;
   organizationMissingReason?: string | null;
+  mode?: "invite" | "update";
+  initialUser?: {
+    email: string;
+    displayName?: string;
+    role?: string;
+    facilityIds?: string[];
+  } | null;
   onInvite: (payload: {
     email: string;
     display_name?: string;
@@ -49,6 +56,8 @@ export function InviteUserModal({
   trigger,
   canInviteUser,
   organizationMissingReason,
+  mode = "invite",
+  initialUser,
   onInvite,
 }: InviteUserModalProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -75,10 +84,10 @@ export function InviteUserModal({
   };
 
   const resetForm = () => {
-    setEmail("");
-    setDisplayName("");
-    setSelectedRole("user");
-    setSelectedFacilityIds([]);
+    setEmail(initialUser?.email ?? "");
+    setDisplayName(initialUser?.displayName ?? "");
+    setSelectedRole(initialUser?.role ?? "user");
+    setSelectedFacilityIds(initialUser?.facilityIds ?? []);
     setError(null);
   };
 
@@ -95,7 +104,7 @@ export function InviteUserModal({
         display_name: displayName.trim() || undefined,
         role: selectedRole,
         facility_ids: selectedFacilityIds,
-        invite: true,
+        invite: mode === "invite",
       });
       setIsOpen(false);
       resetForm();
@@ -111,17 +120,22 @@ export function InviteUserModal({
       open={isOpen}
       onOpenChange={(nextOpen) => {
         setIsOpen(nextOpen);
-        if (!nextOpen) {
+        if (nextOpen) {
           resetForm();
+        } else {
+          setError(null);
+          setIsPending(false);
         }
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Invite New User</DialogTitle>
+          <DialogTitle>{mode === "update" ? "Update User" : "Invite New User"}</DialogTitle>
           <DialogDescription>
-            Create a scoped invite and attach facility access in the same backend write.
+            {mode === "update"
+              ? "Update profile details and facility access for this user."
+              : "Create a scoped invite and attach facility access in the same backend write."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2">
@@ -138,6 +152,7 @@ export function InviteUserModal({
               placeholder="user@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={mode === "update"}
             />
           </div>
           <div className="grid gap-2">
@@ -196,8 +211,8 @@ export function InviteUserModal({
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-            <span className="block font-medium text-slate-900">Send invite email</span>
-            <span className="block text-xs text-slate-500">Always enabled.</span>
+            <span className="block font-medium text-slate-900">{mode === "update" ? "Save user changes" : "Send invite email"}</span>
+            <span className="block text-xs text-slate-500">{mode === "update" ? "This updates the selected user without sending an invite." : "Always enabled."}</span>
           </div>
           {!canInviteUser ? <p className="text-sm text-slate-500">Invite access is disabled for this session.</p> : null}
           {organizationMissingReason ? <p className="text-sm text-slate-500">{organizationMissingReason}</p> : null}
@@ -218,7 +233,7 @@ export function InviteUserModal({
             disabled={!canSubmit}
             className="bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:ring-emerald-500/30"
           >
-            {isPending ? "Inviting..." : "Invite User"}
+            {isPending ? (mode === "update" ? "Saving..." : "Inviting...") : mode === "update" ? "Save User" : "Invite User"}
           </Button>
         </DialogFooter>
       </DialogContent>

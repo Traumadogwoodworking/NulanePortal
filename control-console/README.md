@@ -44,3 +44,11 @@ control-console/
 - Use `npm run dev` while pointing `.env.local` to the target backend.
 - Add new ControlSurfaceDefinition exports under `components/surfaces` and register them via `lib/registry/registerDefaultSurfaces.ts` to keep the shell fully registry-driven.
 - Tailwind 4 is configured in `tailwind.config.ts`; run `npm run lint` to keep formatting and linting tidy.
+
+## Editing guidance
+
+- Inspect the active surface before editing it.
+- Keep changes small and local unless a larger change is required by the current behavior.
+- Prefer obvious code paths over layered abstractions.
+- Centralize style only when the source of truth is clear and the change is safe.
+- Preserve existing behavior when the task is a simplification, not a redesign.

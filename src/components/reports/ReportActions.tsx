@@ -96,7 +96,7 @@ export function ReportActions({
         }}
       >
         <FileImage className="w-3 h-3" />
-        <span>{photosLoading ? "Archiving..." : "Download Photos"}</span>
+        <span>{photosLoading ? "Preparing ZIP…" : "Download Photos"}</span>
       </button>
 
       <button

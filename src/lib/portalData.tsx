@@ -26,6 +26,17 @@ const STALE_TIME_MS = 1000 * 60 * 5;
 const REVALIDATE_ON_FOCUS = false;
 const REVALIDATE_ON_RECONNECT = true;
 const KEEP_PREVIOUS_DATA = true;
+const DIRECTORY_CACHE_KEY_PREFIX = "portalDirectoryCache";
+const REPORTS_CACHE_KEY_PREFIX = "portalReportsSnapshotCache";
+const CACHE_TTL_MS = STALE_TIME_MS;
+
+type CachedPayload<T> = {
+  timestamp: number;
+  value: T;
+};
+
+const directoryMemoryCache = new Map<string, CachedPayload<DirectorySnapshot>>();
+const reportsMemoryCache = new Map<string, CachedPayload<ReportsSnapshot>>();
 
 interface DirectorySnapshot {
   users: UserSummary[];
@@ -63,6 +74,51 @@ export function PortalDataProvider({ children }: { children: ReactNode }) {
       {children}
     </SWRConfig>
   );
+}
+
+function readCachedPayload<T>(memoryCache: Map<string, CachedPayload<T>>, storageKey: string, orgId: string): T | null {
+  const memoryEntry = memoryCache.get(orgId);
+  if (memoryEntry && Date.now() - memoryEntry.timestamp <= CACHE_TTL_MS) {
+    return memoryEntry.value;
+  }
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${storageKey}:${orgId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedPayload<T>;
+    if (typeof parsed.timestamp !== "number" || !parsed.value) return null;
+    if (Date.now() - parsed.timestamp > CACHE_TTL_MS) return null;
+    memoryCache.set(orgId, parsed);
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedPayload<T>(memoryCache: Map<string, CachedPayload<T>>, storageKey: string, orgId: string, value: T) {
+  const payload: CachedPayload<T> = { timestamp: Date.now(), value };
+  memoryCache.set(orgId, payload);
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(`${storageKey}:${orgId}`, JSON.stringify(payload));
+  } catch {
+    // ignore cache write failures
+  }
+}
+
+function hasUsefulDirectoryData(value: DirectorySnapshot | null): boolean {
+  return Boolean(
+    value &&
+      (value.users.length > 0 ||
+        value.facilities.length > 0 ||
+        value.locationMemberships.length > 0 ||
+        value.emailLists.length > 0 ||
+        Object.keys(value.emailListMembersByListId).length > 0)
+  );
+}
+
+function hasUsefulReportsData(value: ReportsSnapshot | null): boolean {
+  return Boolean(value && (value.damageReports.length > 0 || value.rsaReports.length > 0));
 }
 
 function ensureOrgId(orgId?: string | null) {
@@ -189,7 +245,18 @@ export function usePortalControlSnapshots() {
 export function usePortalDirectorySnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
-  return useSWR<DirectorySnapshot>(
+  const cachedValue = resolvedOrgId ? readCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId) : null;
+  const usableCache = hasUsefulDirectoryData(cachedValue);
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[portalData] usePortalDirectorySnapshot", {
+      organizationId,
+      resolvedOrgId,
+      swrKey: resolvedOrgId ? ["portal/directory", resolvedOrgId] : null,
+      cachedValuePresent: Boolean(cachedValue),
+      usableCache,
+    });
+  }
+  return useSWR<DirectorySnapshot | undefined>(
     resolvedOrgId ? ["portal/directory", resolvedOrgId] : null,
     async () => {
       if (!resolvedOrgId) {
@@ -251,7 +318,7 @@ export function usePortalDirectorySnapshot() {
         {}
       );
 
-      return {
+      const snapshot = {
         users: usersResult.status === "fulfilled" ? usersResult.value : [],
         facilities: facilitiesResult.status === "fulfilled" ? facilitiesResult.value : [],
         locationMemberships: membershipsResult.status === "fulfilled" ? membershipsResult.value : [],
@@ -259,17 +326,12 @@ export function usePortalDirectorySnapshot() {
         emailListMembersByListId,
         partialError: partialErrors.length ? partialErrors.join(" | ") : null,
       };
+      writeCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId, snapshot);
+      return snapshot;
     },
     {
-      fallbackData: {
-        users: [],
-        facilities: [],
-        locationMemberships: [],
-        emailLists: [],
-        emailListMembersByListId: {},
-        partialError: null,
-      },
-      revalidateIfStale: true,
+      fallbackData: usableCache && cachedValue ? cachedValue : undefined,
+      revalidateIfStale: !usableCache,
     }
   );
 }
@@ -296,7 +358,18 @@ export function usePortalEmailListMembers(listId?: string | null) {
 export function usePortalReportsSnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
-  return useSWR<ReportsSnapshot>(
+  const cachedValue = resolvedOrgId ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId) : null;
+  const usableCache = hasUsefulReportsData(cachedValue);
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[portalData] usePortalReportsSnapshot", {
+      organizationId,
+      resolvedOrgId,
+      swrKey: resolvedOrgId ? ["portal/reports-snapshot", resolvedOrgId] : null,
+      cachedValuePresent: Boolean(cachedValue),
+      usableCache,
+    });
+  }
+  return useSWR<ReportsSnapshot | undefined>(
     resolvedOrgId ? ["portal/reports-snapshot", resolvedOrgId] : null,
     async () => {
       if (!resolvedOrgId) {
@@ -314,15 +387,17 @@ export function usePortalReportsSnapshot() {
           ? `rsa reports: ${rsaReportsResult.reason instanceof Error ? rsaReportsResult.reason.message : "Unable to load RSA reports."}`
           : null,
       ].filter((entry): entry is string => Boolean(entry));
-      return {
+      const snapshot = {
         damageReports: damageReportsResult.status === "fulfilled" ? damageReportsResult.value : [],
         rsaReports: rsaReportsResult.status === "fulfilled" ? rsaReportsResult.value : [],
         partialError: partialErrors.length ? partialErrors.join(" | ") : null,
       };
+      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, snapshot);
+      return snapshot;
     },
     {
-      fallbackData: { damageReports: [], rsaReports: [], partialError: null },
-      revalidateIfStale: true,
+      fallbackData: usableCache && cachedValue ? cachedValue : undefined,
+      revalidateIfStale: !usableCache,
     }
   );
 }
