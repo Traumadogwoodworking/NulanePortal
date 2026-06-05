@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,11765,e=>{"use strict";var t=e.i(43476),i=e.i(71645),s=e.i(18566);e.s(["default",0,function(){let e=(0,s.useRouter)();return(0,i.useEffect)(()=>{e.replace("/email")},[e]),(0,t.jsx)("main",{className:"p-6 text-sm text-slate-500",children:"Redirecting..."})}])}]);

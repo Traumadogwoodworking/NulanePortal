@@ -1,0 +1,155 @@
+1:"$Sreact.fragment"
+5:I[97367,["/_next/static/chunks/088qzhi1i8lxw.js","/_next/static/chunks/05v.qllv1raln.js","/_next/static/chunks/0iygzp7xg15.1.js","/_next/static/chunks/0o.vt0ev9dfyz.js","/_next/static/chunks/1364hb2y4o8vp.js","/_next/static/chunks/0n4z.7yu76je-.js"],"OutletBoundary"]
+6:"$Sreact.suspense"
+2:T1064,
+(function () {
+  function bySelector(selector) {
+    return document.querySelector(selector);
+  }
+
+  function setStatus(value) {
+    var status = bySelector("[data-auth0-bootstrap-status]");
+    var state = bySelector("[data-auth0-bootstrap-state]");
+    if (status) {
+      status.textContent = value;
+    }
+    if (state) {
+      state.textContent = value;
+    }
+    console.debug("[Auth0Bootstrap]", value);
+  }
+
+  function setError(err) {
+    var error = bySelector("[data-auth0-bootstrap-error]");
+    var message = err && err.message ? err.message : String(err || "unknown error");
+    if (error) {
+      error.textContent = message;
+    }
+    console.error("[Auth0Bootstrap]", err);
+  }
+
+  function getReturnTo() {
+    try {
+      return new URLSearchParams(window.location.search).get("returnTo") || "/home";
+    } catch (error) {
+      return "/home";
+    }
+  }
+
+  function loadAuth0Script() {
+    return new Promise(function (resolve, reject) {
+      if (window.auth0 && window.auth0.createAuth0Client) {
+        resolve();
+        return;
+      }
+
+      setStatus("loading-auth0-script");
+
+      var existing = document.querySelector("script[data-auth0-spa-js]");
+      if (existing) {
+        existing.addEventListener("load", function () {
+          resolve();
+        }, { once: true });
+        existing.addEventListener("error", function () {
+          reject(new Error("Auth0 script failed to load."));
+        }, { once: true });
+        return;
+      }
+
+      var script = document.createElement("script");
+      script.src = "https://cdn.auth0.com/js/auth0-spa-js/2.6/auth0-spa-js.production.js";
+      script.async = true;
+      script.dataset.auth0SpaJs = "true";
+      script.onload = function () {
+        resolve();
+      };
+      script.onerror = function () {
+        reject(new Error("Auth0 script failed to load."));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  async function startAuth0Login() {
+    try {
+      setStatus("script-started");
+
+      var returnTo = getReturnTo();
+      var redirectUri = window.location.origin;
+      var domain = "nulanesystems.us.auth0.com";
+      var clientId = "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc";
+      var audience = "https://api.nulanesystems.com";
+
+      if (!domain || !clientId || !audience) {
+        throw new Error("Missing Auth0 domain/clientId/audience.");
+      }
+
+      var returnToNode = bySelector("[data-auth0-return-to]");
+      if (returnToNode) {
+        returnToNode.textContent = returnTo;
+      }
+      try {
+        window.sessionStorage.setItem("portal_login_return_to", returnTo);
+      } catch (storageError) {
+        console.warn("[Auth0Bootstrap] unable to persist returnTo", storageError);
+      }
+
+      window.__portalAuth0LoginState = {
+        returnTo: returnTo,
+        redirectUri: redirectUri,
+        domain: domain,
+        clientId: clientId,
+        audience: audience,
+      };
+
+      await loadAuth0Script();
+      setStatus("script-loaded");
+
+      if (!window.auth0 || !window.auth0.createAuth0Client) {
+        throw new Error("Auth0 client is unavailable after loading the SDK.");
+      }
+
+      var client = await window.auth0.createAuth0Client({
+        domain: domain,
+        clientId: clientId,
+        authorizationParams: {
+          audience: audience,
+          redirect_uri: redirectUri,
+        },
+        cacheLocation: "localstorage",
+        useRefreshTokens: true,
+      });
+
+      setStatus("client-created");
+      setStatus("redirecting");
+
+      await client.loginWithRedirect({
+        appState: { returnTo: returnTo },
+        authorizationParams: {
+          audience: audience,
+          redirect_uri: redirectUri,
+          prompt: "login",
+        },
+      });
+    } catch (err) {
+      setStatus("failed");
+      setError(err);
+      setStatus("failed: " + (err && err.message ? err.message : String(err || "unknown error")));
+    }
+  }
+
+  window.__portalStartAuth0Login = startAuth0Login;
+
+  var retryButton = bySelector("[data-auth0-bootstrap-retry]");
+  if (retryButton) {
+    retryButton.addEventListener("click", function () {
+      void window.__portalStartAuth0Login();
+    });
+  }
+
+  void window.__portalStartAuth0Login();
+})();
+0:{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 text-slate-900","children":[["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],null,"$L4"]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"TyWsp9LqeH4VP82u2lc7x"}
+3:["$","div",null,{"className":"w-full max-w-lg rounded-[2rem] border border-white/70 bg-white/85 px-8 py-10 text-center shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur","children":[["$","p",null,{"className":"text-[10px] font-black uppercase tracking-[0.35em] text-slate-400","children":"Authentication"}],["$","h1",null,{"className":"mt-3 text-3xl font-black tracking-tight text-slate-950","children":"Opening sign-in"}],["$","p",null,{"className":"mt-2 max-w-md text-sm leading-relaxed text-slate-500","children":"Redirecting to Auth0 so you can continue to the portal."}],["$","p",null,{"className":"mt-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400","data-auth0-bootstrap-status":true,"children":"script-started"}],["$","p",null,{"className":"mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-600","data-auth0-bootstrap-error":true}],["$","div",null,{"className":"mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs leading-relaxed text-slate-600","children":[["$","p",null,{"className":"font-black uppercase tracking-[0.24em] text-slate-400","children":"Debug"}],["$","p",null,{"className":"mt-2","children":["Return target: ",["$","span",null,{"className":"font-semibold text-slate-800","data-auth0-return-to":true,"children":"/home"}]]}],["$","p",null,{"className":"mt-1","children":["State: ",["$","span",null,{"className":"font-semibold text-slate-800","data-auth0-bootstrap-state":true,"children":"script-started"}]]}],["$","p",null,{"className":"mt-1","children":["Location:"," ",["$","span",null,{"className":"font-semibold text-slate-800","children":"server"}]]}],["$","p",null,{"className":"mt-1","children":["Auth0 domain: ",["$","span",null,{"className":"font-semibold text-slate-800","children":"nulanesystems.us.auth0.com"}]]}],["$","button",null,{"type":"button","data-auth0-bootstrap-retry":true,"className":"mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50","children":"Try sign-in again"}]]}]]}]
+4:["$","$L5",null,{"children":["$","$6",null,{"name":"Next.MetadataOutlet","children":"$@7"}]}]
+7:null
