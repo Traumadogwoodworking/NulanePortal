@@ -57,6 +57,46 @@ npm run build           # Static export build
 ```
 The portal now refuses to initialize on `localhost` unless `NEXT_PUBLIC_API_BASE_URL` points at a non-production backend. Set that env (and the matching Auth0 overrides above) before running these commands so you do not accidentally hit `https://api.nulanesystems.com/api` during development.
 
+### Local Auth0 notes
+
+The local portal runs under the `/portal` base path. With the default local redirect behavior, the Auth0 application must allow:
+
+- Allowed Callback URLs: `http://localhost:3000/portal/`
+- Allowed Logout URLs: `http://localhost:3000/portal/`
+- Allowed Web Origins: `http://localhost:3000`
+- Allowed Origins / CORS: `http://localhost:3000` when the API tenant enforces browser origins for local API calls
+
+Keep the production URLs in the same Auth0 application when validating production:
+
+- `https://nulanesystems.com/portal/`
+- `https://nulanesystems.com`
+
+PowerShell local run:
+
+```powershell
+$env:NEXT_PUBLIC_PORTAL_BRANDING = "inspectionTrac"
+$env:NEXT_PUBLIC_PORTAL_BASE_PATH = "/portal"
+npm run dev
+```
+
+Open a clean local browser profile when Auth0 has stale localhost tokens:
+
+```powershell
+$profile = Join-Path $env:TEMP "inspection-trac-portal-auth-clean"
+Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
+Start-Process msedge -ArgumentList "--user-data-dir=$profile", "http://localhost:3000/portal/home/"
+```
+
+If using Chrome instead of Edge:
+
+```powershell
+$profile = Join-Path $env:TEMP "inspection-trac-portal-auth-clean"
+Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
+Start-Process chrome -ArgumentList "--user-data-dir=$profile", "http://localhost:3000/portal/home/"
+```
+
+Localhost `invalid_token`, `login_required`, and `interaction_required` silent-auth failures clear the portal cache and Auth0 SDK cache before redirecting to login. Production keeps the normal Auth0 redirect behavior.
+
 
 ## Static export pipeline
 

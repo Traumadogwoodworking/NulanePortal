@@ -192,7 +192,11 @@ function listAuth0StorageKeys(): string[] {
     return [];
   }
   try {
-    return Object.keys(window.sessionStorage).filter((key) => key.toLowerCase().includes("auth0"));
+    const auth0Key = (key: string) => key.toLowerCase().includes("auth0");
+    return [
+      ...Object.keys(window.localStorage).filter(auth0Key),
+      ...Object.keys(window.sessionStorage).filter(auth0Key),
+    ];
   } catch {
     return [];
   }
@@ -294,6 +298,9 @@ export async function completeAuth0Callback(): Promise<string> {
     persistPortalToken(token);
   } catch (error) {
     console.warn("[Auth0] token bootstrap after callback failed", error);
+    if (isInteractiveLoginError(error)) {
+      clearLocalInvalidAuthState();
+    }
   }
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] callback completion summary", {
@@ -307,7 +314,7 @@ export async function completeAuth0Callback(): Promise<string> {
 }
 
 function isInteractiveLoginError(error: unknown) {
-  const err = error as { error?: string };
+  const err = error as { error?: string; error_description?: string; message?: string };
   if (!err || typeof err !== "object") {
     return false;
   }
@@ -317,7 +324,25 @@ function isInteractiveLoginError(error: unknown) {
     "interaction_required",
     "invalid_token",
   ]);
-  return typeof err.error === "string" && interactiveErrors.has(err.error);
+  if (typeof err.error === "string" && interactiveErrors.has(err.error)) {
+    return true;
+  }
+  const message = [err.message, err.error_description].filter(Boolean).join(" ").toLowerCase();
+  return (
+    message.includes("login required") ||
+    message.includes("consent required") ||
+    message.includes("interaction required") ||
+    message.includes("invalid token") ||
+    message.includes("invalid_token")
+  );
+}
+
+function isLocalDevOrigin() {
+  if (!isBrowser() || process.env.NODE_ENV === "production") {
+    return false;
+  }
+  const hostname = window.location.hostname.toLowerCase();
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 function getLocalStorage(): Storage | null {
@@ -362,15 +387,47 @@ export function persistPortalUser(user?: unknown) {
   }
 }
 
-export function clearPortalAuthStorage() {
-  const storage = getLocalStorage();
-  if (!storage) {
+function clearAuth0SdkStorage() {
+  if (!isBrowser()) {
     return;
   }
-  storage.removeItem(STORAGE_KEYS.token);
-  storage.removeItem(STORAGE_KEYS.user);
-  storage.removeItem(STORAGE_KEYS.authenticated);
+  const shouldRemove = (key: string) => {
+    const normalized = key.toLowerCase();
+    return normalized.includes("auth0") || normalized.includes("@@auth0spajs@@");
+  };
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    try {
+      for (const key of Object.keys(storage)) {
+        if (shouldRemove(key)) {
+          storage.removeItem(key);
+        }
+      }
+    } catch (error) {
+      console.warn("[Auth0] unable to clear SDK storage", error);
+    }
+  }
+  auth0ClientPromise = null;
+}
+
+export function clearPortalAuthStorage(options: { includeAuth0Sdk?: boolean } = {}) {
+  const storage = getLocalStorage();
+  if (storage) {
+    storage.removeItem(STORAGE_KEYS.token);
+    storage.removeItem(STORAGE_KEYS.user);
+    storage.removeItem(STORAGE_KEYS.authenticated);
+  }
+  if (options.includeAuth0Sdk) {
+    clearAuth0SdkStorage();
+  }
   redirectHandlingPromise = null;
+}
+
+function clearLocalInvalidAuthState() {
+  if (isLocalDevOrigin()) {
+    clearPortalAuthStorage({ includeAuth0Sdk: true });
+    return;
+  }
+  clearPortalAuthStorage();
 }
 
 export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
@@ -475,6 +532,7 @@ export async function getPortalAccessToken() {
       });
     }
     if (isInteractiveLoginError(error)) {
+      clearLocalInvalidAuthState();
       return redirectToAuth0Login();
     }
     throw error;

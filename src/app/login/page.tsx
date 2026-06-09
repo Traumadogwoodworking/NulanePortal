@@ -86,7 +86,7 @@ const bootstrapScript = `
       setStatus("script-started");
 
       var returnTo = getReturnTo();
-      var redirectUri = window.location.origin.replace(/\/+$/, "") + "/portal/";
+      var redirectUri = window.location.origin.replace(/\\/+$/, "") + "/portal/";
       var domain = ${JSON.stringify(auth0Domain)};
       var clientId = ${JSON.stringify(auth0ClientId)};
       var audience = ${JSON.stringify(auth0Audience)};
