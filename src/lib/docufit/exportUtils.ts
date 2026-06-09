@@ -3,6 +3,7 @@ import type {
   MeasurementRecord,
 } from "@/lib/services/measurementService";
 import type { Alignment, Column, Content, TDocumentDefinitions } from "pdfmake/interfaces";
+import { publicBranding } from "@/lib/publicBranding";
 
 export interface MeasurementExportRow {
   date: string;
@@ -202,7 +203,7 @@ export function buildPdfDefinition(options: {
     pageMargins: [40, 40, 40, 40],
     info: {
       title: "DocuFit Measurements",
-      author: "Nulane Systems",
+      author: publicBranding.footerLegalOwner,
     },
     content,
     styles: {

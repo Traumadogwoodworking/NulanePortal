@@ -1,20 +1,22 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { withPortalBasePath } from "@/lib/config";
+import { getPublicBrandLogoUrl, publicBranding } from "@/lib/publicBranding";
 
-export const PORTAL_URL = process.env.NEXT_PUBLIC_PORTAL_URL || "/home";
-export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@nulanesystems.com";
-export const REPORTS_EMAIL = process.env.NEXT_PUBLIC_REPORTS_EMAIL || "reports@inspection-trac.com";
+export const PORTAL_URL = publicBranding.portalUrl;
+export const SUPPORT_EMAIL = publicBranding.supportEmail;
+export const REPORTS_EMAIL = publicBranding.reportsEmail;
 
 export function PublicHeader() {
+  const brand = publicBranding;
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-5 lg:px-8">
         <Link href="/" className="flex items-center gap-4 text-slate-900 no-underline">
-          <img src={withPortalBasePath("/images/inspection-trac-logo.png")} alt="Inspection-Trac" className="h-14 w-auto shrink-0 sm:h-16" />
+          <img src={getPublicBrandLogoUrl(brand)} alt={brand.appName} className="h-14 w-auto shrink-0 sm:h-16" />
           <div className="hidden md:block">
-            <p className="text-[10px] font-black uppercase tracking-[0.38em] text-slate-500">Inspection-Trac</p>
-            <p className="text-sm font-medium text-slate-600">Submission, reporting, and visualization</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.38em] text-slate-500">{brand.appName}</p>
+            <p className="text-sm font-medium text-slate-600">{brand.shortDescription}</p>
           </div>
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-700 lg:flex">
@@ -36,7 +38,7 @@ export function PublicHeader() {
             href={PORTAL_URL}
             className="rounded-full bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-amber-300 no-underline"
           >
-            Open Portal
+            {brand.openPortalButtonLabel}
           </Link>
         </div>
       </div>
@@ -45,20 +47,22 @@ export function PublicHeader() {
 }
 
 export function PublicFooter() {
+  const brand = publicBranding;
+
   return (
     <footer className="border-t border-slate-200 bg-slate-950 text-slate-200">
       <div className="mx-auto w-full max-w-7xl px-6 py-14 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4 lg:col-span-1">
             <div className="flex items-center gap-3">
-              <img src={withPortalBasePath("/images/inspection-trac-logo.png")} alt="Inspection-Trac" className="h-11 w-auto" />
+              <img src={getPublicBrandLogoUrl(brand)} alt={brand.appName} className="h-11 w-auto" />
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.28em] text-white">Inspection-Trac</p>
-                <p className="text-xs text-slate-400">Portal and support for inspection operations</p>
+                <p className="text-sm font-black uppercase tracking-[0.28em] text-white">{brand.appName}</p>
+                <p className="text-xs text-slate-400">{brand.shortDescription}</p>
               </div>
             </div>
             <p className="max-w-sm text-sm leading-7 text-slate-400">
-              Submission, visualization, and report handoff tools for vehicle inspection operations.
+              {brand.landingExplainer}
             </p>
             <a className="block text-sm font-semibold text-amber-300 no-underline" href={`mailto:${SUPPORT_EMAIL}`}>
               {SUPPORT_EMAIL}
@@ -69,7 +73,7 @@ export function PublicFooter() {
           <FooterColumn title="Legal" links={[["Privacy", "/privacy"], ["Terms", "/terms"]]} />
         </div>
         <div className="mt-10 border-t border-white/10 pt-6 text-sm text-slate-500">
-          © {new Date().getFullYear()} Inspection-Trac. All rights reserved.
+          © {new Date().getFullYear()} {brand.footerLegalOwner}. All rights reserved.
         </div>
       </div>
     </footer>

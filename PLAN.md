@@ -6,6 +6,8 @@
 - Keep the landing page compact, direct, and one-screen on normal desktop.
 - Keep portal behavior, auth routing, dashboards, reports, users, and facilities intact.
 - Centralize visible brand defaults in the existing branding preset and navigation seams.
+- Switch the quick brand with `NEXT_PUBLIC_PORTAL_BRANDING=inspectionTrac`, `nulaneSystems`, or `docudent`.
+- Keep `inspectionTrac` as the branch default unless the env var says otherwise.
 
 ## Later white-label path
 

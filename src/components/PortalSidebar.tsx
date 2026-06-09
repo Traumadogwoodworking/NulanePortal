@@ -8,7 +8,6 @@ import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
-import { withPortalBasePath } from "@/lib/config";
 import { Home, LayoutGrid, Mail } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
@@ -179,14 +178,7 @@ export function PortalSidebar() {
     });
   }, [brandingSnapshot, safePathname, session]);
 
-  const isInspectionTracOrg =
-    session?.organization?.organization_id === "org-awct" ||
-    branding.normalizedKey === "awct.inc" ||
-    branding.normalizedKey === "awc.inc" ||
-    branding.normalizedKey === "american wheel & car";
-  const activeLogo = isInspectionTracOrg
-    ? withPortalBasePath("/media/inspection-trac-logo.png")
-    : branding.logoUrl ?? branding.staticLogoUrl;
+  const activeLogo = branding.logoUrl ?? branding.staticLogoUrl;
 
   const accessInfo = useMemo(
     () => ({ isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission }),
@@ -302,8 +294,8 @@ export function PortalSidebar() {
                       {isImageIcon && typeof item.icon === "string" && (
                         <Image
                           src={
-                            item.href === "/docudent" && isInspectionTracOrg
-                              ? withPortalBasePath("/media/inspection-trac-logo.png")
+                            item.href === "/docudent"
+                              ? branding.appNavLogoUrl ?? item.brandLogo ?? item.icon
                               : item.brandLogo ?? item.icon
                           }
                           alt={item.href === "/docudent" ? branding.appLabel ?? item.label : item.label}
@@ -333,7 +325,7 @@ export function PortalSidebar() {
         {branding.footerLogoUrl ? (
           <Image
             src={branding.footerLogoUrl}
-            alt="Nulane Systems"
+            alt={branding.organizationName || branding.appLabel || "Portal"}
             width={220}
             height={72}
           />

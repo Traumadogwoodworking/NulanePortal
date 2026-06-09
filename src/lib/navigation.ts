@@ -1,5 +1,6 @@
 import type { PermissionKey } from "./access";
 import { isModuleEnabled, ModuleToggleKey } from "@/lib/modules";
+import { publicBranding } from "@/lib/publicBranding";
 
 export type RouteSectionKey = "core" | "apps" | "administration" | "support";
 
@@ -63,13 +64,13 @@ const portalRoutes: PortalRoute[] = [
 
   // Apps
   {
-    label: "Inspection-Trac",
+    label: publicBranding.appName,
     href: "/docudent",
-    description: "Vehicle inspection and condition reporting",
+    description: publicBranding.shortDescription,
     section: "apps",
-    icon: "/media/inspection-trac-logo.png",
+    icon: publicBranding.logoPath,
     brandColor: "#064e3b",
-    brandLogo: "/media/inspection-trac-logo.png",
+    brandLogo: publicBranding.logoPath,
     moduleKey: "docudent",
   },
   {

@@ -4,6 +4,7 @@ import Script from "next/script";
 import { Suspense } from "react";
 import "./globals.css";
 import { RootRouteShell } from "@/components/RootRouteShell";
+import { publicBranding } from "@/lib/publicBranding";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,8 +21,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Inspection-Trac",
-  description: "Vehicle inspection and condition reporting portal.",
+  title: publicBranding.appName,
+  description: publicBranding.shortDescription,
 };
 
 export default function RootLayout({

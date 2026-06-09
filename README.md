@@ -4,6 +4,19 @@ Next.js 16/TypeScript SPA for the Inspection-Trac portal.
 
 This branch ships the quick Inspection-Trac branded portal path. Branding is centralized in the current preset/navigation seams so the visible shell can be replaced later by a proper config-driven white-label build without rewriting stable portal code.
 
+## Quick branding switch
+
+Inspection-Trac is the default for this branch.
+
+```bash
+npm run build
+NEXT_PUBLIC_PORTAL_BRANDING=inspectionTrac npm run build
+NEXT_PUBLIC_PORTAL_BRANDING=nulaneSystems npm run build
+NEXT_PUBLIC_PORTAL_BRANDING=docudent npm run build
+```
+
+Use `NEXT_PUBLIC_SUPPORT_EMAIL` and `NEXT_PUBLIC_REPORTS_EMAIL` to override public contact addresses. This is a quick reversible branding config, not the final tenant white-label system.
+
 ## Setup
 
 ```bash

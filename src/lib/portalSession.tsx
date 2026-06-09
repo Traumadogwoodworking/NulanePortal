@@ -19,6 +19,7 @@ import {
   persistPortalUser,
   redirectToAuth0Login,
 } from "@/lib/portalAuth";
+import { publicBranding } from "@/lib/publicBranding";
 
 type PortalSessionStatus =
   | "loading"
@@ -162,7 +163,7 @@ function buildDevSession(): PortalSessionResponse {
     location_locked: false,
     branding_snapshot: {
       organization_name: "American Wheel & Car",
-      logo_url: "/media/inspection-trac-logo.png",
+      logo_url: publicBranding.logoPath,
     },
     is_admin: !isLimited,
     timestamp: new Date().toISOString(),

@@ -1,7 +1,10 @@
 import type { ControlOperationsStatus, ControlReadyzStatus, ControlOutboxHistoryItem, ControlOutboxItem, ControlRelease, ControlSettingsResponse, YmsVehicleSummary, YmsYardStateResponse } from "@/lib/services/controlPlaneService";
 import type { LocationMembership, OrganizationMembership, PortalUserRecord } from "@/lib/types";
+import { publicBranding } from "@/lib/publicBranding";
 
 let devFetchInstalled = false;
+const MOCK_BRAND_LOGO = publicBranding.logoPath;
+const MOCK_FROM_NAME = `${publicBranding.appName} Ops`;
 
 function isExplicitDevSessionBypassEnabled(): boolean {
   if (process.env.NODE_ENV === "production") {
@@ -406,9 +409,9 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
 
   if (path.includes("/photos/upload")) {
     return {
-      photo_urls: ["/media/inspection-trac-logo.png"],
-      imageUrl: "/media/inspection-trac-logo.png",
-      url: "/media/inspection-trac-logo.png",
+      photo_urls: [MOCK_BRAND_LOGO],
+      imageUrl: MOCK_BRAND_LOGO,
+      url: MOCK_BRAND_LOGO,
     };
   }
 
@@ -441,7 +444,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
           year: 2025,
           status: "open",
           inspector_email: "ops@example.com",
-          splat_urls: ["/media/inspection-trac-logo.png"],
+          splat_urls: [MOCK_BRAND_LOGO],
           pdf_url: "/media/mock-damage-report.pdf",
           damage_entries: [
             {
@@ -449,8 +452,8 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
               damage_type: "Impact",
               severity: "high",
               photos: [
-                { url: "/media/inspection-trac-logo.png" },
-                { url: "/media/inspection-trac-logo.png" },
+                { url: MOCK_BRAND_LOGO },
+                { url: MOCK_BRAND_LOGO },
               ],
             },
           ],
@@ -522,7 +525,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
         { key: "active_portal_backend_target", scope_type: "global", scope_id: undefined, value: "docudent-api", updated_at: mockTimestamp(240) },
         { key: "feature.docufit_enabled", scope_type: "organization", scope_id: "org-awct", value: true, updated_at: mockTimestamp(180) },
         { key: "layout.company_admin.dashboard", scope_type: "organization", scope_id: "org-awct", value: "default", updated_at: mockTimestamp(120) },
-        { key: "smtp.from_name", scope_type: "global", scope_id: undefined, value: "Inspection-Trac Ops", updated_at: mockTimestamp(120) },
+        { key: "smtp.from_name", scope_type: "global", scope_id: undefined, value: MOCK_FROM_NAME, updated_at: mockTimestamp(120) },
       ],
       allowed_keys: ["maintenance_mode", "active_portal_backend_target", "feature.docufit_enabled", "layout.company_admin.dashboard", "smtp.from_name"],
     };
@@ -787,7 +790,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
   if (path.includes("/organizations/") && path.includes("/branding")) {
     return {
       organization_name: "American Wheel & Car",
-      logo_url: "/media/inspection-trac-logo.png",
+      logo_url: MOCK_BRAND_LOGO,
     };
   }
 

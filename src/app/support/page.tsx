@@ -7,6 +7,7 @@ import {
   SUPPORT_EMAIL,
   SupportCard,
 } from "@/components/public-site";
+import { publicBranding } from "@/lib/publicBranding";
 import { ArrowRight, Mail, MessageSquareText, PhoneCall } from "lucide-react";
 
 const supportCategories = [
@@ -37,6 +38,8 @@ const supportCategories = [
 ];
 
 export default function SupportPage() {
+  const brand = publicBranding;
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f3f4f6_24%,#ffffff_24%,#eef2f7_100%)] text-slate-900">
       <PublicHeader />
@@ -45,7 +48,7 @@ export default function SupportPage() {
         <div className="max-w-3xl">
           <SectionLabel>Support</SectionLabel>
           <h1 className="mt-4 text-5xl font-black tracking-tight text-slate-950 sm:text-6xl">
-            Inspection-Trac Support
+            {brand.appName} Support
           </h1>
           <p className="mt-5 text-lg leading-8 text-slate-600">
             Get help with access, reports, downloads, routing, and account issues.
@@ -101,7 +104,7 @@ export default function SupportPage() {
                 href={PORTAL_URL}
                 className="inline-flex items-center gap-2 rounded-full bg-amber-400 px-6 py-3 text-sm font-bold text-slate-950 no-underline transition hover:bg-amber-300"
               >
-                Open Portal
+                {brand.openPortalButtonLabel}
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link

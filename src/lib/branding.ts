@@ -161,6 +161,9 @@ const INSPECTION_TRAC_ORG_KEYS = new Set([
   "inspection-trac",
   "inspection trac",
   "inspection track",
+]);
+
+const INSPECTION_TRAC_CUSTOMER_KEYS = new Set([
   "awct.inc",
   "awc.inc",
   "signature vehicle logistics",
@@ -266,18 +269,22 @@ export function resolvePortalBranding({
   const customLogo = preset.allowSnapshotLogoOverride
     ? normalizeLogoUrl(typeof snapshot?.logo_url === "string" ? snapshot.logo_url : null)
     : null;
+  const usesInspectionTracPreset = preset.mode === "inspectionTrac";
+  const usesInspectionTracIdentity =
+    INSPECTION_TRAC_ORG_KEYS.has(normalizedKey) ||
+    (usesInspectionTracPreset && INSPECTION_TRAC_CUSTOMER_KEYS.has(normalizedKey));
   const fallbackLogo = normalizeLogoUrl(
-    definition.logoUrl ??
-      PORTAL_LOGO_FALLBACKS[normalizedKey] ??
-      preset.defaultLogoUrl
+    usesInspectionTracPreset
+      ? definition.logoUrl ?? PORTAL_LOGO_FALLBACKS[normalizedKey] ?? preset.defaultLogoUrl
+      : preset.defaultLogoUrl
   );
-  const logoUrl = INSPECTION_TRAC_ORG_KEYS.has(normalizedKey)
+  const logoUrl = usesInspectionTracIdentity
     ? withPortalBasePath("/media/inspection-trac-logo.png")
-    : fallbackLogo ?? null;
-  const resolvedAppLabel = INSPECTION_TRAC_ORG_KEYS.has(normalizedKey)
+    : customLogo ?? fallbackLogo ?? null;
+  const resolvedAppLabel = usesInspectionTracIdentity
     ? "Inspection-Trac"
     : preset.appNavLabel ?? getAppBranding(pathname).appLabel ?? preset.defaultOrganizationName;
-  const resolvedAppLogo = INSPECTION_TRAC_ORG_KEYS.has(normalizedKey)
+  const resolvedAppLogo = usesInspectionTracIdentity
     ? withPortalBasePath("/media/inspection-trac-logo.png")
     : preset.appNavLogoUrl ?? getAppBranding(pathname).brandLogo ?? preset.defaultLogoUrl;
   return {
@@ -318,7 +325,7 @@ export function resolvePortalBranding({
     sidebarProfileLogoutButtonClassName: preset.sidebarProfileLogoutButtonClassName,
     sidebarActiveLinkClassName: preset.sidebarActiveLinkClassName,
     sidebarInactiveLinkClassName: preset.sidebarInactiveLinkClassName,
-    footerLogoUrl: INSPECTION_TRAC_ORG_KEYS.has(normalizedKey) ? null : preset.showFooterLogo ? preset.footerLogoUrl : null,
+    footerLogoUrl: usesInspectionTracIdentity ? null : preset.showFooterLogo ? preset.footerLogoUrl : null,
     staticLogoUrl: preset.staticLogoUrl,
     staticLogoNormalizedKeys: preset.staticLogoNormalizedKeys,
   };

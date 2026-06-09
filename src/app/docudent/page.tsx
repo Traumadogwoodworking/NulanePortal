@@ -43,6 +43,7 @@ import { uploadAttachments, type UploadSummary } from "@/lib/docudent/uploadAtta
 import { PersistenceService, type StashedReport } from "@/lib/docudent/persistenceService";
 import { RefreshCw } from "lucide-react";
 import { usePortalReportsSnapshot } from "@/lib/portalData";
+import { publicBranding } from "@/lib/publicBranding";
 
 const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
 
@@ -153,7 +154,7 @@ export default function DocuDentPage() {
   if (!moduleEnabled) {
     return (
       <ModuleNotice
-        title="Inspection-Trac disabled"
+        title={`${publicBranding.appName} disabled`}
         description="Damage submissions are not available in this build."
         message="Enable NEXT_PUBLIC_MODULE_DOCUDENT to continue."
       />
@@ -251,7 +252,7 @@ export default function DocuDentPage() {
         attachments: attachmentsSummary,
       });
     } catch (error) {
-      console.error("DocuDent submission failed", error);
+      console.error(`${publicBranding.appName} submission failed`, error);
       const errorMessage = error instanceof Error ? error.message : "Network or server failure.";
       
       await PersistenceService.stashReport(reportId, formState, errorMessage, files);
