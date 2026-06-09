@@ -167,6 +167,11 @@ async function fetchImageDataUrl(url?: string | null): Promise<string | null> {
 }
 
 export async function downloadReportPdf(options: ReportPdfActionOptions): Promise<void> {
+  const { blob, fileName } = await buildReportPdfBlob(options);
+  saveAs(blob, fileName);
+}
+
+export async function buildReportPdfBlob(options: ReportPdfActionOptions): Promise<{ blob: Blob; fileName: string }> {
   const { report, reportType, reportId, session } = options;
   const gallery = buildReportGallery(report);
   const mapDataUrl = await fetchImageDataUrl(gallery.mapMetadata?.mapImageUrl);
@@ -209,7 +214,7 @@ export async function downloadReportPdf(options: ReportPdfActionOptions): Promis
     reportType === "rsa"
       ? `Valad_RSA_Manifest_${reportId.substring(0, 8)}.pdf`
       : `Valad_DamageReport_${damageVin || reportId.substring(0, 8)}.pdf`;
-  saveAs(blob, fileName);
+  return { blob, fileName };
 }
 
 export async function downloadReportPhotos(options: ReportPhotoActionOptions): Promise<number> {

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Building2, ShieldCheck, Truck, Users } from "lucide-react";
 import { usePortalSession } from "@/lib/portalSession";
-import { ReportsAdapter } from "@/lib/services/reportService";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
 import {
@@ -26,6 +25,7 @@ import { ControlDetailPanel, type ControlDetailField } from "@/components/contro
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DataTableShell } from "@/components/ui/DataTableShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { usePortalReportsSnapshot } from "@/lib/portalData";
 
 type AuditLogRow = Record<string, unknown> & {
   action?: string;
@@ -71,12 +71,11 @@ function toneForStatus(value?: string | null): "positive" | "warning" | "danger"
 
 export default function ControlOverviewPage() {
   const { organizationId, session } = usePortalSession();
+  const { data: reportsSnapshot } = usePortalReportsSnapshot();
   const [status, setStatus] = useState<ControlOperationsStatus | null>(null);
   const [readiness, setReadiness] = useState<ControlReadyzStatus | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [facilities, setFacilities] = useState<FacilitySummary[]>([]);
-  const [damageReports, setDamageReports] = useState<ReportDamageApiRow[]>([]);
-  const [rsaReports, setRsaReports] = useState<RsaReportApiRow[]>([]);
   const [vehicles, setVehicles] = useState<YmsVehicleSummary[]>([]);
   const [yardState, setYardState] = useState<YmsYardStateResponse | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
@@ -102,13 +101,11 @@ export default function ControlOverviewPage() {
 
     void (async () => {
       try {
-        const [statusResult, readinessResult, usersResult, facilitiesResult, damageResult, rsaResult, vehiclesResult, yardResult, auditResult] = await Promise.allSettled([
+        const [statusResult, readinessResult, usersResult, facilitiesResult, vehiclesResult, yardResult, auditResult] = await Promise.allSettled([
           fetchOperationsStatus(),
           fetchReadinessStatus(),
           UsersAdapter.getUsers(organizationId),
           FacilitiesAdapter.getFacilities(organizationId),
-          ReportsAdapter.fetchDamageReports({ organization_id: organizationId }),
-          ReportsAdapter.fetchRsaReports(),
           fetchYmsVehicles(),
           fetchYmsYardState(),
           apiFetch<{ audit_logs: AuditLogRow[] }>(`/admin/audit-log?organizationId=${encodeURIComponent(organizationId)}&limit=8`),
@@ -121,12 +118,10 @@ export default function ControlOverviewPage() {
         else setReadinessError(readinessResult.reason instanceof Error ? readinessResult.reason.message : "Unable to load readiness status.");
         if (usersResult.status === "fulfilled") setUsers(usersResult.value);
         if (facilitiesResult.status === "fulfilled") setFacilities(facilitiesResult.value);
-        if (damageResult.status === "fulfilled") setDamageReports(damageResult.value);
-        if (rsaResult.status === "fulfilled") setRsaReports(rsaResult.value);
         if (vehiclesResult.status === "fulfilled") setVehicles(vehiclesResult.value);
         if (yardResult.status === "fulfilled") setYardState(yardResult.value);
         if (auditResult.status === "fulfilled") setAuditLogs(Array.isArray(auditResult.value.audit_logs) ? auditResult.value.audit_logs : []);
-        if (usersResult.status === "rejected" || facilitiesResult.status === "rejected" || damageResult.status === "rejected" || rsaResult.status === "rejected" || vehiclesResult.status === "rejected" || yardResult.status === "rejected") {
+        if (usersResult.status === "rejected" || facilitiesResult.status === "rejected" || vehiclesResult.status === "rejected" || yardResult.status === "rejected") {
           setInventoryError("One or more overview panels could not refresh. Other data remains visible.");
         }
         if (auditResult.status === "rejected") {
@@ -143,6 +138,9 @@ export default function ControlOverviewPage() {
       active = false;
     };
   }, [organizationId]);
+
+  const damageReports = reportsSnapshot?.damageReports ?? [];
+  const rsaReports = reportsSnapshot?.rsaReports ?? [];
 
   const openDamageReports = damageReports.filter((report) => {
     const normalized = (report.status || "").toLowerCase();

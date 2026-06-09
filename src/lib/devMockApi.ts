@@ -1,4 +1,5 @@
 import type { ControlOperationsStatus, ControlReadyzStatus, ControlOutboxHistoryItem, ControlOutboxItem, ControlRelease, ControlSettingsResponse, YmsVehicleSummary, YmsYardStateResponse } from "@/lib/services/controlPlaneService";
+import type { LocationMembership, OrganizationMembership, PortalUserRecord } from "@/lib/types";
 
 let devFetchInstalled = false;
 
@@ -99,6 +100,106 @@ function buildMockOutbox(): ControlOutboxItem[] {
 
 const mockOutbox = buildMockOutbox();
 
+type MockDirectoryUserRecord = PortalUserRecord & {
+  organization_membership?: OrganizationMembership | null;
+  location_memberships?: LocationMembership[];
+  facility_ids?: string[];
+};
+
+let mockLocationMembershipSeq = 1;
+
+function buildMockLocationMembership(
+  userId: string,
+  locationId: string,
+  role: string,
+  isPrimary = false
+): LocationMembership {
+  return {
+    location_membership_id: `dev-location-membership-${mockLocationMembershipSeq++}`,
+    location_id: locationId,
+    organization_id: "org-awct",
+    user_id: userId,
+    role,
+    is_active: true,
+    is_primary: isPrimary,
+    membership_metadata: {},
+    updated_at: mockTimestamp(),
+  };
+}
+
+function buildMockDirectoryUser(overrides: Partial<MockDirectoryUserRecord> = {}): MockDirectoryUserRecord {
+  const facilityIds = Array.from(new Set(overrides.facility_ids ?? ["loc-001"]));
+  return {
+    user_id: "dev-guest-user",
+    email: "guest@nulanesystems.com",
+    display_name: "Guest Operator",
+    first_name: "Guest",
+    last_name: "Operator",
+    role: "super_admin",
+    is_active: true,
+    permissions: ["portal.admin"],
+    organization_id: "org-awct",
+    facility_ids: facilityIds,
+    location_memberships: facilityIds.map((locationId, index) =>
+      buildMockLocationMembership("dev-guest-user", locationId, "super_admin", index === 0)
+    ),
+    organization_membership: {
+      membership_id: "dev-membership",
+      user_id: "dev-guest-user",
+      organization_id: "org-awct",
+      role: "super_admin",
+      is_primary: true,
+      is_active: true,
+    },
+    updated_at: mockTimestamp(),
+    ...overrides,
+  };
+}
+
+let mockDirectoryUsers: MockDirectoryUserRecord[] = [buildMockDirectoryUser()];
+let mockDeletedDirectoryUsers: MockDirectoryUserRecord[] = [];
+
+function cloneMockDirectoryUser(user: MockDirectoryUserRecord): MockDirectoryUserRecord {
+  return JSON.parse(JSON.stringify(user)) as MockDirectoryUserRecord;
+}
+
+function normalizeMockFacilityIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+}
+
+function syncMockFacilityMemberships(user: MockDirectoryUserRecord, facilityIds: string[]): MockDirectoryUserRecord {
+  const nextFacilityIds = normalizeMockFacilityIds(facilityIds);
+  const locationMemberships = nextFacilityIds.map((locationId, index) =>
+    buildMockLocationMembership(user.user_id, locationId, user.role ?? "member", index === 0)
+  );
+  return {
+    ...user,
+    facility_ids: nextFacilityIds,
+    location_memberships: locationMemberships,
+    updated_at: mockTimestamp(),
+  };
+}
+
+function upsertMockDirectoryUser(user: MockDirectoryUserRecord) {
+  const nextUser = cloneMockDirectoryUser(user);
+  const index = mockDirectoryUsers.findIndex((entry) => entry.user_id === nextUser.user_id);
+  if (index >= 0) {
+    mockDirectoryUsers[index] = nextUser;
+  } else {
+    mockDirectoryUsers = [nextUser, ...mockDirectoryUsers];
+  }
+  return nextUser;
+}
+
 function buildMockSession() {
   return {
     user: {
@@ -179,7 +280,7 @@ function buildMockSession() {
     location_locked: false,
     branding_snapshot: {
       organization_name: "American Wheel & Car",
-      logo_url: "/media/Nulane_Systems-removebg-preview-inv.png",
+      logo_url: "/media/powered_by_colorful.png",
     },
     is_admin: true,
     timestamp: mockTimestamp(),
@@ -305,9 +406,9 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
 
   if (path.includes("/photos/upload")) {
     return {
-      photo_urls: ["https://nulanesystems.com/media/Nulane_Systems-removebg-preview-inv.png"],
-      imageUrl: "https://nulanesystems.com/media/Nulane_Systems-removebg-preview-inv.png",
-      url: "https://nulanesystems.com/media/Nulane_Systems-removebg-preview-inv.png",
+      photo_urls: ["/media/inspection-trac-logo.png"],
+      imageUrl: "/media/inspection-trac-logo.png",
+      url: "/media/inspection-trac-logo.png",
     };
   }
 
@@ -340,7 +441,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
           year: 2025,
           status: "open",
           inspector_email: "ops@example.com",
-          splat_urls: ["/media/Nulane_Systems-removebg-preview-inv.png"],
+          splat_urls: ["/media/inspection-trac-logo.png"],
           pdf_url: "/media/mock-damage-report.pdf",
           damage_entries: [
             {
@@ -348,8 +449,8 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
               damage_type: "Impact",
               severity: "high",
               photos: [
-                { url: "/media/Nulane_Systems-removebg-preview-inv.png" },
-                { url: "/media/Nulane_Systems-removebg-preview-inv.png" },
+                { url: "/media/inspection-trac-logo.png" },
+                { url: "/media/inspection-trac-logo.png" },
               ],
             },
           ],
@@ -421,7 +522,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
         { key: "active_portal_backend_target", scope_type: "global", scope_id: undefined, value: "docudent-api", updated_at: mockTimestamp(240) },
         { key: "feature.docufit_enabled", scope_type: "organization", scope_id: "org-awct", value: true, updated_at: mockTimestamp(180) },
         { key: "layout.company_admin.dashboard", scope_type: "organization", scope_id: "org-awct", value: "default", updated_at: mockTimestamp(120) },
-        { key: "smtp.from_name", scope_type: "global", scope_id: undefined, value: "DocuDent Ops", updated_at: mockTimestamp(120) },
+        { key: "smtp.from_name", scope_type: "global", scope_id: undefined, value: "Inspection-Trac Ops", updated_at: mockTimestamp(120) },
       ],
       allowed_keys: ["maintenance_mode", "active_portal_backend_target", "feature.docufit_enabled", "layout.company_admin.dashboard", "smtp.from_name"],
     };
@@ -550,22 +651,48 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
   }
 
   if (path.includes("/admin/organizations/") && path.endsWith("/users")) {
-    return {
-      users: [
+    if (method === "POST") {
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
+      const email = typeof body.email === "string" && body.email.trim() ? body.email.trim() : "new.user@nulanesystems.com";
+      const createdUserId = body.user_id || body.userId || body.auth0_user_id || body.auth0UserId || `auth0|${email}`;
+      const facilityIds = normalizeMockFacilityIds(body.facility_ids ?? body.facilityIds);
+      const createdUser = syncMockFacilityMemberships(
         {
-          user_id: "dev-guest-user",
-          email: "guest@nulanesystems.com",
-          display_name: "Guest Operator",
-          first_name: "Guest",
-          last_name: "Operator",
-          role: "super_admin",
-          is_active: true,
-          permissions: ["portal.admin"],
+          user_id: createdUserId,
+          email,
+          display_name: body.display_name ?? body.displayName ?? email,
+          first_name: body.first_name ?? body.firstName ?? null,
+          last_name: body.last_name ?? body.lastName ?? null,
+          role: body.role ?? body.role_key ?? "member",
+          is_active: body.is_active !== false,
+          permissions: [],
           organization_id: "org-awct",
-          location_memberships: [{ location_id: "loc-001", role: "super_admin" }],
-          updated_at: mockTimestamp(5),
+          facility_ids: facilityIds,
+          location_memberships: [],
+          organization_membership: {
+            membership_id: `dev-membership-${createdUserId}`,
+            user_id: createdUserId,
+            organization_id: "org-awct",
+            role: body.role ?? body.role_key ?? "member",
+            is_primary: true,
+            is_active: true,
+          },
+          updated_at: mockTimestamp(),
         },
-      ],
+        facilityIds
+      );
+      upsertMockDirectoryUser(createdUser);
+      return {
+        user: cloneMockDirectoryUser(createdUser),
+        invitation: {
+          provider: "auth0",
+          status: body.invite === false ? "skipped" : "sent",
+          invitation_id: `inv-${createdUserId}`,
+        },
+      };
+    }
+    return {
+      users: mockDirectoryUsers.map((user) => cloneMockDirectoryUser(user)),
     };
   }
 
@@ -581,6 +708,73 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
     return { memberships: [{ location_membership_id: "dev-location-membership-west", location_id: "loc-001", organization_id: "org-awct", user_id: "dev-guest-user", role: "super_admin", is_active: true, is_primary: true }] };
   }
 
+  if (path.includes("/admin/organizations/") && path.endsWith("/users/deleted")) {
+    return { users: mockDeletedDirectoryUsers.map((user) => cloneMockDirectoryUser(user)) };
+  }
+
+  const userDetailMatch = path.match(/\/admin\/organizations\/[^/]+\/users\/([^/]+)$/);
+  if (userDetailMatch && method === "GET") {
+    const userId = decodeURIComponent(userDetailMatch[1]);
+    const user = mockDirectoryUsers.find((entry) => entry.user_id === userId);
+    return { user: user ? cloneMockDirectoryUser(user) : null };
+  }
+
+  if (userDetailMatch && method === "PUT") {
+    const userId = decodeURIComponent(userDetailMatch[1]);
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
+    const existingUser = mockDirectoryUsers.find((entry) => entry.user_id === userId) ?? buildMockDirectoryUser({ user_id: userId });
+    const nextFacilityIds = normalizeMockFacilityIds(body.facility_ids ?? body.facilityIds ?? existingUser.facility_ids);
+    const nextUser = syncMockFacilityMemberships(
+      {
+        ...existingUser,
+        email: body.email ?? existingUser.email,
+        display_name: body.display_name ?? existingUser.display_name,
+        first_name: body.first_name ?? existingUser.first_name,
+        last_name: body.last_name ?? existingUser.last_name,
+        role: body.role ?? body.role_key ?? existingUser.role,
+        is_active: body.is_active ?? existingUser.is_active,
+        permissions: body.permissions ?? existingUser.permissions,
+        organization_id: existingUser.organization_id ?? "org-awct",
+        facility_ids: nextFacilityIds,
+      },
+      nextFacilityIds
+    );
+    upsertMockDirectoryUser(nextUser);
+    return { user: cloneMockDirectoryUser(nextUser), auth0_sync: { ok: true } };
+  }
+
+  const userByEmailMatch = path.match(/\/admin\/organizations\/[^/]+\/users\/by-email\/([^/]+)(?:\/status)?$/);
+  if (userByEmailMatch && method === "DELETE") {
+    const email = decodeURIComponent(userByEmailMatch[1]).toLowerCase();
+    const matchIndex = mockDirectoryUsers.findIndex((entry) => (entry.email || "").toLowerCase() === email);
+    if (matchIndex >= 0) {
+      const [removed] = mockDirectoryUsers.splice(matchIndex, 1);
+      mockDeletedDirectoryUsers = [removed, ...mockDeletedDirectoryUsers];
+    }
+    return { success: true };
+  }
+
+  if (userByEmailMatch && method === "PATCH") {
+    return { success: true };
+  }
+
+  const reactivateMatch = path.match(/\/admin\/organizations\/[^/]+\/users\/([^/]+)\/reactivate$/);
+  if (reactivateMatch && method === "POST") {
+    const userId = decodeURIComponent(reactivateMatch[1]);
+    const matchIndex = mockDeletedDirectoryUsers.findIndex((entry) => entry.user_id === userId);
+    if (matchIndex >= 0) {
+      const [restored] = mockDeletedDirectoryUsers.splice(matchIndex, 1);
+      upsertMockDirectoryUser(syncMockFacilityMemberships({ ...restored, is_active: true }, restored.facility_ids ?? []));
+    }
+    return { success: true };
+  }
+
+  if (path.includes("/admin/control-plane/organizations/") && path.includes("/users/") && path.includes("/facilities")) {
+    if (method === "DELETE" || method === "PUT") {
+      return { success: true };
+    }
+  }
+
   if (path.includes("/admin/audit-log")) {
     return {
       audit_logs: [
@@ -591,7 +785,10 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
   }
 
   if (path.includes("/organizations/") && path.includes("/branding")) {
-    return { organization_name: "American Wheel & Car", logo_url: "/media/Nulane_Systems-removebg-preview-inv.png" };
+    return {
+      organization_name: "American Wheel & Car",
+      logo_url: "/media/inspection-trac-logo.png",
+    };
   }
 
   return null;

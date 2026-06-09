@@ -1,5 +1,5 @@
 import { DAMAGE_SEVERITIES } from "@/lib/docudent/damageTaxonomy";
-import { resolveDamageReportLocationName } from "@/lib/reportUtils";
+import { resolveDamageReportLocationName, stripFacilitySuffix } from "@/lib/reportUtils";
 import type { ReportDamageApiRow } from "@/lib/types";
 
 export type FacilityDamageStats = {
@@ -40,7 +40,8 @@ function normalizeWhitespace(value: string): string {
 }
 
 export function normalizeFacilityLabel(value: string | null | undefined): string {
-  const normalized = normalizeWhitespace((value ?? "").toString().replace(/[_-]+/g, " "));
+  const stripped = stripFacilitySuffix((value ?? "").toString()).replace(/[_-]+/g, " ");
+  const normalized = normalizeWhitespace(stripped.split(/[–-]/).pop() ?? stripped);
   return normalized || "Unknown facility";
 }
 

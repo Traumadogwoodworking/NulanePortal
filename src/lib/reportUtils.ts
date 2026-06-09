@@ -33,6 +33,14 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export function stripFacilitySuffix(value: string | null | undefined): string {
+  const normalized = (value ?? "").toString().trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return "";
+  }
+  return normalized.replace(/\.(?:inc|incs)\.?$/i, "").trim();
+}
+
 export function deriveReportSeverity(report: ReportDamageApiRow): ReportSeverity {
   const entries = Array.isArray(report.damage_entries)
     ? report.damage_entries
@@ -110,23 +118,23 @@ export function resolveDamageReportLocationName(report: ReportDamageApiRow): str
   for (const path of damageLocationPaths) {
     const candidate = extractLocationCandidate(report, path);
     if (candidate.trim()) {
-      return candidate.trim();
+      return stripFacilitySuffix(candidate);
     }
   }
   const locationLabel = report.location?.location_label || "";
   const locationName = report.location?.location_name || "";
   if (locationLabel.trim()) {
-    return locationLabel.trim();
+    return stripFacilitySuffix(locationLabel);
   }
   if (locationName.trim()) {
-    return locationName.trim();
+    return stripFacilitySuffix(locationName);
   }
   return "Unknown facility";
 }
 
 export function resolveRsaFacilityLabel(report: RsaReportApiRow): string {
   if (report?.facility) {
-    return report.facility;
+    return stripFacilitySuffix(report.facility);
   }
   if (report?.track) {
     return `Track ${report.track}`;
@@ -138,7 +146,7 @@ export function resolveRsaFacilityLabel(report: RsaReportApiRow): string {
 }
 
 export function slugForFacilityLabel(label: string): string {
-  const normalized = label.trim();
+  const normalized = stripFacilitySuffix(label);
   if (!normalized) {
     return "unknown";
   }

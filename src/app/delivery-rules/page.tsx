@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { CirclePlus, Lock, Search, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PageTitle } from "@/components/ui/PageTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,6 +73,10 @@ function ruleTypeFromDraft(draft: Pick<RuleDraft, "category" | "triggerKind">) {
   return `${displayCategory(draft.category)} / ${displayTriggerKind(draft.triggerKind)}`;
 }
 
+function recipientCount(rule: DeliveryRule) {
+  return [...(rule.actions?.cc || []), ...(rule.actions?.bcc || [])].filter(Boolean).length;
+}
+
 function triggerSummary(rule: DeliveryRule, options: DeliveryRuleOptions | null) {
   const facilityName =
     rule.facilityTrigger?.facilityName ||
@@ -84,16 +87,19 @@ function triggerSummary(rule: DeliveryRule, options: DeliveryRuleOptions | null)
   const severity = rule.damageTrigger?.severity?.label;
 
   if (rule.triggerKind === "facility") {
-    return facilityName ? `Facility: ${facilityName}` : "Facility trigger";
+    return facilityName ? `Facility: ${facilityName.toUpperCase()}` : "Facility trigger";
   }
   if (rule.triggerKind === "damage") {
     return `Damage: ${[area, damageType, severity].filter(Boolean).join(" / ") || "Any damage"}`;
   }
-  return `Facility + Damage: ${facilityName || "Selected facility"} + ${[area, damageType, severity].filter(Boolean).join(" / ") || "Any damage"}`;
+  return `Facility + Damage: ${(facilityName || "Selected facility").toUpperCase()} + ${[area, damageType, severity].filter(Boolean).join(" / ") || "Any damage"}`;
 }
 
-function recipientsSummary(rule: DeliveryRule) {
-  return `CC ${rule.actions?.cc?.length || 0}`;
+function buildAssignedUserLabels(emails: string[]) {
+  return emails
+    .map((email) => email.trim())
+    .filter(Boolean)
+    .map((email) => ({ email, label: email }));
 }
 
 function makeDraft(rule: DeliveryRule): RuleDraft {
@@ -241,7 +247,6 @@ export default function DeliveryRulesPage() {
   const selectedRule = useMemo(() => rules.find((rule) => rule.id === selectedId) ?? null, [rules, selectedId]);
   const selectedRuleLocked = isLockedRule(selectedRule);
   const draftDirty = isDraftDirty(draft, selectedRule);
-
   useEffect(() => {
     if (draft || !selectedRule) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -255,6 +260,11 @@ export default function DeliveryRulesPage() {
     return duplicate ? "A matching delivery rule already exists. Edit the existing rule instead." : null;
   }, [draft, rules]);
 
+  const draftCcEmails = useMemo(() => normalizeEmailList(draft?.ccInput || ""), [draft?.ccInput]);
+  const draftCcChipLabels = useMemo(
+    () => draftCcEmails.map((email) => ({ email, label: email })),
+    [draftCcEmails]
+  );
   const selectedFacility = draft?.facilityTrigger?.facilityId
     ? directory?.facilities.find((facility) => facility.id === draft.facilityTrigger?.facilityId)
     : null;
@@ -295,10 +305,28 @@ export default function DeliveryRulesPage() {
     setSaveMessage(null);
   };
 
+  const commitCcInput = (value: string) => {
+    if (!draft) return;
+    const nextEmails = normalizeEmailList(value);
+    setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+  };
+
+  const addCcValue = (value: string) => {
+    if (!draft) return;
+    const nextEmails = normalizeEmailList([draft.ccInput, value].join("\n"));
+    setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+  };
+
+  const removeCcEmail = (email: string) => {
+    if (!draft) return;
+    const nextEmails = normalizeEmailList(draft.ccInput).filter((current) => current !== email.toLowerCase());
+    setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+  };
+
   const persistDraft = async (mode: "create" | "update") => {
     if (!draft) return;
     if (selectedRuleLocked) {
-      setEditorError("Locked rules are managed by Nulane and cannot be modified here.");
+      setEditorError("Locked rules are managed by platform support and cannot be modified here.");
       return;
     }
     setEditorError(null);
@@ -337,7 +365,7 @@ export default function DeliveryRulesPage() {
   const handleDelete = async () => {
     if (!selectedRule) return;
     if (selectedRuleLocked) {
-      setEditorError("Locked rules are managed by Nulane and cannot be deleted here.");
+      setEditorError("Locked rules are managed by platform support and cannot be deleted here.");
       return;
     }
     if (!window.confirm(`Delete "${selectedRule.name}"?`)) return;
@@ -358,8 +386,6 @@ export default function DeliveryRulesPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle title="Delivery Rules" subtitle="Manage who receives report copies based on facility or damage details." />
-
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" onClick={handleNewRule} className="bg-slate-900 text-white hover:bg-slate-800">
           <CirclePlus className="h-4 w-4" />
@@ -426,7 +452,7 @@ export default function DeliveryRulesPage() {
                   {locked ? (
                     <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-blue-700">
                       <Lock className="h-3 w-3" />
-                      Locked rule
+                      LOCKED RULES
                     </span>
                   ) : null}
                   <div className="flex items-start justify-between gap-3">
@@ -439,7 +465,16 @@ export default function DeliveryRulesPage() {
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{displayCategory(rule.category)}</span>
                       </div>
                       <p className="text-sm text-slate-600">{triggerSummary(rule, options)}</p>
-                      <p className="text-sm text-slate-600">{recipientsSummary(rule)}</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Email recipients: {recipientCount(rule)}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {buildAssignedUserLabels(rule.actions.cc).map((user) => (
+                          <span key={`${rule.id}-${user.email}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                            {user.label}
+                          </span>
+                        ))}
+                      </div>
                     </div>
 	                    <div className="flex flex-col items-end gap-2 pr-28">
 	                      <div className="flex flex-wrap justify-end gap-2">
@@ -691,14 +726,52 @@ export default function DeliveryRulesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="cc-emails">CC emails</Label>
-                  <textarea
-                    id="cc-emails"
-                    value={draft.ccInput}
-                    onChange={(event) => setDraft({ ...draft, ccInput: event.target.value })}
-                    placeholder="claims@example.com, yard@example.com"
-                    className="min-h-28 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-0 focus:border-slate-400"
-                  />
+                  <Label htmlFor="cc-emails">Assigned users</Label>
+                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      {draftCcChipLabels.map((entry) => (
+                        <span key={entry.email} className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-800">
+                          <span className="max-w-[18rem] truncate font-medium">{entry.label}</span>
+                          <button
+                            type="button"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300"
+                            aria-label={`Remove ${entry.label}`}
+                            onClick={() => removeCcEmail(entry.email)}
+                          >
+                            <span className="text-[12px] leading-none">x</span>
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        id="cc-emails"
+                        value={draft.ccInput}
+                        onChange={(event) => setDraft({ ...draft, ccInput: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === "," || event.key === ";") {
+                            event.preventDefault();
+                            addCcValue(event.currentTarget.value.replace(/[\n,;]+/g, " ").trim());
+                            commitCcInput("");
+                          }
+                        }}
+                        onBlur={(event) => {
+                          const value = event.currentTarget.value.trim();
+                          if (!value) return;
+                          addCcValue(value);
+                          commitCcInput("");
+                        }}
+                        onPaste={(event) => {
+                          const paste = event.clipboardData.getData("text");
+                          if (!paste) return;
+                          event.preventDefault();
+                          const nextEmails = normalizeEmailList([draft?.ccInput || "", paste].join("\n"));
+                          setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+                        }}
+                        placeholder="claims@example.com"
+                        className="min-w-[14rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">Press Enter, comma, or semicolon to add each email. Use x to remove one.</p>
+                  </div>
                 </div>
               </>
             )}

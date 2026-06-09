@@ -15,11 +15,11 @@ const USER_BY_EMAIL_STATUS_ENDPOINT = (organizationId: string, email: string) =>
   `/admin/organizations/${organizationId}/users/by-email/${encodeURIComponent(email)}/status`;
 const USER_BY_EMAIL_ENDPOINT = (organizationId: string, email: string) =>
   `/admin/organizations/${organizationId}/users/by-email/${encodeURIComponent(email)}`;
-const DELETED_USERS_ENDPOINT = (organizationId: string) => `/organizations/${organizationId}/users/deleted`;
+const DELETED_USERS_ENDPOINT = (organizationId: string) => `/admin/organizations/${organizationId}/users/deleted`;
 const USER_REACTIVATE_ENDPOINT = (organizationId: string, userId: string) =>
-  `/organizations/${organizationId}/users/${userId}/reactivate`;
+  `/admin/organizations/${organizationId}/users/${userId}/reactivate`;
 const USER_ROLES_ENDPOINT = (userId: string) => `/users/${userId}/roles`;
-const USER_FACILITIES_ENDPOINT = (organizationId: string, userId: string) => `/admin/organizations/${organizationId}/users/${userId}/facilities`;
+const USER_FACILITIES_ENDPOINT = (organizationId: string, userId: string) => `/admin/control-plane/organizations/${organizationId}/users/${userId}/facilities`;
 const USER_FACILITY_DETAIL_ENDPOINT = (organizationId: string, userId: string, facilityId: string) => `${USER_FACILITIES_ENDPOINT(organizationId, userId)}/${facilityId}`;
 const USER_PASSWORD_RESET_ENDPOINT = (organizationId: string, userId: string) =>
   `/admin/organizations/${organizationId}/users/${userId}/password-reset`;
@@ -53,6 +53,21 @@ interface CreateUserPayload {
   auth0_organization_id?: string;
 }
 
+export interface UpdateUserPayload {
+  email?: string;
+  display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  role?: string;
+  role_key?: string;
+  preferences?: Record<string, unknown>;
+  auth0_metadata?: Record<string, unknown>;
+  is_active?: boolean;
+  facility_ids?: string[];
+  facilityIds?: string[];
+}
+
 function normalizeRoleKey(value?: string): RoleKey {
   if (!value) return "user";
   const candidate = value.toString().trim().toLowerCase();
@@ -76,17 +91,33 @@ function formatName(user: PortalUserRecord) {
   return user.email || user.user_id || "Unknown user";
 }
 
-function mapUserRecord(user: PortalUserRecord): UserSummary {
-  const role = normalizeRoleKey(user.role);
-  const facilityIds = Array.isArray(user.facility_ids)
-    ? Array.from(
-        new Set(
-          user.facility_ids
-            .map((id) => id || "")
-            .filter(Boolean)
-        )
+function normalizeFacilityIdList(value?: string[] | null): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      value
+        .map((id) => id || "")
+        .filter(Boolean)
+    )
+  );
+}
+
+function resolveUserFacilityIds(user: PortalUserRecord): string[] {
+  const membershipFacilityIds = Array.isArray(user.location_memberships)
+    ? normalizeFacilityIdList(
+        user.location_memberships
+          .filter((membership) => membership?.is_active !== false)
+          .map((membership) => membership.location_id)
       )
     : [];
+  return membershipFacilityIds;
+}
+
+function mapUserRecord(user: PortalUserRecord): UserSummary {
+  const role = normalizeRoleKey(user.role);
+  const facilityIds = resolveUserFacilityIds(user);
   return {
     id: user.user_id || user.id || "",
     name: formatName(user),
@@ -100,6 +131,18 @@ function mapUserRecord(user: PortalUserRecord): UserSummary {
     lastUpdated: user.updated_at || new Date().toISOString(),
     createdAt: user.created_at || new Date().toISOString(),
   };
+}
+
+function normalizeUpdateUserPayload(patch: UpdateUserPayload): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...patch };
+  const hasFacilityIds =
+    Object.prototype.hasOwnProperty.call(patch, "facility_ids") ||
+    Object.prototype.hasOwnProperty.call(patch, "facilityIds");
+  if (hasFacilityIds) {
+    body.facility_ids = normalizeFacilityIdList(patch.facility_ids ?? patch.facilityIds);
+  }
+  delete body.facilityIds;
+  return body;
 }
 
 function mapDeletedUserRecord(
@@ -305,11 +348,12 @@ export async function createUser(
 export async function updateUser(
   organizationId: string,
   userId: string,
-  patch: Partial<PortalUserRecord> & { is_active?: boolean }
+  patch: UpdateUserPayload
 ): Promise<UserSummary> {
+  const normalizedPatch = normalizeUpdateUserPayload(patch);
   const response = await apiFetch<unknown>(USER_DETAIL_ENDPOINT(organizationId, userId), {
     method: "PUT",
-    body: JSON.stringify(patch),
+    body: JSON.stringify(normalizedPatch),
   });
   if (response && typeof response === "object" && "user" in response) {
     const user = (response as { user?: PortalUserRecord }).user;
@@ -407,10 +451,8 @@ export async function updateUserFacilities(
   userId: string,
   facilityIds: string[]
 ): Promise<{ success: boolean }> {
-  return apiFetch<{ success: boolean }>(USER_FACILITIES_ENDPOINT(organizationId, userId), {
-    method: "PUT",
-    body: JSON.stringify({ facilityIds }),
-  });
+  await updateUser(organizationId, userId, { facility_ids: facilityIds });
+  return { success: true };
 }
 
 export async function removeUserFacility(
@@ -485,7 +527,7 @@ export class UsersAdapter {
   static async updateUser(
     organizationId: string,
     userId: string,
-    patch: Partial<PortalUserRecord>
+    patch: UpdateUserPayload
   ): Promise<UserSummary> {
     return updateUser(organizationId, userId, patch);
   }

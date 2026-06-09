@@ -8,7 +8,7 @@ type CallbackStatus = "starting" | "processing" | "redirecting" | "failed";
 export function AuthCallbackClient() {
   const [status, setStatus] = useState<CallbackStatus>("starting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [destination, setDestination] = useState("/dashboard");
+  const [destination, setDestination] = useState("/portal/home/");
 
   useEffect(() => {
     let cancelled = false;
@@ -16,6 +16,10 @@ export function AuthCallbackClient() {
     const run = async () => {
       setStatus("processing");
       setErrorMessage(null);
+      console.debug("[Auth0] AuthCallbackClient starting callback exchange", {
+        href: window.location.href,
+        search: window.location.search,
+      });
       try {
         const target = await completeAuth0Callback();
         if (cancelled) {
@@ -64,7 +68,10 @@ export function AuthCallbackClient() {
             Destination: <span className="font-semibold text-slate-800" data-auth0-callback-destination>{destination}</span>
           </p>
           <p className="mt-1">
-            Location: <span className="font-semibold text-slate-800">{typeof window !== "undefined" ? window.location.href : "server"}</span>
+            Location:{" "}
+            <span className="font-semibold text-slate-800" suppressHydrationWarning>
+              {typeof window !== "undefined" ? window.location.href : "server"}
+            </span>
           </p>
           <button
             type="button"

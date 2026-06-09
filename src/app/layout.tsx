@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Inter } from "next/font/google";
 import Script from "next/script";
-import "./globals.css";
-import { AppShellRouter } from "@/components/AppShellRouter";
-import { PortalSessionProvider } from "@/lib/portalSession";
-import { PortalDataProvider } from "@/lib/portalData";
 import { Suspense } from "react";
+import "./globals.css";
+import { RootRouteShell } from "@/components/RootRouteShell";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,10 +20,9 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Nulane Systems Portal",
-  description: "Next.js + TypeScript SPA replacing the legacy portal monolith.",
+  title: "Inspection-Trac",
+  description: "Vehicle inspection and condition reporting portal.",
 };
-
 
 export default function RootLayout({
   children,
@@ -97,13 +94,9 @@ export default function RootLayout({
             `}
           </Script>
         ) : null}
-        <PortalSessionProvider>
-          <PortalDataProvider>
-            <Suspense fallback={null}>
-              <AppShellRouter>{children}</AppShellRouter>
-            </Suspense>
-          </PortalDataProvider>
-        </PortalSessionProvider>
+        <Suspense fallback={null}>
+          <RootRouteShell>{children}</RootRouteShell>
+        </Suspense>
       </body>
     </html>
   );

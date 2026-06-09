@@ -6,7 +6,6 @@ import { fetchBranding, saveBranding, uploadBrandingLogo } from "@/lib/services/
 import type { BrandingSnapshot } from "@/lib/types";
 import Image from "next/image";
 import { PageSection } from "@/components/ui/PageSection";
-import { PageTitle } from "@/components/ui/PageTitle";
 
 export default function BrandingPage() {
   const { organizationId, isOrgAdmin, isAdmin, isSuperAdmin } = usePortalSession();
@@ -110,12 +109,6 @@ export default function BrandingPage() {
 
   return (
     <article className="space-y-6 pb-20">
-      <PageTitle
-        eyebrow="Administration"
-        title="Branding Studio"
-        subtitle="Tailor the visual identity of your organization across the portal, PDF reports, and automated emails."
-      />
-
       <form id="brandingForm" className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]" onSubmit={handleSubmit}>
         <div className="space-y-6">
           <PageSection title="Brand Assets" description="Logo and core organization identity." variant="panel">

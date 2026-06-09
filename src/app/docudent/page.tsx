@@ -22,8 +22,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { FileUploadPanel } from "@/components/docudent/FileUploadPanel";
 import { hasOrganizationScope, isModuleEnabled } from "@/lib/modules";
 import { usePortalSession } from "@/lib/portalSession";
-import { ReportsAdapter } from "@/lib/services/reportService";
-import { getPortalBranding } from "@/lib/branding";
+import { getPortalBranding, resolvePortalBranding } from "@/lib/branding";
 import type { ReportDamageApiRow } from "@/lib/types";
 import {
   docuDentSteps,
@@ -43,15 +42,17 @@ import { submitInspection, deriveReportId } from "@/lib/docudent/submitInspectio
 import { uploadAttachments, type UploadSummary } from "@/lib/docudent/uploadAttachments";
 import { PersistenceService, type StashedReport } from "@/lib/docudent/persistenceService";
 import { RefreshCw } from "lucide-react";
+import { usePortalReportsSnapshot } from "@/lib/portalData";
 
 const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
 
 export default function DocuDentPage() {
   const moduleEnabled = isModuleEnabled("docudent");
   const { session, organizationId } = usePortalSession();
+  const { data: reportsSnapshot } = usePortalReportsSnapshot();
   const portalBranding = useMemo(() => getPortalBranding(session), [session]);
+  const presetBranding = useMemo(() => resolvePortalBranding({ session, pathname: "/docudent" }), [session]);
   const hasScope = hasOrganizationScope(session);
-  const [reports, setReports] = useState<ReportDamageApiRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -73,23 +74,7 @@ export default function DocuDentPage() {
   }>({ status: "idle" });
   const [stashedReports, setStashedReports] = useState<StashedReport[]>([]);
 
-  const loadData = useCallback(async () => {
-    if (!organizationId || !moduleEnabled) return;
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await ReportsAdapter.fetchDamageReports({ organization_id: organizationId });
-      setReports(res);
-    } catch (err) {
-      console.error("DocuDent reports fetch failed", err);
-      setLoadError(err instanceof Error ? err.message : "Unable to load recent inspections.");
-    } finally {
-      setLoading(false);
-    }
-  }, [organizationId, moduleEnabled]);
-
   useEffect(() => {
-    loadData();
     const draft = PersistenceService.loadDraft();
     if (draft && JSON.stringify(draft) !== JSON.stringify(formState)) {
       setFormState(draft);
@@ -101,7 +86,16 @@ export default function DocuDentPage() {
     }
     setStashedReports(PersistenceService.listStashed());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadData]);
+  }, []);
+
+  useEffect(() => {
+    if (!organizationId || !moduleEnabled) {
+      setLoading(false);
+      return;
+    }
+    setLoadError(reportsSnapshot?.partialError ?? null);
+    setLoading(false);
+  }, [moduleEnabled, organizationId, reportsSnapshot?.partialError]);
 
   useEffect(() => {
     if (submissionState.status !== "success") {
@@ -113,10 +107,11 @@ export default function DocuDentPage() {
   }, [formState, currentStep, submissionState.status]);
 
   const stats = useMemo(() => {
+    const reports = reportsSnapshot?.damageReports ?? [];
     const total = reports.length;
     const pending = reports.filter((r) => r.status === "review" || r.status === "open").length;
     return { total, pending };
-  }, [reports]);
+  }, [reportsSnapshot?.damageReports]);
 
   const selectedAreaOption = useMemo(
     () => DAMAGE_AREAS.find((area) => area.code === formState.damageArea) ?? null,
@@ -158,7 +153,7 @@ export default function DocuDentPage() {
   if (!moduleEnabled) {
     return (
       <ModuleNotice
-        title="DocuDent disabled"
+        title="Inspection-Trac disabled"
         description="Damage submissions are not available in this build."
         message="Enable NEXT_PUBLIC_MODULE_DOCUDENT to continue."
       />
@@ -174,6 +169,7 @@ export default function DocuDentPage() {
   const totalFiles = files.length;
   const activeStep = docuDentSteps[currentStep];
   const isReviewStep = currentStep === docuDentSteps.length - 1;
+  const recentReports = reportsSnapshot?.damageReports ?? [];
   const submissionBadgeLabel =
     submissionState.status === "success"
       ? "Submitted"
@@ -501,7 +497,7 @@ export default function DocuDentPage() {
       {loadError ? <ErrorPanel error={loadError} title="Recent inspections unavailable" /> : null}
       <Card>
         <CardHeader
-          title="Damage inspection"
+          title={presetBranding.appNavLabel || "Damage inspection"}
           subtitle="Web-native equivalent of the mobile inspection workflow."
           actions={
             portalBranding.logoUrl ? (
@@ -515,7 +511,7 @@ export default function DocuDentPage() {
         />
         <CardContent>
           <div className="space-y-6">
-            <nav className="sticky top-0 z-20 rounded-2xl border border-blue-100 bg-white/95 p-3 shadow-sm backdrop-blur">
+            <nav className="sticky top-0 z-20 rounded-2xl border border-blue-100/70 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(219,234,254,0.95)_100%)] p-3 shadow-sm backdrop-blur">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-7">
               {docuDentSteps.map((step, index) => (
                 <div key={step.id} className="relative min-w-0">
@@ -662,7 +658,7 @@ export default function DocuDentPage() {
             {loading ? (
               <div className="py-8 text-center text-sm text-slate-400">Loading recent scans…</div>
             ) : (
-              reports.slice(0, 5).map((report) => (
+              recentReports.slice(0, 5).map((report: ReportDamageApiRow) => (
                 <Link
                   key={report.report_id}
                   href={`/reports/damage?focus=${report.report_id}`}

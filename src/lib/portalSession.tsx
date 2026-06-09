@@ -162,7 +162,7 @@ function buildDevSession(): PortalSessionResponse {
     location_locked: false,
     branding_snapshot: {
       organization_name: "American Wheel & Car",
-      logo_url: "/media/Nulane_Systems-removebg-preview-inv.png",
+      logo_url: "/media/inspection-trac-logo.png",
     },
     is_admin: !isLimited,
     timestamp: new Date().toISOString(),
@@ -338,11 +338,12 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     const requiresAds = Boolean(session?.requires_ads);
     const portalAccess = session?.portal_access ?? true;
 
+    const normalizedOrganizationName = session?.organization?.name?.trim().toLowerCase() ?? "";
     const isAwct =
-      organizationId === "org-awct" ||
-      organizationId === "awct" ||
-      session?.organization?.name?.toLowerCase().includes("american wheel") ===
-        true;
+      normalizedOrganizationName === "american wheel & car" ||
+      normalizedOrganizationName === "awct.inc" ||
+      normalizedOrganizationName === "awc.inc" ||
+      normalizedOrganizationName === "signature vehicle logistics";
 
     const hasPermission = (key: PermissionKey) => {
       if (isAdmin || isOrgAdmin) {

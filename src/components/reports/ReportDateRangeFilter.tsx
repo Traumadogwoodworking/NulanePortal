@@ -60,6 +60,13 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
   const [activeDateHandle, setActiveDateHandle] = useState<"start" | "end" | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const todayInputValue = toDateInputValue(new Date());
+  const yesterdayInputValue = toDateInputValue(addDays(new Date(), -1));
+  const formatSingleDayLabel = (dateValue: string): string => {
+    if (dateValue === todayInputValue) return "Today";
+    if (dateValue === yesterdayInputValue) return "Yesterday";
+    return dateValue;
+  };
 
   const dateBounds = useMemo(() => {
     const fallback = new Date();
@@ -72,6 +79,22 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
   const presetRanges = useMemo(() => {
     const end = dateBounds.max;
     return [
+      {
+        key: "today",
+        label: "Today",
+        range: {
+          createdFrom: todayInputValue,
+          createdTo: todayInputValue,
+        },
+      },
+      {
+        key: "yesterday",
+        label: "Yesterday",
+        range: {
+          createdFrom: yesterdayInputValue,
+          createdTo: yesterdayInputValue,
+        },
+      },
       {
         key: "week_to_date",
         label: "Week to date",
@@ -89,7 +112,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
         },
       },
     ];
-  }, [dateBounds.max, dateBounds.min]);
+  }, [dateBounds.max, dateBounds.min, todayInputValue, yesterdayInputValue]);
 
   const dateRangeMax = useMemo(() => daysBetween(dateBounds.min, dateBounds.max), [dateBounds]);
   const createdFromOffset = value.createdFrom ? daysBetween(dateBounds.min, parseDateInputValue(value.createdFrom)) : 0;
@@ -151,7 +174,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
         <span className="min-w-0 flex-1 truncate">
           {value.createdFrom || value.createdTo
             ? dateFilterMode === "single"
-              ? value.createdFrom || value.createdTo
+              ? formatSingleDayLabel(value.createdFrom || value.createdTo || todayInputValue)
               : `${value.createdFrom || toDateInputValue(dateBounds.min)} to ${value.createdTo || toDateInputValue(dateBounds.max)}`
             : label}
         </span>
@@ -161,13 +184,13 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       <div className="absolute right-0 top-10 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
         <div className="mb-3">
           <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Presets</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-2">
             {presetRanges.map((preset) => (
               <button
                 key={preset.key}
                 type="button"
                 onClick={() => {
-                  setDateFilterMode("range");
+                  setDateFilterMode("single");
                   onChange(preset.range);
                   setIsOpen(false);
                 }}
@@ -186,7 +209,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
               onClick={() => {
                 setDateFilterMode(mode);
                 if (mode === "single") {
-                  const selected = value.createdFrom || value.createdTo || toDateInputValue(dateBounds.max);
+                  const selected = value.createdFrom || value.createdTo || todayInputValue;
                   onChange({ createdFrom: selected, createdTo: selected });
                 } else if (dateRangeMax > 0) {
                   const selectedStart = value.createdFrom || toDateInputValue(dateBounds.min);
@@ -203,7 +226,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
                 dateFilterMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
               }`}
             >
-              {mode === "single" ? "One day" : "Range"}
+              {mode === "single" ? "Today" : "Range"}
             </button>
           ))}
         </div>
@@ -213,7 +236,9 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
               <span>{dateFilterMode === "single" ? "Day" : "Active range"}</span>
               <span>
                 {dateFilterMode === "single"
-                  ? value.createdFrom || toDateInputValue(dateBounds.max)
+                  ? value.createdFrom === todayInputValue || value.createdTo === todayInputValue
+                    ? "Today"
+                    : value.createdFrom || value.createdTo || todayInputValue
                   : `${value.createdFrom || toDateInputValue(dateBounds.min)} to ${value.createdTo || toDateInputValue(dateBounds.max)}`}
               </span>
             </div>

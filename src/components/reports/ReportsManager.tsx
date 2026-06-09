@@ -33,7 +33,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildReportGallery } from "@/lib/reportGallery";
-import { normalizeMediaUrl } from "@/lib/config";
 import { ReportsAdapter } from "@/lib/services/reportService";
 import { usePortalDirectorySnapshot, usePortalReportsSnapshot } from "@/lib/portalData";
 import {
@@ -45,6 +44,7 @@ import {
   serializeDamageReportFilters,
 } from "@/lib/reportFilters";
 import { AuthRedirectError } from "@/lib/portalAuth";
+import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { 
   Download, 
@@ -52,6 +52,7 @@ import {
   FileText, 
   Image as ImageIcon, 
   Maximize2,
+  ListFilter,
   RefreshCw,
   Search,
   Filter,
@@ -59,7 +60,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { resolveDamageReportLocationName, slugForFacilityLabel } from "@/lib/reportUtils";
-import { getPortalBranding } from "@/lib/branding";
 import { usePortalSession } from "@/lib/portalSession";
 import {
   DAMAGE_AREAS,
@@ -327,7 +327,7 @@ function severitySortValue(value?: string | number | null): number {
 }
 
 export function ReportsManager({ mode }: ReportsManagerProps) {
-  const { organizationId, status: sessionStatus, isPortalAccessAllowed } = usePortalSession();
+  const { organizationId, status: sessionStatus, isPortalAccessAllowed, session } = usePortalSession();
   const { data: directory } = usePortalDirectorySnapshot();
   const { data: reportsSnapshot, mutate: refreshReportsSnapshot } = usePortalReportsSnapshot();
   const [statusFilter, setStatusFilter] = useState<ReportStatus | "">(DEFAULT_DAMAGE_REPORT_FILTERS.statusFilter);
@@ -348,12 +348,18 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     created: "desc",
   });
   const [selectedDamageReportId, setSelectedDamageReportId] = useState<string | null>(null);
+  const [selectedDamageReportIds, setSelectedDamageReportIds] = useState<string[]>([]);
+  const [damageMultiSelectEnabled, setDamageMultiSelectEnabled] = useState(false);
   const [isDamageEditOpen, setIsDamageEditOpen] = useState(false);
   const [damageEditDraft, setDamageEditDraft] = useState<DamageReportEditDraft | null>(null);
   const [damageEditStatus, setDamageEditStatus] = useState<string | null>(null);
   const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
+  const [isDownloadingSelectedPdf, setIsDownloadingSelectedPdf] = useState(false);
+  const [isDownloadingSelectedCsv, setIsDownloadingSelectedCsv] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hideFacilitySelector = (session?.organization?.name ?? "").trim().toLowerCase() === "free tier organization";
+  const hideFacilityColumn = hideFacilitySelector;
 
   const isMounted = useRef(true);
   const damageSortFieldRef = useRef(damageSortField);
@@ -362,6 +368,18 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }, [damageSortField]);
   const damageReports = reportsSnapshot?.damageReports ?? [];
   const rsaReports = reportsSnapshot?.rsaReports ?? [];
+  const selectedDamageReports = useMemo(
+    () => selectedDamageReportIds.map((reportId) => damageReports.find((report) => report.report_id === reportId)).filter((report): report is ReportDamageApiRow => Boolean(report)),
+    [damageReports, selectedDamageReportIds]
+  );
+  const selectedDamageReportsCount = selectedDamageReports.length;
+  const selectedDamageReportVins = useMemo(
+    () =>
+      selectedDamageReports
+        .map((report) => report.vin || "VIN unavailable")
+        .filter((vin, index, values) => values.indexOf(vin) === index),
+    [selectedDamageReports]
+  );
 
   useEffect(() => {
     isMounted.current = true;
@@ -550,8 +568,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     setCreatedTo("");
   }, []);
   const availableDamageFilterOptions = useMemo(
-    () => DAMAGE_FILTER_OPTIONS.filter((option) => !activeDamageFilterKeys.includes(option.key)),
-    [activeDamageFilterKeys]
+    () =>
+      DAMAGE_FILTER_OPTIONS.filter(
+        (option) => !activeDamageFilterKeys.includes(option.key) && !(hideFacilitySelector && option.key === "facility")
+      ),
+    [activeDamageFilterKeys, hideFacilitySelector]
   );
   const removeDamageFilter = useCallback((key: DamageReportFilterKey) => {
     setActiveDamageFilterKeys((current) => current.filter((filterKey) => filterKey !== key));
@@ -575,6 +596,32 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     const reportComment = selectedDamageFullRow.comments?.trim();
     return overviewComment || reportComment || "";
   }, [selectedDamageFullRow]);
+
+  useEffect(() => {
+    if (!hideFacilitySelector) {
+      return;
+    }
+    setActiveDamageFilterKeys((current) => current.filter((key) => key !== "facility"));
+    setFacilityFilter("all");
+  }, [hideFacilitySelector]);
+
+  useEffect(() => {
+    if (selectedDamageReportIds.length === 0) {
+      if (selectedDamageReportId !== null) {
+        setSelectedDamageReportId(null);
+      }
+      return;
+    }
+    if (selectedDamageReportIds.length === 1) {
+      if (selectedDamageReportId !== selectedDamageReportIds[0]) {
+        setSelectedDamageReportId(selectedDamageReportIds[0]);
+      }
+      return;
+    }
+    if (selectedDamageReportId && !selectedDamageReportIds.includes(selectedDamageReportId)) {
+      setSelectedDamageReportId(selectedDamageReportIds[0]);
+    }
+  }, [selectedDamageReportId, selectedDamageReportIds]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -683,6 +730,83 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     }
   }, [damageEditDraft, refreshReportsSnapshot, selectedDamageFullRow]);
 
+  const toggleDamageMultiSelect = useCallback(() => {
+    setDamageMultiSelectEnabled((current) => !current);
+  }, []);
+
+  const selectDamageReport = useCallback((reportId: string, event?: React.MouseEvent<HTMLTableRowElement>) => {
+    const useMultiSelect = damageMultiSelectEnabled || Boolean(event?.ctrlKey || event?.metaKey);
+    if (useMultiSelect) {
+      setDamageMultiSelectEnabled(true);
+      setSelectedDamageReportIds((current) => {
+        if (current.includes(reportId)) {
+          const next = current.filter((currentId) => currentId !== reportId);
+          if (next.length === 1) {
+            setSelectedDamageReportId(next[0]);
+          }
+          return next;
+        }
+        if (current.length >= 25) {
+          setDamageEditStatus("Multi-select is limited to 25 reports.");
+          return current;
+        }
+        const next = [...current, reportId];
+        setSelectedDamageReportId(next[0]);
+        return next;
+      });
+      return;
+    }
+    setSelectedDamageReportIds([reportId]);
+    setSelectedDamageReportId(reportId);
+    setDamageMultiSelectEnabled(false);
+  }, [damageMultiSelectEnabled]);
+
+  const downloadSelectedDamageCsv = useCallback(() => {
+    if (selectedDamageReports.length === 0) return;
+    const rows = buildFilteredReportCsvRows(selectedDamageReports, "facility");
+    if (rows.length <= 1) return;
+    const csv = rows
+      .map((row) =>
+        row
+          .map((value) => {
+            const stringValue = value === null || value === undefined ? "" : String(value);
+            return `"${stringValue.replace(/"/g, '""')}"`;
+          })
+          .join(",")
+      )
+      .join("\n");
+    saveAs(new Blob([csv], { type: "text/csv;charset=utf-8;" }), `Docudent_damage_selected_${new Date().toISOString().split("T")[0]}.csv`);
+  }, [selectedDamageReports]);
+
+  const downloadSelectedDamagePdfZip = useCallback(async () => {
+    if (selectedDamageReports.length === 0) return;
+    setIsDownloadingSelectedPdf(true);
+    try {
+      const zip = new JSZip();
+      const fetched: Array<{ vin: string; bytes: Uint8Array } | null> = await Promise.all(
+        selectedDamageReports.map(async (report) => {
+          const pdfUrl = ReportsAdapter.resolveDamageReportPdfUrl(report);
+          if (!pdfUrl) return null;
+          const response = await fetch(pdfUrl);
+          if (!response.ok) return null;
+          return {
+            vin: report.vin?.trim() || "",
+            bytes: new Uint8Array((await response.arrayBuffer()) as ArrayBuffer),
+          };
+        })
+      );
+      const added = fetched.filter((entry): entry is { vin: string; bytes: Uint8Array } => Boolean(entry?.vin && entry?.bytes?.length));
+      if (added.length === 0) return;
+      added.forEach((entry) => {
+        zip.file(`${entry.vin}.pdf`, entry.bytes);
+      });
+      const blob = await zip.generateAsync({ type: "blob" });
+      saveAs(blob, `Docudent_damage_selected_pdfs_${new Date().toISOString().split("T")[0]}.zip`);
+    } finally {
+      setIsDownloadingSelectedPdf(false);
+    }
+  }, [selectedDamageReports]);
+
   const handleDamageSort = useCallback((columnId: "severity" | "created") => {
     setDamageSortDirections((currentDirections) => {
       const nextDirection =
@@ -706,6 +830,9 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     "h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300";
   const renderDamageFilterControl = (key: DamageReportFilterKey) => {
     if (key === "facility") {
+      if (hideFacilitySelector) {
+        return null;
+      }
       return (
         <div className="w-52">
           <FacilitySelector facilities={facilityChoices} value={facilityFilter} onChange={setFacilityFilter} />
@@ -714,7 +841,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     }
     if (key === "report_id") {
       return (
-        <input type="search" placeholder="Report ID" value={reportIdFilter} onChange={(event) => setReportIdFilter(event.target.value)} className={damageFilterInputClass} />
+        <input
+          type="search"
+          placeholder="Report ID"
+          value={reportIdFilter}
+          onChange={(event) => setReportIdFilter(event.target.value)}
+          className={damageFilterInputClass}
+        />
       );
     }
     if (key === "vin") {
@@ -733,12 +866,24 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     }
     if (key === "make") {
       return (
-        <input type="search" placeholder="Make" value={makeFilter} onChange={(event) => setMakeFilter(event.target.value)} className={damageFilterInputClass} />
+          <input
+            type="search"
+            placeholder="Make"
+            value={makeFilter}
+            onChange={(event) => setMakeFilter(event.target.value)}
+            className={damageFilterInputClass}
+          />
       );
     }
     if (key === "model") {
       return (
-        <input type="search" placeholder="Model" value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} className={damageFilterInputClass} />
+          <input
+            type="search"
+            placeholder="Model"
+            value={modelFilter}
+            onChange={(event) => setModelFilter(event.target.value)}
+            className={damageFilterInputClass}
+          />
       );
     }
     if (key === "inspector_email") {
@@ -793,37 +938,42 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   return (
     <div className="space-y-6">
-      <PageTitle
-        title={mode === "damage" ? "Damage Reports" : "Operations Reports"}
-        subtitle={mode === "damage" ? "Vehicle inspection results" : "Analyze vehicle inspection activity across all facilities."}
-      />
-
       <Card className="overflow-hidden border-slate-200/80 bg-white shadow-[0_24px_80px_-48px_rgba(15,23,42,0.35)]">
-        <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
+        <div className="border-b border-blue-200/80 bg-gradient-to-r from-blue-50 via-blue-50/80 to-blue-100/60 px-6 py-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Damage Reports</p>
-              <h2 className="text-xl font-black tracking-tight text-slate-950">Vehicle inspection results</h2>
               <p className="text-sm text-slate-600">Browse reports, inspect details, and export the visible set.</p>
             </div>
-            <Badge variant="secondary" className="w-fit border-blue-200 bg-blue-50 text-blue-800">
-              {sortedDamageSummaries.length} visible reports
+            <Badge variant="secondary" className="w-fit border-blue-300 bg-white text-blue-800 shadow-sm">
+              Reports: {sortedDamageSummaries.length}
             </Badge>
           </div>
         </div>
         <CardContent className="p-0">
           <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(420px,0.85fr)] lg:items-start">
             <div className="sticky top-24 h-[calc(100vh-7rem)] min-h-0 self-start">
-              <Card className="flex h-full min-h-0 flex-col overflow-hidden border-slate-200/80 bg-white shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)]">
-                <div className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 px-5 py-4 backdrop-blur">
+              <Card className="flex h-full min-h-0 flex-col overflow-hidden border-blue-200/80 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(255,255,255,0.96)_100%)] shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)]">
+                <div className="sticky top-0 z-30 border-b border-blue-200/80 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(219,234,254,0.92)_100%)] px-5 py-4 backdrop-blur">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Inspection Reports</p>
                       <p className="text-sm font-semibold text-slate-700">Scroll independently from the page</p>
                     </div>
-                    <Badge variant="secondary" className="border-slate-200 bg-white text-slate-700">
-                      {sortedDamageSummaries.length}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="border-blue-300 bg-white text-blue-800 shadow-sm">
+                        Reports: {sortedDamageSummaries.length}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant={damageMultiSelectEnabled ? "default" : "outline"}
+                        size="sm"
+                        className="gap-2"
+                        onClick={toggleDamageMultiSelect}
+                      >
+                        <ListFilter className="h-4 w-4" />
+                        Multi-select
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <div className="relative min-w-56 flex-1">
@@ -910,7 +1060,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     <>
                       <Separator className="my-4" />
                       <div className="flex flex-wrap items-center gap-2">
-                        {activeDamageFilterKeys.map((key) => {
+                        {activeDamageFilterKeys.filter((key) => !(hideFacilitySelector && key === "facility")).map((key) => {
                           const label = DAMAGE_FILTER_OPTIONS.find((option) => option.key === key)?.label ?? key;
                           return (
                             <div key={key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -938,7 +1088,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         <TableRow className="bg-slate-50/95">
                           {[
                             "VIN",
-                            "Facility",
+                            ...(!hideFacilityColumn ? ["Facility"] : []),
                             { id: "severity", label: "Severity", sortable: true },
                             "Status",
                             { id: "created", label: "Created", sortable: true },
@@ -976,7 +1126,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                       <TableBody>
                         {loading ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
                               <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
                                 <RefreshCw className="h-4 w-4 animate-spin" />
                                 Loading reports...
@@ -985,7 +1135,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           </TableRow>
                         ) : error ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
                               <div className="space-y-2 text-center">
                                 <div className="text-sm font-semibold text-rose-600">Damage reports could not be loaded.</div>
                                 <div className="break-all whitespace-normal text-xs text-rose-500">{error}</div>
@@ -994,36 +1144,39 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           </TableRow>
                         ) : sortedDamageSummaries.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
                               <EmptyState title="No Reports Found" description="No matching reports for your criteria." />
                             </TableCell>
                           </TableRow>
                         ) : (
                           sortedDamageSummaries.map((entry) => {
                             const isSelected = entry.id === selectedDamageReportId;
-                            const rowTone = isSelected ? "bg-blue-50/80" : "bg-white";
+                            const isMultiSelected = selectedDamageReportIds.includes(entry.id);
+                            const rowTone = isMultiSelected ? "bg-blue-50/80" : "bg-white";
                             return (
                               <TableRow
                                 key={entry.id}
-                                data-state={isSelected ? "selected" : undefined}
+                                data-state={isMultiSelected ? "selected" : undefined}
                                 className={`cursor-pointer transition-colors hover:bg-slate-50 ${rowTone}`}
-                                onClick={() => setSelectedDamageReportId(entry.id)}
+                                onClick={(event) => selectDamageReport(entry.id, event)}
                               >
-                                <TableCell className={`font-mono text-sm ${isSelected ? "border-l-4 border-l-blue-600 bg-blue-50/80 font-semibold text-slate-950" : "text-slate-600"}`}>
+                                <TableCell className={`font-mono text-sm ${isMultiSelected ? "border-l-4 border-l-blue-600 bg-blue-50/80 font-semibold text-slate-950" : "text-slate-600"}`}>
                                   {entry.vin || "VIN unavailable"}
                                 </TableCell>
-                                <TableCell className={`text-sm break-all ${isSelected ? "bg-blue-50/80 font-medium text-slate-950" : "text-slate-600"}`}>
-                                  {entry.locationName}
-                                </TableCell>
-                                <TableCell className={isSelected ? "bg-blue-50/80" : ""}>
+                                {!hideFacilityColumn ? (
+                                  <TableCell className={`text-sm break-all ${isMultiSelected ? "bg-blue-50/80 font-medium text-slate-950" : "text-slate-600"}`}>
+                                    {entry.locationName}
+                                  </TableCell>
+                                ) : null}
+                                <TableCell className={isMultiSelected ? "bg-blue-50/80" : ""}>
                                   <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${severityPillClass(entry.severity)}`}>
                                     {entry.severity && entry.severity !== "n/a" ? resolveSeverityLabel(entry.severity) : "N/A"}
                                   </span>
                                 </TableCell>
-                                <TableCell className={isSelected ? "bg-blue-50/80" : ""}>
+                                <TableCell className={isMultiSelected ? "bg-blue-50/80" : ""}>
                                   <StatusBadge label={entry.status} tone={toneForReportStatus(entry.status)} />
                                 </TableCell>
-                                <TableCell className={`text-sm ${isSelected ? "bg-blue-50/80 font-medium text-slate-950" : "text-slate-600"}`}>
+                                <TableCell className={`text-sm ${isMultiSelected ? "bg-blue-50/80 font-medium text-slate-950" : "text-slate-600"}`}>
                                   {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "N/A"}
                                 </TableCell>
                               </TableRow>
@@ -1037,76 +1190,142 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
               </Card>
             </div>
             <div className="sticky top-24 h-[calc(100vh-7rem)] min-h-0 self-start">
-              {selectedDamageFullRow ? (
-                <div className="flex h-full min-h-0 flex-col gap-4">
-              <Card className="overflow-hidden border-slate-200/80 bg-white shadow-[0_24px_70px_-34px_rgba(15,23,42,0.24)]">
-                <div className="h-1.5 bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400" />
-                <div className="bg-gradient-to-br from-blue-50/90 via-white to-slate-50 px-5 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Selected Report Overview</p>
-                        <h3 className="font-mono text-3xl font-black tracking-tight text-slate-950">
-                          {selectedDamageFullRow.vin || "VIN unavailable"}
-                        </h3>
-                        <p className="text-sm font-semibold text-slate-700">
-                          {selectedDamageFullRow.make || "Unknown Make"} {selectedDamageFullRow.model || ""}
-                          {selectedDamageFullRow.year ? ` ${selectedDamageFullRow.year}` : ""}
-                        </p>
+              {selectedDamageReportsCount > 1 ? (
+                <Card className="flex h-full min-h-0 flex-col overflow-hidden border-slate-200/80 bg-white shadow-[0_24px_70px_-34px_rgba(15,23,42,0.24)]">
+                  <div className="h-1.5 bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400" />
+                  <div className="border-b border-slate-200/80 bg-gradient-to-br from-blue-50/90 via-white to-slate-50 px-5 py-4 text-center">
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Multiple Reports Selected</p>
+                      <h3 className="text-xl font-black tracking-tight text-slate-950">{selectedDamageReportsCount} reports selected</h3>
+                      <p className="text-sm text-slate-600">Use the downloads below for the selected VINs only.</p>
+                      <div className="flex flex-wrap justify-center gap-2 pt-2">
+                        {selectedDamageReportVins.map((vin) => (
+                          <Badge key={vin} variant="secondary" className="rounded-full border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+                            {vin}
+                          </Badge>
+                        ))}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge label={selectedDamageFullRow.status || "open"} tone={toneForReportStatus(selectedDamageFullRow.status || "open")} />
-                        <Badge variant="secondary" className="rounded-full border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800">
-                          {formatDamageReportTimestamp(selectedDamageFullRow.created_at || selectedDamageFullRow.updated_at)}
-                        </Badge>
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 p-5">
+                    <div className="space-y-3">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="lg"
+                        className="h-11 gap-2 px-4 mx-auto flex"
+                        disabled={isDownloadingSelectedPdf || selectedDamageReportsCount === 0}
+                        onClick={() => void downloadSelectedDamagePdfZip()}
+                      >
+                        <Download className="h-4 w-4" />
+                        {isDownloadingSelectedPdf ? "Preparing PDFs..." : "Download PDFs"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        className="h-11 gap-2 px-4 mx-auto flex"
+                        disabled={isDownloadingSelectedCsv || selectedDamageReportsCount === 0}
+                        onClick={() => {
+                          setIsDownloadingSelectedCsv(true);
+                          try {
+                            downloadSelectedDamageCsv();
+                          } finally {
+                            setIsDownloadingSelectedCsv(false);
+                          }
+                        }}
+                      >
+                        <FileText className="h-4 w-4" />
+                        Download CSV
+                      </Button>
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Selection limit</p>
+                      <p className="mt-1 text-sm text-slate-600">Up to 25 reports can be selected at once.</p>
+                    </div>
+                  </div>
+                </Card>
+              ) : selectedDamageFullRow ? (
+                <div className="flex h-full min-h-0 flex-col gap-4">
+                  <Card className="overflow-hidden border-slate-200/80 bg-white shadow-[0_24px_70px_-34px_rgba(15,23,42,0.24)]">
+                    <div
+                      className="h-1.5"
+                      style={{
+                        background: `linear-gradient(90deg, var(--brand, #2563eb) 0%, color-mix(in srgb, var(--brand, #2563eb) 88%, white) 12%, color-mix(in srgb, var(--brand, #2563eb) 70%, white) 20%, color-mix(in srgb, var(--brand, #2563eb) 48%, white) 32%, color-mix(in srgb, var(--brand, #2563eb) 26%, white) 48%, white 100%)`,
+                      }}
+                    />
+                <div className="bg-gradient-to-br from-blue-50/90 via-white to-slate-50 px-5 py-4 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Selected Report Overview</p>
+                      <h3 className="font-mono text-3xl font-black tracking-tight text-slate-950">
+                        {selectedDamageFullRow.vin || "VIN unavailable"}
+                      </h3>
+                      <p className="text-sm font-semibold text-slate-700">
+                        {selectedDamageFullRow.make || "Unknown Make"} {selectedDamageFullRow.model || ""}
+                        {selectedDamageFullRow.year ? ` ${selectedDamageFullRow.year}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <StatusBadge label={selectedDamageFullRow.status || "open"} tone={toneForReportStatus(selectedDamageFullRow.status || "open")} />
+                      <Badge variant="secondary" className="rounded-full border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800">
+                        {formatDamageReportTimestamp(selectedDamageFullRow.created_at || selectedDamageFullRow.updated_at)}
+                      </Badge>
+                      {!hideFacilitySelector ? (
                         <Badge variant="secondary" className="rounded-full border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
                           {resolveDamageReportLocationName(selectedDamageFullRow)}
                         </Badge>
-                      </div>
+                      ) : null}
                     </div>
-                        <div className="flex shrink-0 flex-wrap gap-2">
-                          <Button type="button" variant="outline" size="lg" className="h-10 gap-2 px-4" onClick={openDamageReportEditor}>
-                            <FileEdit className="h-4 w-4" />
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="lg"
-                            className="h-10 gap-2 px-4"
-                            disabled={!selectedDamageFullRow.report_id || !selectedDamagePhotos.length || isDownloadingPhotos}
-                            onClick={async () => {
-                              if (!selectedDamageFullRow.report_id || isDownloadingPhotos) return;
-                              setIsDownloadingPhotos(true);
-                              try {
-                                await ReportsAdapter.downloadDamageReportPhotosZip(selectedDamageFullRow);
-                              } catch (photoError) {
-                                setDamageEditStatus(photoError instanceof Error ? photoError.message : "Unable to download report photos.");
-                              } finally {
-                                setIsDownloadingPhotos(false);
-                              }
-                            }}
-                          >
-                            <ImageIcon className="mr-2 h-4 w-4" />
-                            Download Photos
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="lg"
-                            className="h-10 gap-2 px-4"
-                            disabled={!selectedDamagePdfUrl}
-                            onClick={() => {
-                              if (!selectedDamagePdfUrl) return;
-                              window.open(selectedDamagePdfUrl, "_blank", "noopener,noreferrer");
-                            }}
-                          >
-                            <Download className="mr-2 h-4 w-4" />
-                            Download PDF
-                          </Button>
-                        </div>
-                      </div>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <Button type="button" variant="outline" size="lg" className="h-10 gap-2 px-4" onClick={openDamageReportEditor}>
+                        <FileEdit className="h-4 w-4" />
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        className="h-10 gap-2 px-4"
+                        disabled={!selectedDamageFullRow.report_id || !selectedDamagePhotos.length || isDownloadingPhotos}
+                        onClick={async () => {
+                          if (!selectedDamageFullRow.report_id || isDownloadingPhotos) return;
+                          setIsDownloadingPhotos(true);
+                          try {
+                            await ReportsAdapter.downloadDamageReportPhotosZip(selectedDamageFullRow);
+                          } catch (photoError) {
+                            setDamageEditStatus(photoError instanceof Error ? photoError.message : "Unable to download report photos.");
+                          } finally {
+                            setIsDownloadingPhotos(false);
+                          }
+                        }}
+                      >
+                        <ImageIcon className="mr-2 h-4 w-4" />
+                        Download Photos
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="lg"
+                        className="h-10 gap-2 px-4"
+                        disabled={!selectedDamagePdfUrl}
+                        onClick={() => {
+                          if (!selectedDamagePdfUrl) return;
+                          window.open(selectedDamagePdfUrl, "_blank", "noopener,noreferrer");
+                        }}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download PDF
+                      </Button>
                     </div>
+                  </div>
+                </div>
+                <div
+                  className="h-1.5"
+                  style={{
+                    background: `linear-gradient(90deg, var(--brand, #2563eb) 0%, color-mix(in srgb, var(--brand, #2563eb) 88%, white) 12%, color-mix(in srgb, var(--brand, #2563eb) 70%, white) 20%, color-mix(in srgb, var(--brand, #2563eb) 48%, white) 32%, color-mix(in srgb, var(--brand, #2563eb) 26%, white) 48%, white 100%)`,
+                  }}
+                />
                   </Card>
                   <ScrollArea className="min-h-0 flex-1">
                     <div className="space-y-4 pr-1">

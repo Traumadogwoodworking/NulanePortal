@@ -1,11 +1,12 @@
-# DocuDent Portal (portal-next)
+# Inspection-Trac Portal (portal-next)
 
-Next.js 16/TypeScript SPA that replaces the legacy `nulane_systems_site` portal iframe with modular, typed routes.
+Next.js 16/TypeScript SPA for the Inspection-Trac portal.
+
+This branch ships the quick Inspection-Trac branded portal path. Branding is centralized in the current preset/navigation seams so the visible shell can be replaced later by a proper config-driven white-label build without rewriting stable portal code.
 
 ## Setup
 
 ```bash
-cd portal-next
 npm install
 ```
 
@@ -36,24 +37,44 @@ The default API base mirrors the legacy `resolveApiBase()` helper in `nulane_sys
 ## Local development and validation
 
 ```bash
-npm run dev             # Next.js development server (Turbopack)
+npm run dev             # Next.js development server
 npm run lint            # ESLint
-npx tsc --noEmit        # TypeScript checks
+npx tsc --noEmit        # TypeScript checks when needed
+npm run build           # Static export build
 ```
 The portal now refuses to initialize on `localhost` unless `NEXT_PUBLIC_API_BASE_URL` points at a non-production backend. Set that env (and the matching Auth0 overrides above) before running these commands so you do not accidentally hit `https://api.nulanesystems.com/api` during development.
 
+
+## Static export pipeline
+
+This repo is configured to export a static site into `out/`.
+
+```bash
+npm run build
+npm run export:validate
+```
+
+The export should produce:
+
+- `out/index.html`
+- `out/_next/`
+- route folders with trailing slashes
+- public asset copies used by the static site
+
+The `out/` directory can be uploaded directly to a static host, cPanel `public_html`, or a CI artifact destination.
 
 ## Production validation (run outside the sandbox)
 
 ```bash
 npm run build           # Next.js production build (Turbopack)
-npm run start           # Run the build locally for smoke checks
+npm run start           # Serve the static out/ export locally
 ```
 
-If Turbopack build hangs in restricted environments (as seen in this sandbox), run these commands on a machine/CI that can execute `npm run build` and capture the standard `next build` output. After building, use `npm run start` to exercise the compiled server.
+If Turbopack build hangs in restricted environments (as seen in this sandbox), run these commands on a machine/CI that can execute `npm run build` and capture the standard `next build` output. For this static export workflow, validate the generated `out/` folder with `npm run export:validate` and publish the contents of `out/` rather than running a Node server. `npm run start` serves the exported `out/` directory directly.
 
 ## Workflow philosophy
 
+- Keep customer branding in the central branding/navigation seams.
 - Inspect first, then patch the narrowest real cause.
 - Prefer simple code, local logic, and one obvious place for a style or behavior decision.
 - Preserve working render paths unless simplification clearly improves correctness or debug speed.

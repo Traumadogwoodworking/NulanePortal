@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
 const DEFAULT_AUTH0_DOMAIN = "nulanesystems.us.auth0.com";
 const DEFAULT_AUTH0_CLIENT_ID = "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc";
 const DEFAULT_AUTH0_AUDIENCE = "https://api.nulanesystems.com";
-const DEFAULT_AUTH0_REDIRECT_URI = "https://nulanesystems.com/portal";
+const DEFAULT_AUTH0_REDIRECT_URI = "https://nulanesystems.com/portal/";
 const DEV_ACCESS_TOKEN = "dev-portal-token";
 const DEV_AUTH_BYPASS_FLAG = "true";
 
@@ -126,13 +126,13 @@ function buildAuthConfig(): AuthConfig {
   const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
   const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || DEFAULT_AUTH0_CLIENT_ID).trim();
   const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || DEFAULT_AUTH0_AUDIENCE).trim();
-  const redirectOverride = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI || "").trim();
   const browserOrigin = window.location.origin || DEFAULT_AUTH0_REDIRECT_URI;
   const localRedirectUri =
     browserOrigin.includes("://127.0.0.1") || browserOrigin.includes("://::1")
       ? browserOrigin.replace("://127.0.0.1", "://localhost").replace("://::1", "://localhost")
       : browserOrigin;
-  const redirectUri = redirectOverride || localRedirectUri || DEFAULT_AUTH0_REDIRECT_URI;
+  const redirectOverride = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI || "").trim();
+  const redirectUri = redirectOverride || `${localRedirectUri.replace(/\/+$/, "")}/portal/` || DEFAULT_AUTH0_REDIRECT_URI;
 
   if (!domain || !clientId || !audience || !redirectUri) {
     console.error("[Auth0] configuration incomplete", { domain, clientId, audience, redirectUri });
@@ -187,6 +187,17 @@ function getUrlSearchParams() {
   return isBrowser() ? new URLSearchParams(window.location.search) : new URLSearchParams();
 }
 
+function listAuth0StorageKeys(): string[] {
+  if (!isBrowser()) {
+    return [];
+  }
+  try {
+    return Object.keys(window.sessionStorage).filter((key) => key.toLowerCase().includes("auth0"));
+  } catch {
+    return [];
+  }
+}
+
 function waitForToken(tokenPromise: Promise<string>, timeoutMs = 5000): Promise<string> {
   return Promise.race([
     tokenPromise,
@@ -216,6 +227,7 @@ async function handleRedirectCallbackIfNeeded() {
       console.debug("[Auth0] handling redirect callback", {
         code: params.get("code")?.slice(0, 5) + "...",
         state: params.get("state")?.slice(0, 5) + "...",
+        auth0StorageKeys: listAuth0StorageKeys(),
         redirectUri: getAuthConfig().redirectUri,
       });
     }
@@ -241,6 +253,13 @@ async function handleRedirectCallbackIfNeeded() {
 }
 
 export async function completeAuth0Callback(): Promise<string> {
+  const callbackState = getUrlSearchParams().get("state") || "";
+  if (DEBUG_AUTH0) {
+    console.debug("[Auth0] callback state received", {
+      callbackStatePrefix: callbackState.slice(0, 5) + (callbackState ? "..." : ""),
+      auth0StorageKeys: listAuth0StorageKeys(),
+    });
+  }
   const client = await getAuth0Client();
   const result = await client.handleRedirectCallback();
   const appState = result?.appState;
@@ -263,7 +282,7 @@ export async function completeAuth0Callback(): Promise<string> {
       console.warn("[Auth0] unable to clear stored returnTo", error);
     }
   }
-  const destination = returnTo || storedReturnTo || "/dashboard";
+  const destination = returnTo || storedReturnTo || "/portal/home/";
   try {
     const token = await waitForToken(
       client.getTokenSilently({
@@ -275,6 +294,14 @@ export async function completeAuth0Callback(): Promise<string> {
     persistPortalToken(token);
   } catch (error) {
     console.warn("[Auth0] token bootstrap after callback failed", error);
+  }
+  if (DEBUG_AUTH0) {
+    console.debug("[Auth0] callback completion summary", {
+      callbackStatePrefix: callbackState.slice(0, 5) + (callbackState ? "..." : ""),
+      returnTo,
+      storedReturnTo,
+      destination,
+    });
   }
   return destination;
 }
@@ -400,9 +427,10 @@ export async function logoutPortal(): Promise<void> {
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] starting logout", describeConfig(config));
   }
+  const returnTo = config.redirectUri;
   await client.logout({
     logoutParams: {
-      returnTo: config.redirectUri,
+      returnTo,
     },
   });
 }

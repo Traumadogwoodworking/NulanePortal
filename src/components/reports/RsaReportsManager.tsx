@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { resolveRsaFacilityLabel, slugForFacilityLabel } from "@/lib/reportUtils";
 import { Button } from "@/components/ui/button";
-import { usePortalReportsSnapshot } from "@/lib/portalData";
+import { usePortalSession } from "@/lib/portalSession";
+import { usePortalBrandingSnapshot, usePortalReportsSnapshot } from "@/lib/portalData";
+import { resolveBrandingPrimaryColor } from "@/lib/branding";
 import {
   DEFAULT_RSA_REPORT_FILTERS,
   FACILITY_FILTER_ALL,
@@ -89,6 +91,8 @@ function normalizeVinEntry(entry: RsaDeckEntry): string | null {
 }
 
 export function RsaReportsManager() {
+  const { session } = usePortalSession();
+  const { data: brandingSnapshot } = usePortalBrandingSnapshot();
   const { data: reportsSnapshot, mutate: refreshReportsSnapshot } = usePortalReportsSnapshot();
   const [facilityFilter, setFacilityFilter] = useState(DEFAULT_RSA_REPORT_FILTERS.facilityFilter);
   const [searchTerm, setSearchTerm] = useState(DEFAULT_RSA_REPORT_FILTERS.searchTerm);
@@ -103,6 +107,10 @@ export function RsaReportsManager() {
   const [partialLoadError, setPartialLoadError] = useState<string | null>(null);
   const [sendingEod, setSendingEod] = useState(false);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const rsaAccentColor = useMemo(
+    () => resolveBrandingPrimaryColor(brandingSnapshot) ?? "var(--brand)",
+    [brandingSnapshot]
+  );
   const loadRsaReports = useCallback(() => {
     void refreshReportsSnapshot();
   }, [refreshReportsSnapshot]);
@@ -256,6 +264,7 @@ export function RsaReportsManager() {
       locationCount: 1,
     }));
   }, [rsaSummaries]);
+  const hideFacilitySelector = (session?.organization?.name ?? "").trim().toLowerCase() === "free tier organization";
 
   const clearFilters = useCallback(() => {
     setSearchTerm("");
@@ -394,14 +403,7 @@ export function RsaReportsManager() {
   return (
     <article className="rsa-reports-page space-y-6 pb-12">
       <header className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <h1 className="page-title text-[20px] font-black tracking-tight text-blue-800">
-            RSA Reports
-          </h1>
-          <p className="page-subtitle text-[12px] text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Monitor railcar assets and internal VIN loading entries from direct physical scans. Vehicle-level identification ensures dense operational tracking.
-          </p>
-        </div>
+        <div />
       </header>
 
       {loadError && (
@@ -461,7 +463,7 @@ export function RsaReportsManager() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-2 p-1.5 bg-slate-50/50 rounded-lg border border-slate-200/60 shadow-inner">
+        <div className="sticky top-0 z-20 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-2 rounded-lg border border-slate-200/60 bg-white/95 p-1.5 shadow-inner backdrop-blur">
           <div className="xl:col-span-2 relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-700 transition-colors" />
             <input
@@ -487,7 +489,9 @@ export function RsaReportsManager() {
             <option value="">All Spots</option>
             {rsaSpotOptions.slice().sort((a, b) => String(a || "").localeCompare(String(b || ""))).map((s) => <option key={s || "unknown"} value={s || ""}>{s}</option>)}
           </select>
-          <FacilitySelector facilities={facilityChoices} value={facilityFilter} onChange={setFacilityFilter} />
+          {!hideFacilitySelector ? (
+            <FacilitySelector facilities={facilityChoices} value={facilityFilter} onChange={setFacilityFilter} />
+          ) : null}
             <button onClick={clearFilters} className="py-1 bg-white border border-slate-200 rounded-md text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900">
             Reset
           </button>
@@ -613,9 +617,15 @@ export function RsaReportsManager() {
 
           {/* Right Pane Sidebar for the Selected Report context block */}
           <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-0 self-start">
-            {selectedRsaFullRow ? (
-              <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl animate-in fade-in duration-500">
-                <header className="p-6 bg-slate-50/80 border-b border-slate-200">
+          {selectedRsaFullRow ? (
+            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-blue-200 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(255,255,255,0.96)_100%)] shadow-xl animate-in fade-in duration-500">
+                <div
+                  className="h-1.5 shrink-0"
+                  style={{
+                    background: `linear-gradient(90deg, var(--brand, #2563eb) 0%, color-mix(in srgb, var(--brand, #2563eb) 88%, white) 12%, color-mix(in srgb, var(--brand, #2563eb) 70%, white) 20%, color-mix(in srgb, var(--brand, #2563eb) 48%, white) 32%, color-mix(in srgb, var(--brand, #2563eb) 26%, white) 48%, white 100%)`,
+                  }}
+                />
+                <header className="p-6 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(219,234,254,0.92)_100%)] border-b border-blue-200">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200 shadow-sm"><FileText className="w-6 h-6" /></div>
                     <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest px-2 py-1 bg-white border border-slate-200 rounded">{selectedRsaFullRow.report_id.substring(0,8)}</span>
@@ -625,18 +635,22 @@ export function RsaReportsManager() {
                     <h3 className="text-[20px] font-black text-slate-900 tracking-tight mt-2 leading-tight">
                       {selectedRsaFullRow.subject || "Railcar Inbound Entry"}
                     </h3>
-                    <p className="mt-2 text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
-                      Submitted {selectedRsaFullRow.created_at ? new Date(selectedRsaFullRow.created_at).toLocaleString() : "time unavailable"}
-                    </p>
-                  </div>
+                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    Submitted {selectedRsaFullRow.created_at ? new Date(selectedRsaFullRow.created_at).toLocaleString() : "time unavailable"}
+                  </p>
+                </div>
                 </header>
-
+                <div
+                  className="h-1.5 shrink-0"
+                  style={{
+                    background: `linear-gradient(90deg, var(--brand, #2563eb) 0%, color-mix(in srgb, var(--brand, #2563eb) 88%, white) 12%, color-mix(in srgb, var(--brand, #2563eb) 70%, white) 20%, color-mix(in srgb, var(--brand, #2563eb) 48%, white) 32%, color-mix(in srgb, var(--brand, #2563eb) 26%, white) 48%, white 100%)`,
+                  }}
+                />
                 <div className="flex-1 min-h-0 space-y-6 overflow-y-auto p-6 custom-scrollbar">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                       <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Context Metadata</h4>
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Context Metadata</h4>
                     </div>
-                    
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col">
                         <span className="rsa-scope-label text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MapPin className="w-3 h-3 text-slate-400"/> TRACK</span>
@@ -665,27 +679,27 @@ export function RsaReportsManager() {
 
                         return (
                           <div key={carIdx} className="space-y-3 pl-2 border-l-[3px] border-slate-300 py-1">
-                             <div className="flex items-center gap-3">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-slate-100 px-2 py-0.5 rounded">{railcarNum}</span>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{allVins.length} Total VINs</span>
-                             </div>
-                             <div className="grid grid-cols-1 gap-2">
-                                {Object.entries(deckVinsMap).map(([deckType, vins]) => (
-                                    <div key={deckType} className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                                        <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
-                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Deck {deckType}</p>
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-1.5">
-                                            {vins.map((vin, vIdx) => (
-                                              <div key={vIdx} className="flex items-center gap-2">
-                                                  <div className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500">{vIdx + 1}</div>
-                                                  <span className="text-[12px] font-mono font-black text-slate-800 tracking-wider">{vin}</span>
-                                              </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                             </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-slate-100 px-2 py-0.5 rounded">{railcarNum}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{allVins.length} Total VINs</span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
+                              {Object.entries(deckVinsMap).map(([deckType, vins]) => (
+                                <div key={deckType} className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                  <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Deck {deckType}</p>
+                                  </div>
+                                  <div className="grid grid-cols-1 gap-1.5">
+                                    {vins.map((vin, vIdx) => (
+                                      <div key={vIdx} className="flex items-center gap-2">
+                                        <div className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500">{vIdx + 1}</div>
+                                        <span className="text-[12px] font-mono font-black text-slate-800 tracking-wider">{vin}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         );
                       })}

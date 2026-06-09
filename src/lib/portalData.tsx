@@ -86,9 +86,14 @@ export function PortalDataProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function readCachedPayload<T>(memoryCache: Map<string, CachedPayload<T>>, storageKey: string, orgId: string): T | null {
+function readCachedPayload<T>(
+  memoryCache: Map<string, CachedPayload<T>>,
+  storageKey: string,
+  orgId: string,
+  options?: { allowStale?: boolean }
+): T | null {
   const memoryEntry = memoryCache.get(orgId);
-  if (memoryEntry && Date.now() - memoryEntry.timestamp <= CACHE_TTL_MS) {
+  if (memoryEntry && (options?.allowStale || Date.now() - memoryEntry.timestamp <= CACHE_TTL_MS)) {
     return memoryEntry.value;
   }
   if (typeof window === "undefined") return null;
@@ -97,7 +102,7 @@ function readCachedPayload<T>(memoryCache: Map<string, CachedPayload<T>>, storag
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedPayload<T>;
     if (typeof parsed.timestamp !== "number" || !parsed.value) return null;
-    if (Date.now() - parsed.timestamp > CACHE_TTL_MS) return null;
+    if (!options?.allowStale && Date.now() - parsed.timestamp > CACHE_TTL_MS) return null;
     memoryCache.set(orgId, parsed);
     return parsed.value;
   } catch {
@@ -129,6 +134,32 @@ function hasUsefulDirectoryData(value: DirectorySnapshot | null): boolean {
 
 function hasUsefulReportsData(value: ReportsSnapshot | null): boolean {
   return Boolean(value && (value.damageReports.length > 0 || value.rsaReports.length > 0));
+}
+
+function normalizeDirectoryUsers(users: UserSummary[], memberships: LocationMembership[]): UserSummary[] {
+  const activeMembershipsByUserId = memberships.reduce<Record<string, Set<string>>>((acc, membership) => {
+    if (!membership.user_id || !membership.location_id || membership.is_active === false) {
+      return acc;
+    }
+    const userMemberships = acc[membership.user_id] ?? new Set<string>();
+    userMemberships.add(membership.location_id);
+    acc[membership.user_id] = userMemberships;
+    return acc;
+  }, {});
+  return users.map((user) => {
+    const facilityIds = Array.from(activeMembershipsByUserId[user.id] ?? []);
+    const currentFacilityIds = Array.isArray(user.facilityIds) ? user.facilityIds : [];
+    const sameFacilityIds =
+      facilityIds.length === currentFacilityIds.length &&
+      facilityIds.every((facilityId, index) => facilityId === currentFacilityIds[index]);
+    if (sameFacilityIds) {
+      return user;
+    }
+    return {
+      ...user,
+      facilityIds,
+    };
+  });
 }
 
 function ensureOrgId(orgId?: string | null) {
@@ -331,7 +362,13 @@ export function usePortalDirectorySnapshot() {
       );
 
       const snapshot = {
-        users: usersResult.status === "fulfilled" ? usersResult.value : [],
+        users:
+          usersResult.status === "fulfilled"
+            ? normalizeDirectoryUsers(
+                usersResult.value,
+                membershipsResult.status === "fulfilled" ? membershipsResult.value : []
+              )
+            : [],
         facilities: facilitiesResult.status === "fulfilled" ? facilitiesResult.value : [],
         locationMemberships: membershipsResult.status === "fulfilled" ? membershipsResult.value : [],
         emailLists,
@@ -371,7 +408,9 @@ export function usePortalReportsSnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const scope = getPortalScopeKey(resolvedOrgId, null);
-  const cachedValue = resolvedOrgId ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId) : null;
+  const cachedValue = resolvedOrgId
+    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, { allowStale: true })
+    : null;
   const usableCache = hasUsefulReportsData(cachedValue);
   if (process.env.NODE_ENV !== "production") {
     console.debug("[portalData] usePortalReportsSnapshot", {
@@ -409,8 +448,10 @@ export function usePortalReportsSnapshot() {
       return snapshot;
     },
     {
-      fallbackData: usableCache && cachedValue ? cachedValue : undefined,
+      fallbackData: cachedValue ?? undefined,
+      keepPreviousData: true,
       revalidateIfStale: !usableCache,
+      revalidateOnMount: !usableCache,
     }
   );
 }

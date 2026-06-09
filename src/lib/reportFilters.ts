@@ -1,4 +1,5 @@
-import { resolveDamageReportLocationName, slugForFacilityLabel } from "@/lib/reportUtils";
+import { resolveDamageReportLocationName, slugForFacilityLabel, stripFacilitySuffix } from "@/lib/reportUtils";
+import { matchesAnySearchQuery, splitSearchTokens } from "@/lib/searchText";
 import type { ReportDamageApiRow, ReportStatus, RsaReportApiRow, ReportSummary } from "@/lib/types";
 
 export const FACILITY_FILTER_ALL = "all";
@@ -91,7 +92,7 @@ export function normalizeSearchText(value: string | null | undefined): string {
 }
 
 export function normalizeLabel(value: string | null | undefined): string {
-  const normalized = normalizeText(value);
+  const normalized = normalizeText(stripFacilitySuffix(value));
   return normalized || "Unavailable";
 }
 
@@ -112,7 +113,7 @@ export function getReportDateValue(report: { created_at?: string | null; updated
 
 export function normalizeDamageReportFilters(input: Partial<DamageReportFilters> | null | undefined): DamageReportFilters {
   return {
-    facilityFilter: normalizeText(input?.facilityFilter) || FACILITY_FILTER_ALL,
+    facilityFilter: stripFacilitySuffix(normalizeText(input?.facilityFilter)) || FACILITY_FILTER_ALL,
     searchTerm: normalizeText(input?.searchTerm),
     reportIdFilter: normalizeText(input?.reportIdFilter),
     vinFilter: normalizeText(input?.vinFilter),
@@ -142,7 +143,7 @@ export function serializeDamageReportFilters(filters: DamageReportFilters): stri
 
 export function normalizeRsaReportFilters(input: Partial<RsaReportFilters> | null | undefined): RsaReportFilters {
   return {
-    facilityFilter: normalizeText(input?.facilityFilter) || FACILITY_FILTER_ALL,
+    facilityFilter: stripFacilitySuffix(normalizeText(input?.facilityFilter)) || FACILITY_FILTER_ALL,
     searchTerm: normalizeText(input?.searchTerm),
     rsaTrackFilter: normalizeText(input?.rsaTrackFilter),
     rsaSpotFilter: normalizeText(input?.rsaSpotFilter),
@@ -164,8 +165,8 @@ export function serializeRsaReportFilters(filters: RsaReportFilters): string {
 
 export function normalizeHomeReportFilters(input: Partial<HomeReportFilters> | null | undefined): HomeReportFilters {
   return {
-    selectedFacilityKey: normalizeText(input?.selectedFacilityKey) || FACILITY_FILTER_ALL,
-    selectedInspectorEmail: normalizeText(input?.selectedInspectorEmail) || FACILITY_FILTER_ALL,
+    selectedFacilityKey: stripFacilitySuffix(normalizeText(input?.selectedFacilityKey)) || FACILITY_FILTER_ALL,
+    selectedInspectorEmail: stripFacilitySuffix(normalizeText(input?.selectedInspectorEmail)) || FACILITY_FILTER_ALL,
     createdFrom: normalizeText(input?.createdFrom),
     createdTo: normalizeText(input?.createdTo),
   };
@@ -204,7 +205,7 @@ export function matchesFacilitySlugFilter(label: string, facilityFilter: string)
   if (!facilityFilter || facilityFilter === FACILITY_FILTER_ALL) {
     return true;
   }
-  return slugForFacilityLabel(label || "Unknown facility") === facilityFilter;
+  return slugForFacilityLabel(label || "Unknown facility") === stripFacilitySuffix(facilityFilter);
 }
 
 export function matchesSelectionValue(value: string | null | undefined, selectedValue: string): boolean {
@@ -212,12 +213,6 @@ export function matchesSelectionValue(value: string | null | undefined, selected
     return true;
   }
   return normalizeSearchText(value) === normalizeSearchText(selectedValue);
-}
-
-export function matchesSearchQuery(haystack: string, query: string): boolean {
-  const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) return true;
-  return normalizeSearchText(haystack).includes(normalizedQuery);
 }
 
 function normalizeCsvValue(value: unknown): string {
@@ -273,6 +268,13 @@ export function buildDamageSearchText(report: ReportDamageApiRow, locationName: 
     .toLowerCase();
 }
 
+function matchesAnyToken(haystack: string, query: string): boolean {
+  const tokens = splitSearchTokens(query);
+  if (tokens.length === 0) return true;
+  const normalizedHaystack = normalizeSearchText(haystack);
+  return tokens.some((token) => normalizedHaystack.includes(token.toLowerCase()));
+}
+
 export function matchesDamageReportFilters(report: ReportDamageApiRow, filters: DamageReportFilters): boolean {
   const locationName = resolveDamageReportLocationName(report);
   if (!matchesFacilitySlugFilter(locationName, filters.facilityFilter)) {
@@ -280,28 +282,23 @@ export function matchesDamageReportFilters(report: ReportDamageApiRow, filters: 
   }
 
   const normalizedStatus = (report.status as ReportStatus) || "open";
-  const reportIdQuery = normalizeSearchText(filters.reportIdFilter);
-  const vinQuery = normalizeSearchText(filters.vinFilter);
-  const makeQuery = normalizeSearchText(filters.makeFilter);
-  const modelQuery = normalizeSearchText(filters.modelFilter);
-  const inspectorEmailQuery = normalizeSearchText(filters.inspectorEmailFilter);
-  const query = normalizeSearchText(filters.searchTerm);
+  const damageSearchText = buildDamageSearchText(report, locationName);
   const reportId = normalizeSearchText(report.report_id || "");
   const vin = normalizeSearchText(report.vin || "");
   const make = normalizeSearchText(report.make || "");
   const model = normalizeSearchText(report.model || "");
-  const inspectorEmail = normalizeSearchText(report.inspector_email || "");
+  const inspectorEmail = normalizeSearchText(report.inspector_email || (report as unknown as { inspectorEmail?: string }).inspectorEmail || "");
 
-  if (reportIdQuery && !reportId.includes(reportIdQuery)) return false;
+  if (filters.reportIdFilter && !matchesAnyToken(reportId, filters.reportIdFilter)) return false;
   if (filters.statusFilter && normalizedStatus !== filters.statusFilter) return false;
-  if (vinQuery && !vin.includes(vinQuery)) return false;
-  if (makeQuery && !make.includes(makeQuery)) return false;
-  if (modelQuery && !model.includes(modelQuery)) return false;
-  if (inspectorEmailQuery && !inspectorEmail.includes(inspectorEmailQuery)) return false;
+  if (filters.vinFilter && !matchesAnyToken(vin, filters.vinFilter)) return false;
+  if (filters.makeFilter && !matchesAnyToken(make, filters.makeFilter)) return false;
+  if (filters.modelFilter && !matchesAnyToken(model, filters.modelFilter)) return false;
+  if (filters.inspectorEmailFilter && !matchesAnyToken(inspectorEmail, filters.inspectorEmailFilter)) return false;
   if ((filters.createdFrom || filters.createdTo) && report.created_at && !reportWithinDateRange(report.created_at, filters.createdFrom, filters.createdTo)) {
     return false;
   }
-  if (query && !buildDamageSearchText(report, locationName).includes(query)) {
+  if (filters.searchTerm && !matchesAnySearchQuery(damageSearchText, filters.searchTerm)) {
     return false;
   }
   return true;
@@ -358,7 +355,7 @@ export function matchesRsaRailcarSearch(
   allVins: string[],
   searchTerm: string
 ): boolean {
-  return matchesSearchQuery(buildRsaSearchText(summary, railcarSpot, railcarId, allVins), searchTerm);
+  return matchesAnySearchQuery(buildRsaSearchText(summary, railcarSpot, railcarId, allVins), searchTerm);
 }
 
 export function matchesHomeDamageReportFilters(

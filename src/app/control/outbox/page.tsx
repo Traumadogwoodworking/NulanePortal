@@ -355,6 +355,7 @@ export default function ControlOutboxPage() {
       <ControlFilterBar
         search={search}
         onSearch={setSearch}
+        // batch VIN drops are handled in the shared search bar
         placeholder="Search outbox ID, subject, recipient, source record, or error"
         filters={
           <div className="flex flex-wrap items-center gap-2">

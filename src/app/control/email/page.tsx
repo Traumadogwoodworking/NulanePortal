@@ -219,6 +219,9 @@ export default function ControlEmailPage() {
     return `${orgName} · ${directory?.emailLists.length || 0} email lists · ${settings.length} admin settings rows`;
   }, [branding?.brand_name, branding?.organization_name, directory?.emailLists.length, settings.length]);
   const listProvenance = "Live backend snapshot";
+  const userCount = directory?.users.length || 0;
+  const emailCount = directory?.emailLists.length || 0;
+  const emailListNames = directory?.emailLists.map((list) => list.list_name.toUpperCase()) ?? [];
 
   if (!organizationId) {
     return <EmptyState title="Email ops unavailable" description="Organization session required." />;
@@ -235,8 +238,20 @@ export default function ControlEmailPage() {
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[1.35rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel-muted)] p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-[color:var(--text-primary)]/72">Email lists</p>
-          <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">{directory?.emailLists.length || 0} lists</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.36em] text-[color:var(--text-primary)]/72">
+            Email lists <span className="ml-2 text-[color:var(--text-primary)]">{emailCount}</span>
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--text-primary)]">
+            {emailCount} lists
+          </p>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.24em] text-[color:var(--text-primary)]/62">
+            {userCount} users · {emailCount} emails
+          </p>
+          {emailListNames.length ? (
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--text-primary)]/72">
+              {emailListNames.join(" · ")}
+            </p>
+          ) : null}
           <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">{listProvenance}</p>
         </div>
         <div className="rounded-[1.35rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel-muted)] p-4">

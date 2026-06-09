@@ -18,13 +18,15 @@ if (process.env.ANALYZE === "true") {
 }
 
 const isGithubPages = process.env.GITHUB_PAGES === "true";
-const githubPagesBasePath = isGithubPages ? "/DocuDent" : undefined;
+const portalBasePath = process.env.NEXT_PUBLIC_PORTAL_BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH || "/portal";
+const staticBasePath = isGithubPages ? "/DocuDent" : portalBasePath;
 
 const nextConfig = withAnalyzer({
   typedRoutes: false,
+  output: "export",
   trailingSlash: true,
-  basePath: githubPagesBasePath,
-  assetPrefix: githubPagesBasePath,
+  basePath: staticBasePath,
+  assetPrefix: staticBasePath,
   turbopack: {
     root: projectRoot,
   },

@@ -7,18 +7,20 @@ import { AlertStack } from "@/components/AlertStack";
 import { PortalStatusScreen } from "@/components/PortalStatusScreen";
 import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
+import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalThemeMode } from "@/lib/portalTheme";
 
 export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
-  const { status, error, refetch } = usePortalSession();
+  const { status, error, refetch, session } = usePortalSession();
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
+  const { data: brandingSnapshot } = usePortalBrandingSnapshot();
   const branding = useMemo(
-    () => resolvePortalBranding({ session: null, pathname: safePathname }),
-    [safePathname]
+    () => resolvePortalBranding({ session, pathname: safePathname, brandingSnapshot: brandingSnapshot ?? null }),
+    [brandingSnapshot, safePathname, session]
   );
   const { mode: themeMode } = usePortalThemeMode();
 
@@ -31,10 +33,21 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   }, [branding.appLabel, safePathname]);
 
   const brandingStyles = useMemo(() => {
+    const brand = branding.portalBrandColor;
+    const hex = brand.replace("#", "").trim();
+    const expanded = hex.length === 3 ? hex.split("").map((char) => char + char).join("") : hex;
+    const red = Number.parseInt(expanded.slice(0, 2), 16);
+    const green = Number.parseInt(expanded.slice(2, 4), 16);
+    const blue = Number.parseInt(expanded.slice(4, 6), 16);
+    const isValidColor = [red, green, blue].every((component) => Number.isFinite(component));
+    const glow = isValidColor ? `rgba(${red}, ${green}, ${blue}, 0.16)` : "rgba(37, 99, 235, 0.16)";
+    const shadow = isValidColor ? `rgba(${red}, ${green}, ${blue}, 0.22)` : "rgba(15, 23, 42, 0.24)";
     return {
-      "--brand": branding.portalBrandColor,
+      "--brand": brand,
       "--brand-accent": branding.portalBrandAccentColor,
       "--brand-light": branding.portalBrandLightColor,
+      "--brand-shadow": shadow,
+      "--brand-glow": glow,
       "--sidebar-bg-enforced": branding.sidebarBgEnforced,
       "--sidebar-text-enforced": branding.sidebarTextEnforced,
       "--sidebar-link-enforced": branding.sidebarLinkEnforced,
@@ -95,12 +108,12 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div id="portal" data-theme={themeMode} style={brandingStyles}>
+    <div id="portal" data-theme={themeMode} className="flex h-screen overflow-hidden" style={brandingStyles}>
       <PortalSidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <PortalTopBar pageTitle={pageMetadata.title} pageSubtitle={pageMetadata.subtitle} />
         <AlertStack />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_120px,rgba(255,255,255,0)_240px)] p-4">
           <AccessGuardClient>{children}</AccessGuardClient>
         </main>
       </div>

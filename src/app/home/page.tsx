@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
-  ArrowRight,
-  ChevronRight,
   Download,
+  Filter,
   FileText,
   LayoutGrid,
   ShieldAlert,
@@ -28,22 +26,31 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { DataTableShell } from "@/components/ui/DataTableShell";
 import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
+import { Separator } from "@/components/ui/Separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { usePortalDirectorySnapshot, usePortalReportsSnapshot } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
 import { buildFacilityDamageStats } from "@/lib/facilityDamageStats";
 import { chartTheme } from "@/lib/chartTheme";
-import { resolveDamageReportLocationName } from "@/lib/reportUtils";
+import { DAMAGE_SEVERITIES } from "@/lib/docudent/damageTaxonomy";
+import { resolveDamageReportLocationName, slugForFacilityLabel, stripFacilitySuffix } from "@/lib/reportUtils";
 import {
-  DEFAULT_HOME_REPORT_FILTERS,
-  matchesHomeDamageReportFilters,
-  matchesHomeInspectorEmailFilter,
-  matchesHomeRsaReportFilters,
-  normalizeHomeReportFilters,
   normalizeLabel,
-  serializeHomeReportFilters,
+  normalizeSearchText,
+  matchesDamageReportFilters,
+  DEFAULT_DAMAGE_REPORT_FILTERS,
+  DAMAGE_FILTER_OPTIONS,
 } from "@/lib/reportFilters";
 import type { FacilityDamageStats } from "@/lib/facilityDamageStats";
 import type { ReportDamageApiRow, RsaReportApiRow } from "@/lib/types";
+import { severityPillClass } from "@/lib/severityTheme";
 
 type DashboardSeverityItem = {
   level: string;
@@ -76,6 +83,36 @@ type InspectorSummary = {
   label: string;
   reportCount: number;
   severity: DashboardSeverityItem[];
+};
+
+type PieAreaDatum = {
+  name: string;
+  count: number;
+  fill: string;
+  breakdown?: PieBreakdownItem[];
+};
+
+type PieBreakdownItem = {
+  label: string;
+  count: number;
+};
+
+type ChartTooltipItem = {
+  name?: string | number;
+  value?: number | string;
+  color?: string;
+  fill?: string;
+  dataKey?: string | number;
+  payload?: {
+    name?: string | number;
+    breakdown?: PieBreakdownItem[];
+  };
+};
+
+type ChartTooltipProps = {
+  active?: boolean;
+  label?: string | number;
+  payload?: ChartTooltipItem[];
 };
 
 type DashboardSummary = {
@@ -320,8 +357,16 @@ function buildTopBuckets(items: Map<string, number>): { name: string; count: num
   return [...items.entries()]
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-    .slice(0, 5);
 }
+
+const SEVERITY_PIE_COLORS: Record<string, string> = {
+  "1": "#10b981",
+  "2": "#fbbf24",
+  "3": "#f97316",
+  "4": "#ef4444",
+  "5": "#881337",
+  "6": "#64748b",
+};
 
 function buildPieData(items: { name: string; count: number }[]) {
   const palette = ["#1d4ed8", "#0f766e", "#7c3aed", "#dc2626", "#059669", "#ea580c", "#0ea5e9", "#4338ca"];
@@ -329,6 +374,429 @@ function buildPieData(items: { name: string; count: number }[]) {
     ...item,
     fill: palette[index % palette.length],
   }));
+}
+
+function buildAllAreaPieData(items: { name: string; count: number }[]): PieAreaDatum[] {
+  const palette = [
+    "#2563eb",
+    "#0f766e",
+    "#7c3aed",
+    "#dc2626",
+    "#ea580c",
+    "#16a34a",
+    "#db2777",
+    "#0ea5e9",
+    "#9333ea",
+    "#0891b2",
+  ];
+  return items
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 5)
+    .map((item, index) => ({
+      ...item,
+      fill: palette[index % palette.length],
+    }));
+}
+
+function buildSelectedAreaPieData(items: { name: string; count: number }[], selectedArea: string): PieAreaDatum[] {
+  const selected = selectedArea.trim();
+  return buildAllAreaPieData(items).map((item) => ({
+    ...item,
+    count: !selected || item.name === selected ? item.count : 0,
+  }));
+}
+
+function getPieSliceLabel(name: string, percent: number, index: number): string {
+  if (!percent || percent <= 0) {
+    return "";
+  }
+  if (index < 5) {
+    return `${name} ${(percent * 100).toFixed(0)}%`;
+  }
+  return "";
+}
+
+function buildSeverityPieData(items: DashboardSeverityItem[]) {
+  return items.map((item) => ({
+    name: `${item.level} - ${item.label}`,
+    count: item.count,
+    fill: SEVERITY_PIE_COLORS[item.level] ?? "#cbd5e1",
+  }));
+}
+
+function buildSelectedSeverityPieData(items: DashboardSeverityItem[], selectedLevel: string): Array<{ name: string; count: number; fill: string }> {
+  const normalizedSelected = selectedLevel === "all" ? "" : selectedLevel;
+  return buildSeverityPieData(items).map((item) => ({
+    ...item,
+    count: !normalizedSelected || String(item.name).startsWith(`${normalizedSelected} `) ? item.count : 0,
+  }));
+}
+
+function buildModelOptions(reports: ReportDamageApiRow[]): { value: string; label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const report of reports) {
+    const model = normalizeKnownModelLabel(report.model || "");
+    if (!model) {
+      continue;
+    }
+    counts.set(model, (counts.get(model) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ value: label, label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function buildLocationCounts<T>(
+  items: T[],
+  getBucket: (item: T) => string | null,
+  getLocation: (item: T) => string
+): Map<string, Map<string, number>> {
+  const bucketMap = new Map<string, Map<string, number>>();
+  for (const item of items) {
+    const bucket = getBucket(item);
+    if (!bucket) continue;
+    const location = getLocation(item);
+    if (!location) continue;
+    const locationMap = bucketMap.get(bucket) ?? new Map<string, number>();
+    locationMap.set(location, (locationMap.get(location) ?? 0) + 1);
+    bucketMap.set(bucket, locationMap);
+  }
+  return bucketMap;
+}
+
+function buildTopCounts(items: Map<string, number>, limit = 5): { name: string; count: number }[] {
+  return [...items.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+function buildTopLocations(locationCounts: Map<string, number> | undefined, limit = 3): { name: string; count: number }[] {
+  if (!locationCounts) {
+    return [];
+  }
+  return [...locationCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+function resolveSeverityLabel(value?: string | number | null): string {
+  if (value === undefined || value === null || value === "") {
+    return "Severity unavailable";
+  }
+  const normalized = `${value}`.trim();
+  const option = DAMAGE_SEVERITIES.find((entry) => entry.value === normalized);
+  return option?.label || normalized;
+}
+
+function normalizeKnownModelLabel(value?: string | null): string {
+  const normalized = normalizeLabel(value || "");
+  const lower = normalized.toLowerCase();
+  if (!normalized || lower.includes("unknown") || lower.includes("unavailable")) {
+    return "";
+  }
+  return normalized;
+}
+
+type ChartSectionRow = {
+  section: string;
+  car: string;
+  count: number;
+  severity?: string;
+};
+
+type ChartSectionGroup = {
+  section: string;
+  rows: ChartSectionRow[];
+};
+
+function buildSeverityTotalRows(severityItems: DashboardSeverityItem[]): ChartSectionGroup[] {
+  return severityItems.map((item) => ({
+    section: item.label,
+    rows: [
+      {
+        section: item.label,
+        car: "Total",
+        count: item.count,
+        severity: item.level,
+      },
+    ],
+  }));
+}
+
+function buildAreaTotalRows(areas: { name: string; count: number }[]): ChartSectionGroup[] {
+  return areas.slice(0, 20).map((area) => ({
+    section: area.name,
+    rows: [
+      {
+        section: area.name,
+        car: "Total",
+        count: area.count,
+      },
+    ],
+  }));
+}
+
+function buildTopCarRowsBySeverity(reports: ReportDamageApiRow[], severityItems: DashboardSeverityItem[]): ChartSectionGroup[] {
+  const bucketMap = new Map<string, Map<string, number>>();
+  for (const report of reports) {
+    const severity = getReportSeverity(report);
+    if (!severity) continue;
+    const section = SEVERITY_LABELS[severity];
+    const make = normalizeLabel(report.make || "");
+    const model = normalizeKnownModelLabel(report.model || "");
+    if (!make || !model || make.toLowerCase() === "unknown" || model.toLowerCase() === "unknown") {
+      continue;
+    }
+    const car = `${make} ${model}`;
+    const sectionMap = bucketMap.get(section) ?? new Map<string, number>();
+    sectionMap.set(car, (sectionMap.get(car) ?? 0) + 1);
+    bucketMap.set(section, sectionMap);
+  }
+
+  return severityItems
+    .map((item) => {
+      const section = item.label;
+      const cars = bucketMap.get(section);
+      if (!cars || cars.size === 0) {
+        return null;
+      }
+      const rows = [...cars.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([car, count]) => ({
+          section,
+          car,
+          count,
+          severity: item.level,
+        }));
+      return { section, rows } as ChartSectionGroup;
+    })
+    .filter((row): row is ChartSectionGroup => Boolean(row));
+}
+
+function buildTopCarRowsByArea(reports: ReportDamageApiRow[], areas: { name: string; count: number }[]): ChartSectionGroup[] {
+  const bucketMap = new Map<string, Map<string, number>>();
+  const areaSet = new Set(areas.map((area) => area.name));
+
+  for (const report of reports) {
+    const make = normalizeLabel(report.make || "");
+    const model = normalizeKnownModelLabel(report.model || "");
+    if (!make || !model || make.toLowerCase() === "unknown" || model.toLowerCase() === "unknown") {
+      continue;
+    }
+    const car = `${make} ${model}`;
+    const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+    const uniqueAreas = new Set<string>();
+    for (const entry of entries) {
+      const record = entry as unknown as Record<string, unknown>;
+      const area = normalizeLabel(
+        getDamageEntryField(record, ["damage_area", "damage_area_code", "damage_area_name", "area", "area_code"])
+      );
+      if (area !== "Unavailable" && areaSet.has(area)) {
+        uniqueAreas.add(area);
+      }
+    }
+    for (const area of uniqueAreas) {
+      const areaMap = bucketMap.get(area) ?? new Map<string, number>();
+      areaMap.set(car, (areaMap.get(car) ?? 0) + 1);
+      bucketMap.set(area, areaMap);
+    }
+  }
+
+  return areas
+    .map((area) => {
+      const cars = bucketMap.get(area.name);
+      if (!cars || cars.size === 0) {
+        return null;
+      }
+      const rows = [...cars.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([car, count]) => ({
+          section: area.name,
+          car,
+          count,
+        }));
+      return { section: area.name, rows } as ChartSectionGroup;
+    })
+    .filter((row): row is ChartSectionGroup => Boolean(row));
+}
+
+function ChartFooterTable({
+  title,
+  subtitle,
+  items,
+  showSeverityPills = false,
+  showRowCount = true,
+}: {
+  title: string;
+  subtitle: string;
+  items: ChartSectionGroup[];
+  showSeverityPills?: boolean;
+  showRowCount?: boolean;
+}) {
+  return (
+    <div className="shrink-0 border-t border-slate-200 bg-slate-50/70">
+      <div className="flex items-end justify-between gap-4 px-6 py-4">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{title}</p>
+          <p className="text-xs text-slate-600">{subtitle}</p>
+        </div>
+        {showRowCount ? (
+          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{formatNumber(items.length)} rows</span>
+        ) : null}
+      </div>
+      <div className="max-h-[260px] overflow-y-auto border-t border-slate-200">
+        {items.length ? (
+          <table className="w-full border-collapse text-left">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+              <tr className="border-b border-slate-200">
+                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  {showSeverityPills ? "Severity" : "Section"}
+                </th>
+                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Model</th>
+                <th className="px-6 py-3 text-right text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Count</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {items.map((item) =>
+                item.rows.map((row, rowIndex) => (
+                  <tr key={`${item.section}-${row.car}`} className="align-top">
+                    <td className="px-6 py-3 text-sm font-semibold text-slate-900">
+                      {showSeverityPills && row.severity ? (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${severityPillClass(row.severity)}`}
+                        >
+                          {resolveSeverityLabel(row.severity)}
+                        </span>
+                      ) : rowIndex === 0 ? (
+                        <span className="block text-xs font-black uppercase tracking-[0.18em] text-slate-500">{item.section}</span>
+                      ) : null}
+                    </td>
+                    <td className="px-6 py-3">
+                      <p className="truncate text-sm font-semibold text-slate-900">{row.car}</p>
+                    </td>
+                    <td className="px-6 py-3 text-right text-sm font-black tracking-tight text-slate-950">{formatNumber(row.count)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <p className="px-6 py-4 text-sm text-slate-500">No make/model pairs available in the current filtered view.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function reportMatchesSeverityFilter(report: ReportDamageApiRow, severityFilter: number | null): boolean {
+  if (severityFilter === null) {
+    return true;
+  }
+  return getReportSeverity(report) === severityFilter;
+}
+
+function formatTooltipLabel(label: string | number | undefined): string {
+  if (typeof label === "number") {
+    return String(label);
+  }
+  if (!label) {
+    return "Summary";
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(label) ? formatDateKeyLabel(label) : label;
+}
+
+function NonZeroBarTooltip({ active, label, payload, hideSeriesNames = false }: ChartTooltipProps & { hideSeriesNames?: boolean }) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const visibleItems = payload.filter((item) => {
+    const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
+    return value > 0;
+  });
+
+  if (!visibleItems.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-white p-3 shadow-lg">
+      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+        {formatTooltipLabel(label)}
+      </p>
+      <div className="mt-2 space-y-2">
+        {visibleItems.map((item) => {
+          const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
+          return (
+            <div key={`${String(item.name)}-${item.dataKey ?? item.color ?? value}`} className="flex items-center justify-between gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color || item.fill || chartTheme.colors.text }} />
+                <span className="text-slate-700">{hideSeriesNames ? "" : String(item.name)}</span>
+              </div>
+              <span className="font-bold text-slate-950">{formatNumber(value)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PieSummaryTooltip({ active, payload }: ChartTooltipProps) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const item = payload[0];
+  const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
+  const datum = item.payload ?? {};
+  const sliceName = typeof datum.name === "string" || typeof datum.name === "number" ? String(datum.name) : "Summary";
+  const breakdown = Array.isArray(datum.breakdown) ? datum.breakdown : [];
+
+  return (
+    <div className="min-w-[220px] rounded-2xl border border-[color:var(--border-subtle)] bg-white p-3 shadow-lg">
+      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{sliceName}</p>
+      <div className="mt-2">
+        <div className="text-3xl font-black tracking-tight text-slate-950">{formatNumber(value)}</div>
+      </div>
+      {breakdown.length ? (
+        <>
+          <Separator className="my-3" />
+          <div className="space-y-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Facility breakdown</p>
+            {breakdown.map((entry) => (
+              <div key={entry.label} className="flex items-center justify-between gap-4 text-xs font-semibold text-slate-700">
+                <span className="truncate">{entry.label}</span>
+                <span className="text-slate-950">{formatNumber(entry.count)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function buildFacilityBreakdownFromReports(
+  reports: ReportDamageApiRow[],
+  predicate: (report: ReportDamageApiRow) => boolean,
+  limit = 3
+): PieBreakdownItem[] {
+  const counts = new Map<string, number>();
+  for (const report of reports) {
+    if (!predicate(report)) {
+      continue;
+    }
+    const facility = stripFacilitySuffix(getReportFacilityLabel(report));
+    counts.set(facility, (counts.get(facility) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, limit);
 }
 
 function getReportDateBounds(reports: ReportDamageApiRow[]): { minDate: string | null; maxDate: string | null } {
@@ -368,13 +836,14 @@ function buildInspectorSummaries(reports: ReportDamageApiRow[]): InspectorSummar
 function buildFacilityTrendFromStats(
   reports: ReportDamageApiRow[],
   facilityStats: FacilityDamageStats[],
-  days = 30
+  days = 30,
+  endDate?: string
 ): { data: { date: string; [facility: string]: string | number }[]; keys: string[] } {
-  const now = new Date();
+  const now = endDate ? new Date(endDate) : new Date();
   const start = addDays(now, -(days - 1));
   const dateRows = new Map<string, { date: string; [facility: string]: string | number }>();
   const reportToFacility = new Map<string, string>();
-  const facilityLabels = facilityStats.map((stats) => stats.label);
+  const facilityLabels = [...facilityStats.map((stats) => stats.label)].sort((left, right) => left.localeCompare(right));
 
   for (const facility of facilityStats) {
     for (const reportId of facility.reportIds) {
@@ -407,9 +876,10 @@ function buildFacilityTrendFromStats(
 
 function buildInspectorTrendData(
   reports: ReportDamageApiRow[],
-  days = 30
+  days = 30,
+  endDate?: string
 ): { data: { date: string; [submitter: string]: string | number }[]; keys: string[] } {
-  const now = new Date();
+  const now = endDate ? new Date(endDate) : new Date();
   const start = addDays(now, -(days - 1));
   const submitters = [...new Set(reports.map((report) => normalizeLabel(report.inspector_email || "Unassigned")))].sort((a, b) =>
     a.localeCompare(b)
@@ -826,10 +1296,19 @@ export default function HomePage() {
   const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
   const { data: reportsSnapshot } = usePortalReportsSnapshot();
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(organizationId ?? "");
-  const [selectedFacilityKey, setSelectedFacilityKey] = useState(DEFAULT_HOME_REPORT_FILTERS.selectedFacilityKey);
-  const [selectedInspectorEmail, setSelectedInspectorEmail] = useState(DEFAULT_HOME_REPORT_FILTERS.selectedInspectorEmail);
-  const [createdFrom, setCreatedFrom] = useState(DEFAULT_HOME_REPORT_FILTERS.createdFrom);
-  const [createdTo, setCreatedTo] = useState(DEFAULT_HOME_REPORT_FILTERS.createdTo);
+  const [selectedFacilityKey, setSelectedFacilityKey] = useState("all");
+  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState("all");
+  const [selectedDamageAreaFilter, setSelectedDamageAreaFilter] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [reportIdFilter, setReportIdFilter] = useState("");
+  const [vinFilter, setVinFilter] = useState("");
+  const [makeFilter, setMakeFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [inspectorEmailFilter, setInspectorEmailFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [homeFilterMenuOpen, setHomeFilterMenuOpen] = useState(false);
+  const [activeHomeFilterKeys, setActiveHomeFilterKeys] = useState<Array<"report_id" | "vin" | "make" | "model" | "inspector_email" | "status">>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<Error | null>(null);
 
@@ -837,17 +1316,21 @@ export default function HomePage() {
   const facilitySource = facilities.length > 0 ? facilities : undefined;
   const damageReports = reportsSnapshot?.damageReports ?? [];
   const rsaReports = reportsSnapshot?.rsaReports ?? [];
-  const normalizedHomeFilters = useMemo(
-    () =>
-      normalizeHomeReportFilters({
-        selectedFacilityKey,
-        selectedInspectorEmail,
-        createdFrom,
-        createdTo,
-      }),
-    [createdFrom, createdTo, selectedFacilityKey, selectedInspectorEmail]
+  const homeFilters = useMemo(
+    () => ({
+      ...DEFAULT_DAMAGE_REPORT_FILTERS,
+      facilityFilter: selectedFacilityKey,
+      reportIdFilter,
+      vinFilter,
+      makeFilter,
+      modelFilter,
+      inspectorEmailFilter,
+      statusFilter: statusFilter as "" | import("@/lib/types").ReportStatus,
+      createdFrom,
+      createdTo,
+    }),
+    [createdFrom, createdTo, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedFacilityKey, statusFilter, vinFilter]
   );
-  const homeFilterKey = useMemo(() => serializeHomeReportFilters(normalizedHomeFilters), [normalizedHomeFilters]);
   const facilityDamageStats = useMemo(
     () => buildFacilityDamageStats(damageReports, facilitySource).sort((a, b) => b.totalReports - a.totalReports),
     [damageReports, facilitySource]
@@ -857,24 +1340,78 @@ export default function HomePage() {
     session?.organization?.organization_id ||
     organizationId ||
     "Current organization";
+  const isInspectionTracOrg =
+    (currentOrganizationLabel ?? "").trim().toLowerCase() === "american wheel & car" ||
+    (currentOrganizationLabel ?? "").trim().toLowerCase() === "awct.inc" ||
+    (currentOrganizationLabel ?? "").trim().toLowerCase() === "awc.inc" ||
+    (currentOrganizationLabel ?? "").trim().toLowerCase() === "signature vehicle logistics";
+  const hideFacilitySelector = currentOrganizationLabel.trim().toLowerCase() === "free tier organization";
+  const hideInspectorSections = hideFacilitySelector;
+  const sanitizeFacilityDisplay = (value: string): string => stripFacilitySuffix(value);
+  const sanitizeDisplay = (value: string): string => stripFacilitySuffix(value);
+  const availableHomeFilterOptions = DAMAGE_FILTER_OPTIONS.filter((option) => !["facility", "severity", "date_range"].includes(option.key));
+  const clearHomeFilters = () => {
+    setHomeFilterMenuOpen(false);
+    setActiveHomeFilterKeys([]);
+      setSelectedFacilityKey("all");
+      setSelectedSeverityLevel("all");
+      setSelectedDamageAreaFilter("");
+      setCreatedFrom("");
+    setCreatedTo("");
+    setReportIdFilter("");
+    setVinFilter("");
+    setMakeFilter("");
+    setModelFilter("");
+    setInspectorEmailFilter("");
+    setStatusFilter("");
+  };
+  const renderHomeFilterControl = (key: (typeof activeHomeFilterKeys)[number]) => {
+    if (key === "report_id") {
+      return <input type="search" placeholder="Report ID" value={reportIdFilter} onChange={(e) => setReportIdFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+    }
+    if (key === "vin") {
+      return <input type="search" placeholder="VIN" value={vinFilter} onChange={(e) => setVinFilter(e.target.value.toUpperCase())} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+    }
+    if (key === "make") {
+      return <input type="search" placeholder="Make" value={makeFilter} onChange={(e) => setMakeFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+    }
+    if (key === "model") {
+      return <input type="search" placeholder="Model" value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+    }
+    if (key === "inspector_email") {
+      return (
+        <select
+          value={inspectorEmailFilter}
+          onChange={(e) => setInspectorEmailFilter(e.target.value)}
+          className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+        >
+          <option value="">All inspectors</option>
+          {inspectorChoices.map((inspector) => (
+            <option key={inspector.email} value={inspector.email}>
+              {inspector.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    if (key === "status") {
+      return (
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="review">Review</option>
+          <option value="closed">Closed</option>
+          <option value="verified">Verified</option>
+          <option value="archived">Archived</option>
+        </select>
+      );
+    }
+    return null;
+  };
 
   useEffect(() => {
     setSelectedOrganizationId(organizationId ?? "");
   }, [organizationId]);
-
-  useEffect(() => {
-    setSelectedFacilityKey("all");
-  }, [selectedOrganizationId]);
-
-  useEffect(() => {
-    setSelectedInspectorEmail("all");
-    setCreatedFrom("");
-    setCreatedTo("");
-  }, [selectedOrganizationId]);
-
-  useEffect(() => {
-    setSelectedInspectorEmail("all");
-  }, [selectedFacilityKey]);
 
   useEffect(() => {
     if (!organizationId) {
@@ -891,41 +1428,83 @@ export default function HomePage() {
     setReportsError(reportsSnapshot.partialError ? new Error(reportsSnapshot.partialError) : null);
   }, [organizationId, reportsSnapshot]);
 
-  const selectedFacilityStats = useMemo(
-    () => (selectedFacilityKey === "all" ? null : facilityDamageStats.find((item) => item.key === selectedFacilityKey) ?? null),
-    [facilityDamageStats, selectedFacilityKey]
+  useEffect(() => {
+    setSelectedFacilityKey("all");
+    setSelectedSeverityLevel("all");
+    setSelectedDamageAreaFilter("");
+    setCreatedFrom("");
+    setCreatedTo("");
+    setReportIdFilter("");
+    setVinFilter("");
+    setMakeFilter("");
+    setModelFilter("");
+    setInspectorEmailFilter("");
+    setStatusFilter("");
+  }, [selectedOrganizationId]);
+
+  const inspectorFilteredDamageReports = useMemo(
+    () =>
+      damageReports.filter((report) => {
+        if (!inspectorEmailFilter) {
+          return true;
+        }
+        const reportInspector = normalizeSearchText(report.inspector_email || (report as unknown as { inspectorEmail?: string }).inspectorEmail || "");
+        return reportInspector === normalizeSearchText(inspectorEmailFilter);
+      }),
+    [damageReports, inspectorEmailFilter]
   );
-  const selectedFacilityLabel = useMemo(() => {
-    return selectedFacilityStats?.label || "";
-  }, [selectedFacilityStats]);
-  const selectedFacilityReportIds = useMemo(
-    () => new Set(selectedFacilityStats?.reportIds ?? []),
-    [selectedFacilityStats]
+  const severityFilteredDamageReports = useMemo(
+    () => {
+      const selectedSeverityFilter = selectedSeverityLevel === "all" ? null : Number(selectedSeverityLevel);
+      return inspectorFilteredDamageReports.filter((report) => {
+        if (!matchesDamageReportFilters(report, { ...homeFilters, inspectorEmailFilter: "" })) {
+          return false;
+        }
+        if (selectedDamageAreaFilter) {
+          const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+          const matchesArea = entries.some((entry) => {
+            const record = entry as unknown as Record<string, unknown>;
+            const area = normalizeLabel(
+              getDamageEntryField(record, ["damage_area", "damage_area_code", "damage_area_name", "area", "area_code"])
+            );
+            return area === selectedDamageAreaFilter;
+          });
+          if (!matchesArea) {
+            return false;
+          }
+        }
+        return reportMatchesSeverityFilter(report, selectedSeverityFilter);
+      });
+    },
+    [homeFilters, inspectorFilteredDamageReports, selectedDamageAreaFilter, selectedSeverityLevel]
   );
+  const inspectorChoices = useMemo(() => buildInspectorSummaries(severityFilteredDamageReports), [severityFilteredDamageReports]);
 
-  const inspectorScopedDamageReports = useMemo(() => {
-    return damageReports.filter((report) => {
-      return matchesHomeDamageReportFilters(report, normalizedHomeFilters, selectedFacilityReportIds);
-    });
-  }, [damageReports, homeFilterKey, normalizedHomeFilters, selectedFacilityReportIds]);
-
-  const inspectorChoices = useMemo(() => buildInspectorSummaries(inspectorScopedDamageReports), [inspectorScopedDamageReports]);
-
-  const filteredDamageReports = useMemo(() => {
-    return inspectorScopedDamageReports.filter((report) => {
-      return matchesHomeInspectorEmailFilter(report, normalizedHomeFilters.selectedInspectorEmail);
-    });
-  }, [homeFilterKey, inspectorScopedDamageReports, normalizedHomeFilters.selectedInspectorEmail]);
+  const modelOptions = useMemo(() => buildModelOptions(severityFilteredDamageReports), [severityFilteredDamageReports]);
+  const [selectedModelFilter, setSelectedModelFilter] = useState("all");
+  useEffect(() => {
+    if (selectedModelFilter === "all") {
+      return;
+    }
+    if (!modelOptions.some((option) => option.value === selectedModelFilter)) {
+      setSelectedModelFilter("all");
+    }
+  }, [modelOptions, selectedModelFilter]);
+  const chartFilteredDamageReports = useMemo(
+    () =>
+      selectedModelFilter === "all"
+        ? severityFilteredDamageReports
+        : severityFilteredDamageReports.filter((report) => normalizeKnownModelLabel(report.model || "") === selectedModelFilter),
+    [selectedModelFilter, severityFilteredDamageReports]
+  );
 
   const filteredRsaReports = useMemo(() => {
-    return rsaReports.filter((report) => {
-      return matchesHomeRsaReportFilters(report, normalizedHomeFilters, selectedFacilityLabel);
-    });
-  }, [homeFilterKey, normalizedHomeFilters, rsaReports, selectedFacilityLabel]);
+    return rsaReports;
+  }, [rsaReports]);
 
   const filteredFacilityStats = useMemo(
-    () => buildFacilityDamageStats(filteredDamageReports, facilitySource).sort((a, b) => b.totalReports - a.totalReports),
-    [facilitySource, filteredDamageReports]
+    () => buildFacilityDamageStats(severityFilteredDamageReports, facilitySource).sort((a, b) => b.totalReports - a.totalReports),
+    [facilitySource, severityFilteredDamageReports]
   );
   const reportDateBounds = useMemo(() => getReportDateBounds(damageReports), [damageReports]);
 
@@ -935,53 +1514,101 @@ export default function HomePage() {
     }
     console.debug("[home.data]", {
       selectedOrgId: selectedOrganizationId,
-      selectedFacilityId: selectedFacilityKey,
-      createdFrom,
-      createdTo,
+      activeFilterCount: activeHomeFilterKeys.length,
       reportPullCount: damageReports.length,
       normalizedDamageReportCount: damageReports.length,
-      filteredDamageReportCount: filteredDamageReports.length,
+      filteredDamageReportCount: severityFilteredDamageReports.length,
       facilityOptionCount: facilityDamageStats.length,
       reportsLoading,
       reportsError: reportsError ? reportsError.message : null,
     });
   }, [
-    createdFrom,
-    createdTo,
     damageReports.length,
     facilityDamageStats.length,
-    filteredDamageReports.length,
+    severityFilteredDamageReports.length,
     damageReports,
     reportsError,
     reportsLoading,
-    selectedFacilityKey,
+    activeHomeFilterKeys.length,
     selectedOrganizationId,
   ]);
 
   const summary = useMemo(
-    () => buildDashboardSummary(filteredDamageReports, filteredRsaReports, filteredFacilityStats),
-    [filteredDamageReports, filteredFacilityStats, filteredRsaReports]
+    () => buildDashboardSummary(severityFilteredDamageReports, filteredRsaReports, filteredFacilityStats),
+    [filteredFacilityStats, filteredRsaReports, severityFilteredDamageReports]
   );
-
-  const visibleFacilityStats = useMemo(
+  const chartSummary = useMemo(
+    () => buildDashboardSummary(chartFilteredDamageReports, filteredRsaReports, filteredFacilityStats),
+    [chartFilteredDamageReports, filteredFacilityStats, filteredRsaReports]
+  );
+  const severityPieData = useMemo(
     () =>
-      selectedFacilityKey === "all"
-        ? filteredFacilityStats
-        : filteredFacilityStats.filter((stats) => stats.key === selectedFacilityKey),
-    [filteredFacilityStats, selectedFacilityKey]
+      buildSelectedSeverityPieData(chartSummary.severity, selectedSeverityLevel).map((item) => {
+        const severityLevel = String(item.name).split(" - ")[0];
+        return {
+          ...item,
+          breakdown: buildFacilityBreakdownFromReports(
+            chartFilteredDamageReports,
+            (report) => {
+              const reportSeverity = getReportSeverity(report);
+              return reportSeverity !== null && String(reportSeverity) === severityLevel;
+            }
+          ),
+        };
+      }),
+    [chartFilteredDamageReports, chartSummary.severity, selectedSeverityLevel]
   );
-  const selectedInspector = useMemo(
-    () => inspectorChoices.find((inspector) => inspector.email.toLowerCase() === selectedInspectorEmail.toLowerCase()) ?? null,
-    [inspectorChoices, selectedInspectorEmail]
+  const severityFooterRows = useMemo(
+    () => (selectedModelFilter === "all" ? buildSeverityTotalRows(chartSummary.severity) : buildTopCarRowsBySeverity(chartFilteredDamageReports, chartSummary.severity)),
+    [chartFilteredDamageReports, chartSummary.severity, selectedModelFilter]
   );
-  const selectedInspectorSeverity = selectedInspector?.severity ?? summary.severity;
+  const areaCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const report of chartFilteredDamageReports) {
+      const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+      for (const entry of entries) {
+        const record = entry as unknown as Record<string, unknown>;
+        const area = normalizeLabel(
+          getDamageEntryField(record, ["damage_area", "damage_area_code", "damage_area_name", "area", "area_code"])
+        );
+        if (area !== "Unavailable") {
+          counts.set(area, (counts.get(area) ?? 0) + 1);
+        }
+      }
+    }
+    return counts;
+  }, [chartFilteredDamageReports]);
+  const areaPieData = useMemo(
+    () =>
+      buildSelectedAreaPieData([...areaCounts.entries()].map(([name, count]) => ({ name, count })), selectedDamageAreaFilter).map((item) => ({
+        ...item,
+        breakdown: buildFacilityBreakdownFromReports(chartFilteredDamageReports, (report) => {
+          const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+          return entries.some((entry) => {
+            const record = entry as unknown as Record<string, unknown>;
+            const area = normalizeLabel(
+              getDamageEntryField(record, ["damage_area", "damage_area_code", "damage_area_name", "area", "area_code"])
+            );
+            return area === item.name;
+          });
+        }),
+      })),
+    [areaCounts, chartFilteredDamageReports, selectedDamageAreaFilter]
+  );
+  const allAreaRows = useMemo(
+    () => [...areaCounts.entries()].map(([name, count]) => ({ name, count })),
+    [areaCounts]
+  );
+  const areaFooterRows = useMemo(
+    () => (selectedModelFilter === "all" ? buildAreaTotalRows(allAreaRows) : buildTopCarRowsByArea(chartFilteredDamageReports, allAreaRows)),
+    [allAreaRows, chartFilteredDamageReports, selectedModelFilter]
+  );
+  const areaCarRows = useMemo(
+    () => buildTopCarRowsByArea(chartFilteredDamageReports, areaPieData),
+    [areaPieData, chartFilteredDamageReports]
+  );
 
-  const quickLinks = [
-    { href: "/reports/damage", label: "Damage reports", description: "Open the live damage report list." },
-    { href: "/reports/rsa", label: "RSA reports", description: "Review rail and route records." },
-    { href: "/dashboard", label: "Dashboard", description: "Open the embedded analytics surface." },
-  ];
-
+  const visibleFacilityStats = useMemo(() => filteredFacilityStats, [filteredFacilityStats]);
   if (!organizationId) {
     return <EmptyState title="Home unavailable" description="Organization session required." />;
   }
@@ -997,342 +1624,488 @@ export default function HomePage() {
   if (reportsError) {
     return <EmptyState title="Home data unavailable" description="Report data could not be loaded." tone="danger" />;
   }
-  const facilityTrend = buildFacilityTrendFromStats(filteredDamageReports, filteredFacilityStats, 30);
-  const inspectorTrend = buildInspectorTrendData(filteredDamageReports, 30);
+  const trendEndDate = createdTo || undefined;
+  const facilityTrend = buildFacilityTrendFromStats(severityFilteredDamageReports, filteredFacilityStats, 30, trendEndDate);
+  const inspectorTrend = buildInspectorTrendData(severityFilteredDamageReports, 30, trendEndDate);
   const palette = ["#2563eb", "#dc2626", "#0f766e", "#7c3aed", "#ea580c", "#16a34a", "#db2777", "#0ea5e9"];
+  const facilityTrendColors = new Map(facilityTrend.keys.map((facility, index) => [facility, palette[index % palette.length]] as const));
   const selectFacilityFromChart = (facilityLabel: string) => {
-    const matched = filteredFacilityStats.find((stats) => stats.label === facilityLabel) ?? facilityDamageStats.find((stats) => stats.label === facilityLabel);
+    const normalizedFacilityLabel = sanitizeFacilityDisplay(facilityLabel);
+    const matched =
+      filteredFacilityStats.find((stats) => sanitizeFacilityDisplay(stats.label) === normalizedFacilityLabel) ??
+      facilityDamageStats.find((stats) => sanitizeFacilityDisplay(stats.label) === normalizedFacilityLabel);
     if (matched) {
-      setSelectedFacilityKey(selectedFacilityKey === matched.key ? "all" : matched.key);
+      setSelectedFacilityKey(slugForFacilityLabel(matched.label));
     }
   };
   const selectInspectorFromChart = (inspectorLabel: string) => {
     const matched = inspectorChoices.find((inspector) => inspector.label === inspectorLabel || inspector.email === inspectorLabel);
     if (matched) {
-      setSelectedInspectorEmail(selectedInspectorEmail.toLowerCase() === matched.email.toLowerCase() ? "all" : matched.email);
+      toggleInspectorFilter(matched.email);
     }
+  };
+  const toggleInspectorFilter = (email: string) => {
+    setInspectorEmailFilter((current) => (current.trim().toLowerCase() === email.trim().toLowerCase() ? "" : email));
+  };
+  const selectSeverityFromChart = (severityLabel: string) => {
+    const matched = buildSeverityPieData(chartSummary.severity).find((item) => item.name === severityLabel);
+    if (matched) {
+      setSelectedSeverityLevel((current) => (current === matched.name.split(" - ")[0] ? "all" : matched.name.split(" - ")[0]));
+    }
+  };
+  const selectAreaFromPie = (areaName: string) => {
+    setSelectedDamageAreaFilter((current) => (current === areaName ? "" : areaName));
   };
 
   return (
     <div className="space-y-6">
-          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-26px_rgba(15,23,42,0.2)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(300px,0.9fr)]">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Organization</span>
-              <select
-                value={selectedOrganizationId}
-                onChange={(event) => setSelectedOrganizationId(event.target.value)}
-                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
-              >
-                <option value={organizationId ?? ""}>{currentOrganizationLabel}</option>
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Facility</span>
-              <select
-                value={selectedFacilityKey}
-                onChange={(event) => setSelectedFacilityKey(event.target.value)}
-                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
-              >
-                <option value="all">All facilities</option>
-                {facilityDamageStats.map((stats) => (
-                  <option key={stats.key} value={stats.key}>
-                    {stats.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Date Range</span>
-              <ReportDateRangeFilter
-                value={{ createdFrom, createdTo }}
-                onChange={({ createdFrom: nextFrom, createdTo: nextTo }) => {
-                  setCreatedFrom(nextFrom);
-                  setCreatedTo(nextTo);
-                }}
-                label="Select date"
-                minDate={reportDateBounds.minDate}
-                maxDate={reportDateBounds.maxDate}
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedFacilityKey("all");
-                  setSelectedInspectorEmail("all");
-                  setCreatedFrom("");
-                  setCreatedTo("");
-                }}
-                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-              >
-                Clear filters
-              </button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-            <MetricCard label="Damage Reports Today" value={summary.currentPeriod.damageToday} detail="Damage reports filed today" icon={<FileText className="h-4 w-4" />} />
-            <MetricCard label="RSA Reports Today" value={summary.currentPeriod.rsaToday} detail="RSA reports filed today" icon={<ShieldAlert className="h-4 w-4" />} />
-            <MetricCard accent label="Total Damage Reports" value={summary.totals.damageReports} detail={`Month to date ${formatNumber(summary.currentPeriod.damageMonthToDate)}`} icon={<TriangleAlert className="h-4 w-4" />} />
-            <MetricCard label="Active Facilities" value={summary.totals.facilities} detail="Facilities with current directory data" icon={<LayoutGrid className="h-4 w-4" />} />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]">
-            <Card className="overflow-hidden">
-              <CardHeader
-                title="Report Trend"
-                subtitle="30-day stacked daily damage volume by facility."
-                actions={
+          <Card className="sticky top-0 z-30 overflow-visible border-slate-200/80 bg-white/95 shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)] backdrop-blur">
+            <CardHeader
+              title="Filters"
+              subtitle="Narrow the home dashboard view."
+              actions={
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => downloadCsv("facility-damage-reports.csv", buildFilteredReportCsvRows(filteredDamageReports, "facility"))}
-                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                    onClick={clearHomeFilters}
+                    className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700 shadow-sm transition hover:bg-slate-100"
                   >
-                    <Download className="h-4 w-4" />
-                    Export
+                    Clear filters
                   </button>
-                }
-              />
-              <CardContent className="h-96">
-                <div className="h-full overflow-x-auto">
-                  <div className="min-w-[980px] h-full">
-                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                      <BarChart data={facilityTrend.data} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="18%" barGap={2}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
-                        <XAxis
-                          dataKey="date"
-                          type="category"
-                          interval={0}
-                          minTickGap={0}
-                          tickMargin={8}
-                          tickFormatter={(value) => formatEvenDateKeyLabel(String(value))}
-                          tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
-                          stroke={chartTheme.colors.grid}
-                        />
-                        <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: 16, border: `1px solid ${chartTheme.colors.grid}`, background: "#ffffff" }}
-                          labelFormatter={(value) => formatDateKeyLabel(String(value))}
-                        />
-                        {facilityTrend.keys.map((facility, index) => (
-                          <Bar
-                            key={facility}
-                            dataKey={facility}
-                            stackId="damage"
-                            name={facility}
-                            fill={palette[index % palette.length]}
-                            barSize={30}
-                            cursor="pointer"
-                            onClick={() => selectFacilityFromChart(facility)}
-                          />
-                        ))}
-                        <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <DataTableShell
-              title="Facility Damage Submissions"
-              description="Facility names and counts for the current filter."
-              columns={["Facility", { id: "damage-submissions", label: "Damage submissions", align: "right" }]}
-              rowsCount={visibleFacilityStats.length}
-              emptyState={<div className="text-sm text-slate-500">No facility data available.</div>}
-            >
-              {visibleFacilityStats.map((facility) => (
-                <tr key={facility.key} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-800">{facility.label}</td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{formatNumber(facility.totalReports)}</td>
-                </tr>
-              ))}
-            </DataTableShell>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="overflow-hidden">
-              <CardHeader title="Inspector Comparison" subtitle="Select an inspector to filter the severity detail card." />
-              <CardContent className="space-y-2">
-                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-                  {inspectorChoices.length ? inspectorChoices.map((inspector) => {
-                    const active = selectedInspectorEmail.toLowerCase() === inspector.email.toLowerCase();
-                    return (
+                  <DropdownMenu open={homeFilterMenuOpen} onOpenChange={setHomeFilterMenuOpen}>
+                    <DropdownMenuTrigger asChild>
                       <button
-                        key={inspector.email}
                         type="button"
-                        onClick={() => setSelectedInspectorEmail(active ? "all" : inspector.email)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
-                          active ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                        }`}
+                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-800 shadow-sm transition hover:bg-blue-100"
                       >
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{inspector.label}</p>
-                          <p className="text-xs text-slate-500">{inspector.email}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-black text-slate-950">{formatNumber(inspector.reportCount)}</p>
-                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Reports</p>
-                        </div>
+                        <Filter className="h-4 w-4" />
+                        + Add filter
                       </button>
-                    );
-                  }) : (
-                    <p className="px-1 py-8 text-center text-sm text-slate-500">No inspector data available.</p>
-                  )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-72">
+                      <DropdownMenuLabel>Available filters</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {availableHomeFilterOptions.map((option) => (
+                        <DropdownMenuItem
+                          key={option.key}
+                          onSelect={() => {
+                            setActiveHomeFilterKeys((current) =>
+                              current.includes(option.key as any) ? current : [...current, option.key as any]
+                            );
+                            setHomeFilterMenuOpen(false);
+                          }}
+                        >
+                          {option.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
+              }
+            />
+            <CardContent>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Organization</span>
+                  <select
+                    value={selectedOrganizationId}
+                    onChange={(event) => setSelectedOrganizationId(event.target.value)}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+                  >
+                    <option value={organizationId ?? ""}>{sanitizeDisplay(currentOrganizationLabel)}</option>
+                  </select>
+                </label>
+                {!hideFacilitySelector ? (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Facility</span>
+                    <select
+                      value={selectedFacilityKey}
+                      onChange={(event) => setSelectedFacilityKey(event.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+                    >
+                      <option value="all">All facilities</option>
+                      {facilityDamageStats.map((stats) => (
+                        <option key={stats.key} value={slugForFacilityLabel(stats.label)}>
+                          {sanitizeFacilityDisplay(stats.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Severity</span>
+                  <select
+                    value={selectedSeverityLevel}
+                    onChange={(event) => setSelectedSeverityLevel(event.target.value)}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+                  >
+                    <option value="all">All severities</option>
+                    {DAMAGE_SEVERITIES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Date Range</span>
+                  <ReportDateRangeFilter
+                    value={{ createdFrom, createdTo }}
+                    onChange={({ createdFrom: nextFrom, createdTo: nextTo }) => {
+                      setCreatedFrom(nextFrom);
+                      setCreatedTo(nextTo);
+                    }}
+                    label="Select date"
+                    minDate={reportDateBounds.minDate}
+                    maxDate={reportDateBounds.maxDate}
+                  />
+                </div>
+              </div>
+              {activeHomeFilterKeys.length ? (
+                <>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {activeHomeFilterKeys.map((key) => {
+                      const label = availableHomeFilterOptions.find((option) => option.key === key)?.label ?? key;
+                      return (
+                        <div key={key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                          <span className="w-24 shrink-0 truncate text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+                          {renderHomeFilterControl(key)}
+                          <button
+                            type="button"
+                            onClick={() => setActiveHomeFilterKeys((current) => current.filter((item) => item !== key))}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
+                            aria-label={`Remove ${label} filter`}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <div className={`grid gap-4 xl:items-stretch ${hideFacilitySelector ? "xl:grid-cols-1" : "xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]"}`}>
+            <div className="space-y-4">
+              <div className={`grid gap-4 sm:grid-cols-2 ${hideFacilitySelector ? "xl:grid-cols-2" : "xl:grid-cols-4"}`}>
+                <MetricCard label="Damage Reports Today" value={summary.currentPeriod.damageToday} detail="Damage reports filed today" icon={<FileText className="h-4 w-4" />} />
+                {isInspectionTracOrg ? (
+                  <MetricCard label="RSA Reports Today" value={summary.currentPeriod.rsaToday} detail="RSA reports filed today" icon={<ShieldAlert className="h-4 w-4" />} />
+                ) : null}
+                <MetricCard accent label="Total Damage Reports" value={summary.totals.damageReports} detail={`Month to date ${formatNumber(summary.currentPeriod.damageMonthToDate)}`} icon={<TriangleAlert className="h-4 w-4" />} />
+                {!hideFacilitySelector ? (
+                  <MetricCard label="Active Facilities" value={summary.totals.facilities} detail="Facilities with current directory data" icon={<LayoutGrid className="h-4 w-4" />} />
+                ) : null}
+              </div>
+
+              <Card className="overflow-hidden">
+                <CardHeader
+                  title="Report Trend"
+                  subtitle={hideFacilitySelector ? "30-day stacked daily damage volume." : "30-day stacked daily damage volume by facility."}
+                  actions={
+                    <button
+                      type="button"
+                      onClick={() => downloadCsv("facility-damage-reports.csv", buildFilteredReportCsvRows(severityFilteredDamageReports, "facility"))}
+                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export
+                    </button>
+                  }
+                />
+                <CardContent className="h-96">
+                  <div className="h-full overflow-x-auto">
+                    <div className={`h-full ${hideFacilitySelector ? "min-w-0" : "min-w-[980px]"}`}>
+                      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+                        <BarChart data={facilityTrend.data} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="12%" barGap={0}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
+                          <XAxis
+                            dataKey="date"
+                            type="category"
+                            interval={0}
+                            minTickGap={0}
+                            tickMargin={8}
+                            tickFormatter={(value) => formatEvenDateKeyLabel(String(value))}
+                            tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
+                            stroke={chartTheme.colors.grid}
+                          />
+                          <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
+                          <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
+                          <Tooltip content={<NonZeroBarTooltip />} labelFormatter={(value) => formatDateKeyLabel(String(value))} />
+                          {facilityTrend.keys.map((facility, index) => (
+                          <Bar
+                              key={facility}
+                              dataKey={facility}
+                              stackId="damage"
+                              name={sanitizeFacilityDisplay(facility)}
+                              fill={facilityTrendColors.get(facility) ?? palette[index % palette.length]}
+                              cursor="pointer"
+                              onClick={() => selectFacilityFromChart(facility)}
+                            />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {!hideFacilitySelector ? (
+              <div className="h-full">
+                <DataTableShell
+                  className="h-full"
+                  title="Facility Damage Submissions"
+                  description="Facility names and counts for the current filter."
+                  columns={["Facility", { id: "damage-submissions", label: "Damage submissions", align: "left" }]}
+                  rowsCount={visibleFacilityStats.length}
+                  emptyState={<div className="text-sm text-slate-500">No facility data available.</div>}
+                >
+                  {visibleFacilityStats.map((facility) => (
+                    <tr key={facility.key} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-sm font-medium text-slate-800">{sanitizeFacilityDisplay(facility.label)}</td>
+                      <td className="px-4 py-3 text-left text-sm font-semibold text-slate-900">{formatNumber(facility.totalReports)}</td>
+                    </tr>
+                  ))}
+                </DataTableShell>
+              </div>
+            ) : null}
+          </div>
+
+          {!hideInspectorSections ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Card className="overflow-hidden">
+                <CardHeader title="Inspector Comparison" subtitle="Select an inspector to filter the severity detail card." />
+                <CardContent className="space-y-2">
+                  <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                    {inspectorChoices.length ? inspectorChoices.map((inspector) => {
+                      const active = inspectorEmailFilter.toLowerCase() === inspector.email.toLowerCase();
+                      return (
+                        <button
+                          key={inspector.email}
+                          type="button"
+                          onClick={() => toggleInspectorFilter(inspector.email)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                            active ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{inspector.label}</p>
+                            <p className="text-xs text-slate-500">{inspector.email}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-black text-slate-950">{formatNumber(inspector.reportCount)}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Reports</p>
+                          </div>
+                        </button>
+                      );
+                    }) : (
+                      <p className="px-1 py-8 text-center text-sm text-slate-500">No inspector data available.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden">
+                <CardHeader
+                  title="Inspector Report Trend"
+                  subtitle="30-day stacked daily damage volume by submitter."
+                  actions={
+                    <button
+                      type="button"
+                      onClick={() => downloadCsv("inspector-damage-reports.csv", buildFilteredReportCsvRows(severityFilteredDamageReports, "inspector"))}
+                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export
+                    </button>
+                  }
+                />
+                <CardContent className="h-96">
+                  <div className="h-full overflow-x-auto">
+                    <div className="min-w-[760px] h-full">
+                      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+                        <BarChart data={inspectorTrend.data} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="18%" barGap={2}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
+                          <XAxis
+                            dataKey="date"
+                            type="category"
+                            interval={0}
+                            minTickGap={0}
+                            tickMargin={8}
+                            tickFormatter={(value) => formatEvenDateKeyLabel(String(value))}
+                            tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
+                            stroke={chartTheme.colors.grid}
+                          />
+                          <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
+                          <Tooltip content={<NonZeroBarTooltip />} labelFormatter={(value) => formatDateKeyLabel(String(value))} />
+                          {inspectorTrend.keys.map((inspector, index) => (
+                            <Bar
+                              key={inspector}
+                              dataKey={inspector}
+                              stackId="damage"
+                              name={inspector}
+                              fill={palette[index % palette.length]}
+                              barSize={30}
+                              cursor="pointer"
+                              onClick={() => selectInspectorFromChart(inspector)}
+                            />
+                          ))}
+                          <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Card className="overflow-hidden">
+              <CardHeader
+                title="Severity Detail"
+                subtitle={
+                  selectedModelFilter === "all"
+                    ? "Six-level breakdown from the current damage payload."
+                    : `Filtered to model ${selectedModelFilter}.`
+                }
+                actions={
+                  <div className="flex min-w-[220px] flex-col items-end gap-1">
+                    <select
+                      value={selectedModelFilter}
+                      onChange={(event) => setSelectedModelFilter(event.target.value)}
+                      className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+                    >
+                      <option value="all">All models</option>
+                      {modelOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{formatNumber(chartFilteredDamageReports.length)} reports</p>
+                  </div>
+                }
+              />
+              <CardContent className="flex h-[760px] flex-col p-0">
+                <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-6 pb-4">
+                  <div className="h-full min-h-[360px] w-full">
+                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+                      <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
+                        <Tooltip content={<PieSummaryTooltip />} />
+                        <Pie
+                          data={severityPieData}
+                          dataKey="count"
+                          nameKey="name"
+                          outerRadius={100}
+                          cx="50%"
+                          cy="48%"
+                          label={({ name, percent = 0 }) => (Number(percent) > 0 ? `${String(name).slice(0, 18)} ${(percent * 100).toFixed(0)}%` : "")}
+                          labelLine={false}
+                          onClick={(_, index) => {
+                            const item = severityPieData[index ?? -1];
+                            if (item) {
+                              const level = String(item.name).split(" - ")[0];
+                              setSelectedSeverityLevel((current) => (current === level ? "all" : level));
+                            }
+                          }}
+                        >
+                          {severityPieData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Legend
+                          verticalAlign="bottom"
+                          align="center"
+                          height={60}
+                          wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700, whiteSpace: "normal" }}
+                        />
+                      </PieChart>
+                  </ResponsiveContainer>
+                  </div>
+                </div>
+                <ChartFooterTable
+                  title="Section car rows"
+                  subtitle={selectedModelFilter === "all" ? "Total rows per severity section." : "Model rows per severity section for the selected model."}
+                  items={severityFooterRows}
+                  showSeverityPills
+                />
               </CardContent>
             </Card>
 
             <Card className="overflow-hidden">
               <CardHeader
-                title="Inspector Report Trend"
-                subtitle="30-day stacked daily damage volume by submitter."
+                title="Top Damage Areas"
+                subtitle="Pie chart for the current filtered data."
                 actions={
-                  <button
-                    type="button"
-                    onClick={() => downloadCsv("inspector-damage-reports.csv", buildFilteredReportCsvRows(filteredDamageReports, "inspector"))}
-                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
-                  >
-                    <Download className="h-4 w-4" />
-                    Export
-                  </button>
+                  <div className="flex min-w-[220px] flex-col items-end gap-1">
+                    <select
+                      value={selectedModelFilter}
+                      onChange={(event) => setSelectedModelFilter(event.target.value)}
+                      className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
+                    >
+                      <option value="all">All models</option>
+                      {modelOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      {formatNumber(chartFilteredDamageReports.length)} reports
+                    </p>
+                  </div>
                 }
               />
-              <CardContent className="h-96">
-                <div className="h-full overflow-x-auto">
-                  <div className="min-w-[760px] h-full">
+              <CardContent className="flex h-[760px] flex-col p-0">
+                <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-6 pb-4">
+                  <div className="h-full min-h-[360px] w-full">
                     <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                      <BarChart data={inspectorTrend.data} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="18%" barGap={2}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
-                        <XAxis
-                          dataKey="date"
-                          type="category"
-                          interval={0}
-                          minTickGap={0}
-                          tickMargin={8}
-                          tickFormatter={(value) => formatEvenDateKeyLabel(String(value))}
-                          tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
-                          stroke={chartTheme.colors.grid}
+                      <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
+                        <Tooltip content={<PieSummaryTooltip />} />
+                        <Pie
+                          data={areaPieData}
+                          dataKey="count"
+                          nameKey="name"
+                          outerRadius={100}
+                          cx="50%"
+                          cy="48%"
+                          label={({ name, percent = 0, index = 0 }) => getPieSliceLabel(String(name), Number(percent), Number(index))}
+                          labelLine={false}
+                          onClick={(_, index) => {
+                            const item = areaPieData[index ?? -1];
+                            if (item) {
+                              selectAreaFromPie(item.name);
+                            }
+                          }}
+                        >
+                          {areaPieData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Legend
+                          verticalAlign="bottom"
+                          align="center"
+                          height={60}
+                          wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700, whiteSpace: "normal" }}
                         />
-                        <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: 16, border: `1px solid ${chartTheme.colors.grid}`, background: "#ffffff" }}
-                          labelFormatter={(value) => formatDateKeyLabel(String(value))}
-                        />
-                        {inspectorTrend.keys.map((inspector, index) => (
-                          <Bar
-                            key={inspector}
-                            dataKey={inspector}
-                            stackId="damage"
-                            name={inspector}
-                            fill={palette[index % palette.length]}
-                            barSize={30}
-                            cursor="pointer"
-                            onClick={() => selectInspectorFromChart(inspector)}
-                          />
-                        ))}
-                        <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                      </PieChart>
+                  </ResponsiveContainer>
                   </div>
                 </div>
+                <ChartFooterTable
+                  title="Section car rows"
+                  subtitle={selectedModelFilter === "all" ? "Total rows per area section." : "Model rows per area section for the selected model."}
+                  items={areaFooterRows}
+                  showRowCount={false}
+                />
               </CardContent>
             </Card>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="overflow-hidden">
-              <CardHeader title="Severity Detail" subtitle={selectedInspectorEmail === "all" ? "Six-level breakdown from the current damage payload." : `Filtered to ${selectedInspector?.label || "selected inspector"}.`} />
-              <CardContent className="h-[520px] p-0">
-                <div className="flex h-full items-center justify-center p-10">
-                  <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                    <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
-                      <Tooltip contentStyle={{ borderRadius: 16, border: `1px solid ${chartTheme.colors.grid}`, background: "#ffffff" }} />
-                      <Pie
-                        data={buildPieData(selectedInspectorSeverity.map((item) => ({
-                          name: `${item.level} - ${item.label}`,
-                          count: item.count,
-                        })))}
-                        dataKey="count"
-                        nameKey="name"
-                        outerRadius={110}
-                        cx="50%"
-                        cy="44%"
-                        label={({ name, percent = 0 }) => `${String(name).slice(0, 18)} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {buildPieData(selectedInspectorSeverity.map((item) => ({
-                          name: `${item.level} - ${item.label}`,
-                          count: item.count,
-                        }))).map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Legend
-                        verticalAlign="bottom"
-                        align="center"
-                        height={60}
-                        wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700, whiteSpace: "normal" }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden">
-              <CardHeader title="Top Damage Areas" subtitle="Pie chart for the selected data." />
-              <CardContent className="h-[520px] p-0">
-                <div className="flex h-full items-center justify-center p-10">
-                  <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                    <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
-                      <Tooltip contentStyle={{ borderRadius: 16, border: `1px solid ${chartTheme.colors.grid}`, background: "#ffffff" }} />
-                      <Pie
-                          data={buildPieData(summary.topAreas)}
-                        dataKey="count"
-                        nameKey="name"
-                        outerRadius={110}
-                        cx="50%"
-                        cy="44%"
-                        label={({ name, percent = 0 }) => `${String(name).slice(0, 18)} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {buildPieData(summary.topAreas).map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Legend
-                        verticalAlign="bottom"
-                        align="center"
-                        height={60}
-                        wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700, whiteSpace: "normal" }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {quickLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-26px_rgba(15,23,42,0.2)] transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{link.label}</p>
-                    <p className="mt-1 text-xs text-slate-600">{link.description}</p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-700" />
-                </div>
-              </Link>
-            ))}
           </div>
 
     </div>

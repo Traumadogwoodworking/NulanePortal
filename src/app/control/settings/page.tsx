@@ -9,6 +9,8 @@ import { ControlMetricTile } from "@/components/control/ControlMetricTile";
 import { ControlSection } from "@/components/control/ControlSection";
 import { ControlTableShell } from "@/components/control/ControlTableShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Input } from "@/components/ui/input";
+import { matchesAnySearchQuery } from "@/lib/searchText";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 interface SettingGroup {
@@ -89,14 +91,10 @@ export default function ControlSettingsPage() {
     : [];
 
   const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const sorted = [...settingsRows].sort((left, right) => settingPriority(left) - settingPriority(right) || (left.key || "").localeCompare(right.key || ""));
-    if (!q) return sorted;
-    return sorted.filter((row) => {
-      return [row.key, row.scope_type, row.scope_id, safeString(row.value)]
-        .filter((value): value is string => Boolean(value))
-        .some((value) => value.toLowerCase().includes(q));
-    });
+    return sorted.filter((row) =>
+      matchesAnySearchQuery([row.key, row.scope_type, row.scope_id, safeString(row.value)].filter(Boolean).join(" "), search)
+    );
   }, [search, settingsRows]);
 
   const groupedRows = useMemo<SettingGroupView[]>(() => {
@@ -175,7 +173,7 @@ export default function ControlSettingsPage() {
         <div className="flex flex-col gap-3 rounded-[1.35rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel-muted)] p-4 lg:flex-row lg:items-center lg:justify-between">
           <label className="flex-1">
             <span className="text-[10px] font-semibold uppercase tracking-[0.36em] text-[color:var(--text-muted)]">Search</span>
-            <input
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Key, scope, value, or org"

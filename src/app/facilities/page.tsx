@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageSection } from "@/components/ui/PageSection";
 import { StatCard } from "@/components/ui/StatCard";
@@ -10,13 +10,14 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorPanel } from "@/components/ui/ErrorPanel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { usePortalSession } from "@/lib/portalSession";
 import { refreshControlPlaneBootstrap, usePortalBrandingSnapshot, usePortalDirectorySnapshot } from "@/lib/portalData";
 import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { FacilityModal } from "@/components/facilities/FacilityModal";
-import { Search, RefreshCw, MapPin, Building2, ChevronRight, Settings2 } from "lucide-react";
+import { Search, RefreshCw, MapPin, Building2, Settings2, Check, Minus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { matchesAnySearchQuery } from "@/lib/searchText";
 
 const columns = ["Facility Identity", "Users", "Status"];
 const facilityRecipientAliases: Record<string, string> = {
@@ -98,12 +99,12 @@ export default function FacilitiesPage() {
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(searchParams?.get("facility") ?? null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<null | { membershipId: string; userName: string; facilityName: string }>(null);
+  const [removeTarget, setRemoveTarget] = useState<null | { userId: string; facilityId: string; userName: string; facilityName: string }>(null);
   const [facilityActionMessage, setFacilityActionMessage] = useState<string | null>(null);
   const [facilityActionError, setFacilityActionError] = useState<string | null>(null);
-  const [assignedUsersOpen, setAssignedUsersOpen] = useState(false);
-  const [assignmentEditorUserId, setAssignmentEditorUserId] = useState<string | null>(null);
-  const [assignmentEditorFacilityIds, setAssignmentEditorFacilityIds] = useState<string[]>([]);
+  const [facilityAssignmentDraftUserIds, setFacilityAssignmentDraftUserIds] = useState<string[]>([]);
+  const [facilityAssignmentSaving, setFacilityAssignmentSaving] = useState(false);
+  const [isAssignmentEditorOpen, setIsAssignmentEditorOpen] = useState(false);
   const loadFacilities = async () => {
     setStatusMessage(null);
     await refreshDirectory();
@@ -141,7 +142,11 @@ export default function FacilitiesPage() {
     setFacilityActionMessage(null);
     setFacilityActionError(null);
     try {
-      await UsersAdapter.removeFacilityMembership(organizationId, removeTarget.membershipId);
+      const currentFacilityIds = Array.from(userFacilityIdsByUserId.get(removeTarget.userId) ?? []);
+      const nextFacilityIds = currentFacilityIds.filter((facilityId) => facilityId !== removeTarget.facilityId);
+      await UsersAdapter.updateUser(organizationId, removeTarget.userId, {
+        facility_ids: nextFacilityIds,
+      });
       setFacilityActionMessage(`Removed ${removeTarget.userName} from ${removeTarget.facilityName}.`);
       await loadFacilities();
       await refreshControlPlaneBootstrap(organizationId);
@@ -152,39 +157,88 @@ export default function FacilitiesPage() {
     }
   };
 
-  const openAssignmentEditor = (userId: string) => {
-    const user = users.find((entry) => entry.id === userId);
-    if (!user) return;
-    const facilityIds = Array.from(new Set((user.facilityIds && user.facilityIds.length ? user.facilityIds : facilities.map((facility) => facility.id)).filter(Boolean)));
-    setAssignmentEditorUserId(userId);
-    setAssignmentEditorFacilityIds(facilityIds);
-  };
-
-  const handleSaveAssignmentEditor = async () => {
-    if (!organizationId || !assignmentEditorUserId || !isOrgAdmin) return;
-    try {
-      await UsersAdapter.updateUserFacilities(organizationId, assignmentEditorUserId, assignmentEditorFacilityIds);
-      setFacilityActionMessage("User facility assignments saved.");
-      await loadFacilities();
-      await refreshControlPlaneBootstrap(organizationId);
-      setAssignmentEditorUserId(null);
-      setAssignmentEditorFacilityIds([]);
-    } catch (error) {
-      setFacilityActionError(error instanceof Error ? error.message : "Unable to save user facility assignments.");
-    }
-  };
-
   const filteredFacilities = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return facilities;
-    return facilities.filter((f) => 
-      f.name.toLowerCase().includes(term) || 
-      f.slug.toLowerCase().includes(term) || 
-      (f.region || "").toLowerCase().includes(term)
+    return facilities.filter((facility) =>
+      matchesAnySearchQuery([facility.name, facility.slug, facility.region].filter(Boolean).join(" "), searchTerm)
     );
   }, [facilities, searchTerm]);
 
   const selectedFacility = filteredFacilities.find((facility) => facility.id === selectedFacilityId) ?? null;
+  const userFacilityIdsByUserId = useMemo(() => {
+    const assignments = new Map<string, Set<string>>();
+    users.forEach((user) => {
+      const assignedFacilities = Array.isArray(user.facilityIds) ? user.facilityIds.filter(Boolean) : [];
+      assignments.set(user.id, new Set(assignedFacilities));
+    });
+    locationMemberships.forEach((membership) => {
+      if (!membership.user_id || !membership.location_id || membership.is_active === false) return;
+      const existing = assignments.get(membership.user_id) ?? new Set<string>();
+      existing.add(membership.location_id);
+      assignments.set(membership.user_id, existing);
+    });
+    return assignments;
+  }, [locationMemberships, users]);
+
+  const selectedFacilityAssignedUserIds = useMemo(() => {
+    if (!selectedFacilityId) return [];
+    return users
+      .filter((user) => {
+        const assignedFacilities = userFacilityIdsByUserId.get(user.id);
+        return Boolean(assignedFacilities?.size && assignedFacilities.has(selectedFacilityId));
+      })
+      .map((user) => user.id);
+  }, [selectedFacilityId, userFacilityIdsByUserId, users]);
+
+  useEffect(() => {
+    if (!selectedFacilityId) {
+      setFacilityAssignmentDraftUserIds([]);
+      return;
+    }
+    setFacilityAssignmentDraftUserIds(selectedFacilityAssignedUserIds);
+  }, [selectedFacilityAssignedUserIds, selectedFacilityId]);
+
+  const toggleFacilityAssignmentDraft = (userId: string) => {
+    if (!selectedFacilityId || !isOrgAdmin || facilityAssignmentSaving) return;
+    setFacilityAssignmentDraftUserIds((current) => {
+      const next = current.includes(userId) ? current.filter((entry) => entry !== userId) : [...current, userId];
+      return next;
+    });
+  };
+
+  const handleSaveFacilityAssignments = async () => {
+    if (!organizationId || !selectedFacilityId || !isOrgAdmin) return;
+    const currentAssigned = new Set(selectedFacilityAssignedUserIds);
+    const nextAssigned = new Set(facilityAssignmentDraftUserIds);
+    const changedUsers = users.filter((user) => currentAssigned.has(user.id) !== nextAssigned.has(user.id));
+    if (!changedUsers.length) {
+      setFacilityActionMessage("Facility assignments already match the current selection.");
+      return;
+    }
+    setFacilityAssignmentSaving(true);
+    setFacilityActionError(null);
+    try {
+      await Promise.all(
+        changedUsers.map((user) => {
+          const currentIds = Array.from(userFacilityIdsByUserId.get(user.id) ?? []);
+          const nextIds = nextAssigned.has(user.id)
+            ? Array.from(new Set([...currentIds, selectedFacilityId]))
+            : currentIds.filter((facilityId) => facilityId !== selectedFacilityId);
+          return UsersAdapter.updateUser(organizationId, user.id, {
+            facility_ids: nextIds,
+          });
+        })
+      );
+      setFacilityActionMessage("Facility assignments saved.");
+      await loadFacilities();
+      await refreshControlPlaneBootstrap(organizationId);
+      setIsAssignmentEditorOpen(false);
+    } catch (error) {
+      setFacilityActionError(error instanceof Error ? error.message : "Unable to save facility assignments.");
+    } finally {
+      setFacilityAssignmentSaving(false);
+    }
+  };
+
   const selectedFacilityKeys = useMemo(() => {
     if (!selectedFacility) {
       return [];
@@ -228,32 +282,34 @@ export default function FacilitiesPage() {
     acc[user.email.toLowerCase()] = user;
     return acc;
   }, {});
-  const selectedFacilityMembershipAssignments = (() => {
-    if (!selectedFacilityId) return [];
-    const seen = new Set<string>();
-    return users
-      .filter((user) => Array.isArray(user.facilityIds) && user.facilityIds.includes(selectedFacilityId))
-      .map((user) => {
-        const membership = locationMemberships.find((entry) => entry.location_id === selectedFacilityId && entry.user_id === user.id) ?? null;
-        return { membership, user };
-      })
-      .filter((entry) => {
-        if (seen.has(entry.user.id)) return false;
-        seen.add(entry.user.id);
-        return true;
-      });
-  })();
-  const selectedFacilityVisibleAssignments = users.map((user) => {
-    const membership = locationMemberships.find((entry) => entry.location_id === selectedFacilityId && entry.user_id === user.id) ?? null;
-    return { membership, user };
-  });
   const facilityUserCounts = useMemo(() => {
-    const counts = new Map<string, Set<string>>();
+    const counts = new Map<string, number>();
     facilities.forEach((facility) => {
-      counts.set(facility.id, new Set(users.map((user) => user.id)));
+      counts.set(
+        facility.id,
+        users.filter((user) => {
+          const assignedFacilities = userFacilityIdsByUserId.get(user.id);
+          return Boolean(assignedFacilities?.size && assignedFacilities.has(facility.id));
+        }).length
+      );
     });
     return counts;
-  }, [facilities, users]);
+  }, [facilities, userFacilityIdsByUserId, users]);
+  const assignedUsers = useMemo(() => {
+    if (!selectedFacilityId) {
+      return [];
+    }
+    return users.filter((user) => {
+      const assignedFacilities = userFacilityIdsByUserId.get(user.id);
+      return Boolean(assignedFacilities?.size && assignedFacilities.has(selectedFacilityId));
+    });
+  }, [selectedFacilityId, userFacilityIdsByUserId, users]);
+
+  const openAssignmentEditor = () => {
+    if (!selectedFacilityId || facilityAssignmentSaving) return;
+    setFacilityAssignmentDraftUserIds(selectedFacilityAssignedUserIds);
+    setIsAssignmentEditorOpen(true);
+  };
 
   const activeCount = facilities.filter(f => f.active).length;
   const summaryDeck = [
@@ -299,104 +355,63 @@ export default function FacilitiesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={assignedUsersOpen} onOpenChange={(open) => setAssignedUsersOpen(open)}>
-        <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Assigned users</DialogTitle>
-            <DialogDescription>
-              Full assignment list for the selected facility.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto pr-1">
-            <div className="space-y-2">
-              {selectedFacilityVisibleAssignments.map((assignment) => {
-                const key = assignment.membership?.location_membership_id || assignment.user.id;
-                return (
-                  <Link
-                    key={key}
-                    href={`/users?user=${encodeURIComponent(assignment.user.id)}`}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:border-brand/30 hover:bg-slate-50"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold text-slate-900 truncate">{assignment.user.name}</p>
-                      <p className="text-[10px] font-medium text-slate-500 truncate">{assignment.user.email}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openAssignmentEditor(assignment.user.id);
-                        }}
-                        className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600"
-                      >
-                        Assign
-                      </button>
-                      <ChevronRight className="h-4 w-4 text-slate-300" />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={Boolean(assignmentEditorUserId)} onOpenChange={(open) => !open && setAssignmentEditorUserId(null)}>
+      <Dialog open={isAssignmentEditorOpen} onOpenChange={(open) => setIsAssignmentEditorOpen(open)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit user assignments</DialogTitle>
+            <DialogTitle>Edit Facility Assignments</DialogTitle>
             <DialogDescription>
-              Assign the selected user to one or more facilities.
+              Select the users that should be directly assigned to this facility, then save the updated list.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto pr-1">
-            <div className="space-y-2">
-              {facilities.map((facility) => {
-                const checked = assignmentEditorFacilityIds.includes(facility.id);
+            <div className="space-y-1">
+              {users.length ? users.map((user) => {
+                const assignedFacilities = userFacilityIdsByUserId.get(user.id);
+                const checked = facilityAssignmentDraftUserIds.includes(user.id);
                 return (
                   <button
-                    key={facility.id}
+                    key={user.id}
                     type="button"
-                    onClick={() =>
-                      setAssignmentEditorFacilityIds((current) =>
-                        current.includes(facility.id)
-                          ? current.filter((id) => id !== facility.id)
-                          : [...current, facility.id]
-                      )
-                    }
-                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition ${
-                      checked ? "border-brand bg-brand/5" : "border-slate-200 bg-white hover:bg-slate-50"
-                    }`}
+                    onClick={() => toggleFacilityAssignmentDraft(user.id)}
+                    aria-disabled={!isOrgAdmin || facilityAssignmentSaving}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition cursor-pointer ${
+                      checked ? "border-brand bg-brand/5" : "border-slate-100 bg-white hover:bg-slate-50"
+                    } ${!isOrgAdmin || facilityAssignmentSaving ? "opacity-75" : ""}`}
+                    title={assignedFacilities?.size ? "Direct facility assignment" : "No direct facility assignment"}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-900">{facility.name}</p>
-                      <p className="truncate text-xs font-medium text-slate-500">{facility.slug}</p>
+                      <p className="truncate text-[11px] font-bold text-slate-900">{user.name}</p>
+                      <p className="truncate text-[10px] font-medium text-slate-500">{user.email}</p>
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <span className="flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                      {checked ? <Check className="h-3 w-3 text-emerald-500" /> : <Minus className="h-3 w-3 text-slate-300" />}
                       {checked ? "Assigned" : "Unassigned"}
                     </span>
                   </button>
                 );
-              })}
+              }) : (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">No users available</p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button
+            <button
               type="button"
-              variant="outline"
-              onClick={() => setAssignmentEditorUserId(null)}
-              className="border-slate-300 bg-slate-700 text-white hover:bg-slate-600 hover:text-white focus-visible:ring-slate-500/30"
+              onClick={() => setIsAssignmentEditorOpen(false)}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-700"
             >
               Cancel
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              onClick={() => void handleSaveAssignmentEditor()}
-              className="bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:ring-emerald-500/30"
+              onClick={() => void handleSaveFacilityAssignments()}
+              disabled={!isOrgAdmin || facilityAssignmentSaving || !selectedFacilityId}
+              className="rounded-full border border-brand/20 bg-brand px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Save assignments
-            </Button>
+              {facilityAssignmentSaving ? "Saving..." : "Save"}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -434,13 +449,13 @@ export default function FacilitiesPage() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative group">
                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-brand transition-colors" />
-               <input
-                 type="search"
-                 placeholder="Search registry..."
-                 value={searchTerm}
-                 onChange={(e) => setSearchTerm(e.target.value)}
-                 className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm"
-               />
+              <Input
+                type="search"
+                placeholder="Search registry..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm"
+              />
             </div>
             <button
               onClick={() => void loadFacilities()}
@@ -454,8 +469,6 @@ export default function FacilitiesPage() {
               trigger={
                 <button
                   type="button"
-              disabled={!organizationId || Boolean(createDisabledReason)}
-                  title={createDisabledReason ?? "Add facility"}
                   className="flex items-center gap-2 rounded-lg bg-brand hover:bg-brand-accent px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-brand/10 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <Building2 className="w-3.5 h-3.5" />
@@ -511,7 +524,7 @@ export default function FacilitiesPage() {
                         </td>
                         <td className="px-4 py-2">
                           <span className="text-xs font-black text-slate-700">
-                            {facilityUserCounts.get(f.id)?.size ?? users.length}
+                            {facilityUserCounts.get(f.id) ?? users.length}
                           </span>
                         </td>
                         <td className="px-4 py-2">
@@ -548,19 +561,48 @@ export default function FacilitiesPage() {
                    <nav className="space-y-4">
                       <div className="space-y-2">
                          <div className="flex items-center justify-between gap-2 px-1">
-                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Users</p>
+                           <div className="min-w-0">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Direct Assignments</p>
+                             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-300">
+                               {assignedUsers.length} directly assigned
+                             </p>
+                           </div>
                            <button
                              type="button"
-                             onClick={() => setAssignedUsersOpen(true)}
-                             className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600"
+                             onClick={() => void openAssignmentEditor()}
+                             disabled={!isOrgAdmin || !selectedFacilityId}
+                             className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                            >
-                             Open list
+                             Edit Facility
                            </button>
                          </div>
-                        <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center">
-                          <p className="text-sm font-medium text-slate-600">
-                            {selectedFacilityVisibleAssignments.length} assigned users
-                          </p>
+                        <div className="rounded-xl border border-slate-200 bg-white p-2">
+                          <div className="max-h-[14rem] overflow-y-auto pr-1">
+                            <div className="space-y-1">
+                              {assignedUsers.length ? assignedUsers.map((user) => {
+                                const assignedFacilities = userFacilityIdsByUserId.get(user.id);
+                                return (
+                                  <div
+                                    key={user.id}
+                                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2 text-left"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate text-[11px] font-bold text-slate-900">{user.name}</p>
+                                      <p className="truncate text-[10px] font-medium text-slate-500">{user.email}</p>
+                                    </div>
+                                    <span className="flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                      <Check className="h-3 w-3 text-emerald-500" />
+                                      Assigned
+                                    </span>
+                                  </div>
+                                );
+                              }) : (
+                                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">No directly assigned users</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
 

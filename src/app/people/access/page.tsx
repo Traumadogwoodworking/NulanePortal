@@ -1,5 +1,14 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function PeopleAccessRedirectPage() {
-  redirect("/users/access");
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/users/access");
+  }, [router]);
+
+  return <main className="p-6 text-sm text-slate-500">Redirecting...</main>;
 }

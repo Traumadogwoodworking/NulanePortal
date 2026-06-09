@@ -4,6 +4,16 @@ const auth0Audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || "https://api.nul
 
 const bootstrapScript = `
 (function () {
+  function listAuth0StorageKeys() {
+    try {
+      return Object.keys(window.sessionStorage).filter(function (key) {
+        return key.toLowerCase().indexOf("auth0") !== -1;
+      });
+    } catch (error) {
+      return [];
+    }
+  }
+
   function bySelector(selector) {
     return document.querySelector(selector);
   }
@@ -31,9 +41,9 @@ const bootstrapScript = `
 
   function getReturnTo() {
     try {
-      return new URLSearchParams(window.location.search).get("returnTo") || "/dashboard";
+      return new URLSearchParams(window.location.search).get("returnTo") || "/portal/home/";
     } catch (error) {
-      return "/dashboard";
+      return "/portal/home/";
     }
   }
 
@@ -76,7 +86,7 @@ const bootstrapScript = `
       setStatus("script-started");
 
       var returnTo = getReturnTo();
-      var redirectUri = window.location.origin;
+      var redirectUri = window.location.origin.replace(/\/+$/, "") + "/portal/";
       var domain = ${JSON.stringify(auth0Domain)};
       var clientId = ${JSON.stringify(auth0ClientId)};
       var audience = ${JSON.stringify(auth0Audience)};
@@ -102,6 +112,11 @@ const bootstrapScript = `
         clientId: clientId,
         audience: audience,
       };
+      console.debug("[Auth0Bootstrap] auth state snapshot", {
+        returnTo: returnTo,
+        redirectUri: redirectUri,
+        auth0StorageKeys: listAuth0StorageKeys(),
+      });
 
       await loadAuth0Script();
       setStatus("script-loaded");
@@ -169,7 +184,7 @@ export default function LoginPage() {
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
           <p className="font-black uppercase tracking-[0.24em] text-slate-400">Debug</p>
           <p className="mt-2">
-            Return target: <span className="font-semibold text-slate-800" data-auth0-return-to>/dashboard</span>
+            Return target: <span className="font-semibold text-slate-800" data-auth0-return-to>/portal/home/</span>
           </p>
           <p className="mt-1">
             State: <span className="font-semibold text-slate-800" data-auth0-bootstrap-state>script-started</span>

@@ -13,6 +13,7 @@ interface DataTableShellProps {
   columns?: (string | ColumnDef)[];
   title?: string;
   description?: string;
+  className?: string;
   density?: "compact" | "comfortable";
   metrics?: ReactNode;
   filters?: ReactNode;
@@ -34,6 +35,7 @@ export function DataTableShell({
   columns,
   title,
   description,
+  className,
   density = "comfortable",
   metrics,
   filters,
@@ -103,7 +105,7 @@ export function DataTableShell({
     ));
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md">
+    <div className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md ${className ?? ""}`}>
       {(title || description || actions) && (
         <header className="border-b border-slate-200 bg-slate-50/50 px-4 py-3">
           <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">

@@ -2,13 +2,13 @@ import type { CSSProperties } from "react";
 import type { BrandingSnapshot, PortalSessionResponse } from "./types";
 import { getRouteByPath } from "./navigation";
 import {
-  BASE_MEDIA_URL,
   ACTIVE_PORTAL_BRANDING,
   PORTAL_LOGO_FALLBACKS,
   getPortalBrandingPreset,
   type PortalBrandPreset,
   type PortalBrandingMode,
 } from "./brandingPresets";
+import { withPortalBasePath } from "./config";
 
 type OrgKey = string;
 
@@ -33,34 +33,34 @@ export const RSA_ORG_OPTIONS: RSAOrgOption[] = [
 const BRANDING_MAP: Record<OrgKey, OrgBrandingDefinition> = {
   "awct.inc": {
     organizationName: "AWCT.inc",
-    logoUrl: `${BASE_MEDIA_URL}/AWCT.png`,
+    logoUrl: withPortalBasePath("/media/inspection-trac-logo.png"),
     powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiMmRkNjcxMGMtOWRjNy00ODdhLWJjMzktNjFhOTBhNjE5YjNiIiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
     isPaid: true,
   },
   "awc.inc": {
     organizationName: "AWC.inc",
-    logoUrl: `${BASE_MEDIA_URL}/AWCLogo.png`,
+    logoUrl: withPortalBasePath("/media/inspection-trac-logo.png"),
     badgeLabel: "Paid",
     powerBiEmbedUrl: null,
     isPaid: true,
   },
   "inter-rail.inc": {
     organizationName: "Inter-rail.inc",
-    logoUrl: `${BASE_MEDIA_URL}/IRT-Navigation-LOGO.png`,
+    logoUrl: withPortalBasePath("/media/IRT-Navigation-LOGO.png"),
     badgeLabel: "Paid",
     powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiYTg1OTcyYjMtNGRiYy00ODNmLWI3ODctYzU0NmU0ZTg1ODM2IiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
     isPaid: true,
   },
   "inter-rail transport": {
     organizationName: "Inter-Rail Transport",
-    logoUrl: `${BASE_MEDIA_URL}/IRT-Navigation-LOGO.png`,
+    logoUrl: withPortalBasePath("/media/IRT-Navigation-LOGO.png"),
     badgeLabel: "Paid",
     powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiYTg1OTcyYjMtNGRiYy00ODNmLWI3ODctYzU0NmU0ZTg1ODM2IiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
     isPaid: true,
   },
   "signature vehicle logistics": {
     organizationName: "Signature Vehicle Logistics",
-    logoUrl: `${BASE_MEDIA_URL}/svl-dark.png`,
+    logoUrl: withPortalBasePath("/media/inspection-trac-logo.png"),
     badgeLabel: "Paid",
     powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiMDc4ODEwZGYtY2UxYy00ZWY0LWIwMjEtZWQ5ODk5ZDBlZjNlIiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
     isPaid: true,
@@ -131,13 +131,113 @@ function normalizeLogoUrl(value?: string | null): string | null {
     return null;
   }
   const trimmed = value.trim();
-  return trimmed ? trimmed : null;
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith("http") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("/media/") || trimmed.startsWith("media/")) {
+    return withPortalBasePath(trimmed.startsWith("/") ? trimmed : `/${trimmed}`);
+  }
+  return trimmed;
 }
 
 interface ResolvePortalBrandingOptions {
   session: PortalSessionResponse | null;
   pathname?: string;
   brandingSnapshot?: BrandingSnapshot | null;
+}
+
+function normalizeBrandColor(value?: string | null): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+const INSPECTION_TRAC_ORG_KEYS = new Set([
+  "inspection-trac",
+  "inspection trac",
+  "inspection track",
+  "awct.inc",
+  "awc.inc",
+  "signature vehicle logistics",
+]);
+
+function pickSwatchColor(swatch?: Record<string, string> | null): string | null {
+  if (!swatch) {
+    return null;
+  }
+  const preferredKeys = [
+    "primary",
+    "primary_color",
+    "accent",
+    "accent_color",
+    "border",
+    "border_color",
+    "brand",
+    "brand_color",
+    "secondary",
+    "secondary_color",
+    "button",
+    "button_color",
+  ];
+  for (const key of preferredKeys) {
+    const candidate = normalizeBrandColor(swatch[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  for (const candidate of Object.values(swatch)) {
+    const normalized = normalizeBrandColor(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+export function resolveBrandingAccentColor(snapshot?: BrandingSnapshot | null): string | null {
+  return (
+    pickSwatchColor(snapshot?.color_swatch ?? null) ??
+    normalizeBrandColor(snapshot?.primary_color) ??
+    normalizeBrandColor(snapshot?.accent_color) ??
+    normalizeBrandColor(snapshot?.border_color) ??
+    normalizeBrandColor(snapshot?.secondary_color) ??
+    normalizeBrandColor(snapshot?.button_color) ??
+    null
+  );
+}
+
+export function resolveBrandingPrimaryColor(snapshot?: BrandingSnapshot | null): string | null {
+  return (
+    normalizeBrandColor(snapshot?.primary_color) ??
+    pickSwatchColor(snapshot?.color_swatch ?? null) ??
+    normalizeBrandColor(snapshot?.accent_color) ??
+    normalizeBrandColor(snapshot?.border_color) ??
+    normalizeBrandColor(snapshot?.secondary_color) ??
+    normalizeBrandColor(snapshot?.button_color) ??
+    null
+  );
+}
+
+export function resolvePowerBiEmbedUrl(rawUrl?: string | null): string | null {
+  const normalized = normalizeBrandColor(rawUrl);
+  if (!normalized) {
+    return null;
+  }
+  try {
+    const url = new URL(normalized);
+    url.searchParams.set("pageView", "fitToWidth");
+    url.searchParams.set("navContentPaneEnabled", "false");
+    url.searchParams.set("filterPaneEnabled", "false");
+    url.searchParams.set("toolbarHidden", "true");
+    return url.toString();
+  } catch {
+    return normalized;
+  }
 }
 
 export function resolvePortalBranding({
@@ -167,15 +267,19 @@ export function resolvePortalBranding({
     ? normalizeLogoUrl(typeof snapshot?.logo_url === "string" ? snapshot.logo_url : null)
     : null;
   const fallbackLogo = normalizeLogoUrl(
-    PORTAL_LOGO_FALLBACKS[normalizedKey] ??
-      definition.logoUrl ??
+    definition.logoUrl ??
+      PORTAL_LOGO_FALLBACKS[normalizedKey] ??
       preset.defaultLogoUrl
   );
-  const usesStaticLogo = preset.staticLogoUrl && preset.staticLogoNormalizedKeys.includes(normalizedKey);
-  const logoUrl =
-    usesStaticLogo
-      ? preset.staticLogoUrl
-      : customLogo ?? fallbackLogo ?? null;
+  const logoUrl = INSPECTION_TRAC_ORG_KEYS.has(normalizedKey)
+    ? withPortalBasePath("/media/inspection-trac-logo.png")
+    : fallbackLogo ?? null;
+  const resolvedAppLabel = INSPECTION_TRAC_ORG_KEYS.has(normalizedKey)
+    ? "Inspection-Trac"
+    : preset.appNavLabel ?? getAppBranding(pathname).appLabel ?? preset.defaultOrganizationName;
+  const resolvedAppLogo = INSPECTION_TRAC_ORG_KEYS.has(normalizedKey)
+    ? withPortalBasePath("/media/inspection-trac-logo.png")
+    : preset.appNavLogoUrl ?? getAppBranding(pathname).brandLogo ?? preset.defaultLogoUrl;
   return {
     mode: preset.mode,
     preset,
@@ -185,7 +289,7 @@ export function resolvePortalBranding({
     badgeLabel: definition.badgeLabel ?? null,
     powerBiEmbedUrl: definition.powerBiEmbedUrl ?? null,
     isPaid: Boolean(definition.isPaid),
-    appLabel: preset.appNavLabel ?? getAppBranding(pathname).appLabel ?? preset.defaultOrganizationName,
+    appLabel: resolvedAppLabel,
     customLogoUrl: customLogo,
     hasCustomLogo: Boolean(customLogo),
     portalBrandColor: preset.portalBrandColor,
@@ -198,8 +302,8 @@ export function resolvePortalBranding({
     topbarTextClassName: preset.topbarTextClassName,
     sidebarLogoShellClassName: preset.sidebarLogoShellClassName,
     sidebarLogoImageClassName: preset.sidebarLogoImageClassName,
-    appNavLogoUrl: preset.appNavLogoUrl,
-    appNavLabel: preset.appNavLabel,
+    appNavLogoUrl: resolvedAppLogo,
+    appNavLabel: resolvedAppLabel,
     sidebarShellClassName: preset.sidebarShellClassName,
     sidebarHeaderClassName: preset.sidebarHeaderClassName,
     sidebarHeaderStyle: preset.sidebarHeaderStyle,
@@ -214,7 +318,7 @@ export function resolvePortalBranding({
     sidebarProfileLogoutButtonClassName: preset.sidebarProfileLogoutButtonClassName,
     sidebarActiveLinkClassName: preset.sidebarActiveLinkClassName,
     sidebarInactiveLinkClassName: preset.sidebarInactiveLinkClassName,
-    footerLogoUrl: preset.showFooterLogo ? preset.footerLogoUrl : null,
+    footerLogoUrl: INSPECTION_TRAC_ORG_KEYS.has(normalizedKey) ? null : preset.showFooterLogo ? preset.footerLogoUrl : null,
     staticLogoUrl: preset.staticLogoUrl,
     staticLogoNormalizedKeys: preset.staticLogoNormalizedKeys,
   };
@@ -240,7 +344,7 @@ export interface AppBranding {
 
 /**
  * Returns app-specific branding based on the current route.
- * This allows the shell to switch identity between DocuDent, DocuFit, etc.
+ * This allows the shell to switch identity between branded portal modules.
  */
 export function getAppBranding(pathname: string): AppBranding {
   const route = getRouteByPath(pathname);

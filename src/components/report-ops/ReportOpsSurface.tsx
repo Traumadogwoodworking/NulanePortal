@@ -273,6 +273,16 @@ export function ReportOpsSurface() {
     return items.sort((left, right) => left.localeCompare(right));
   }, [baseReports]);
 
+  const locationCounts = useMemo(() => {
+    return baseReports.reduce<Record<string, number>>((acc, record) => {
+      if (!record.location || record.location === "Unattributed") {
+        return acc;
+      }
+      acc[record.location] = (acc[record.location] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [baseReports]);
+
   const detailedReports = useMemo(() => {
     const query = search.trim().toLowerCase();
     return baseReports.filter((record) => {
@@ -971,7 +981,14 @@ export function ReportOpsSurface() {
               </td>
               <td className="px-3 py-3 text-sm text-slate-300">{record.vin}</td>
               <td className="px-3 py-3 text-sm text-slate-300">{normalizeControlTimestamp(record.createdAt)}</td>
-              <td className="px-3 py-3 text-sm text-slate-300">{record.location}</td>
+              <td className="px-3 py-3 text-sm text-slate-300">
+                <div className="flex items-center gap-2">
+                  <span>{record.location}</span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    {locationCounts[record.location] ?? 0}
+                  </span>
+                </div>
+              </td>
               <td className="px-3 py-3"><ReportLifecycleBadge state={record.lifecycleState} /></td>
               <td className="px-3 py-3"><ReportOutboxBadge state={record.outboxState} /></td>
               <td className="px-3 py-3 text-xs leading-5 text-slate-300">{record.exactBlocker}</td>

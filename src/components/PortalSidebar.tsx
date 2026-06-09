@@ -8,6 +8,7 @@ import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
+import { withPortalBasePath } from "@/lib/config";
 import { Home, LayoutGrid, Mail } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
@@ -178,7 +179,14 @@ export function PortalSidebar() {
     });
   }, [brandingSnapshot, safePathname, session]);
 
-  const activeLogo = branding.staticLogoUrl ?? branding.logoUrl;
+  const isInspectionTracOrg =
+    session?.organization?.organization_id === "org-awct" ||
+    branding.normalizedKey === "awct.inc" ||
+    branding.normalizedKey === "awc.inc" ||
+    branding.normalizedKey === "american wheel & car";
+  const activeLogo = isInspectionTracOrg
+    ? withPortalBasePath("/media/inspection-trac-logo.png")
+    : branding.logoUrl ?? branding.staticLogoUrl;
 
   const accessInfo = useMemo(
     () => ({ isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission }),
@@ -186,8 +194,17 @@ export function PortalSidebar() {
   );
 
   const visibleSections = useMemo(
-    () => filterNavSectionsByAccess(navSections, accessInfo),
-    [accessInfo]
+    () => {
+      const sections = filterNavSectionsByAccess(navSections, accessInfo);
+      if (branding.powerBiEmbedUrl) {
+        return sections;
+      }
+      return sections.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => item.href !== "/dashboard"),
+      }));
+    },
+    [accessInfo, branding.powerBiEmbedUrl]
   );
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -199,8 +216,20 @@ export function PortalSidebar() {
     branding.appLabel ||
     "Portal";
   const profileInitial = (profileLabel?.[0] || "N").toUpperCase();
+  const sidebarBg = branding.portalBrandColor;
+  const sidebarAccent = branding.portalBrandAccentColor;
+  const sidebarText = branding.sidebarTextEnforced;
+  const sidebarLink = branding.sidebarLinkEnforced;
   return (
-    <aside id="sidebar" className={branding.sidebarShellClassName}>
+    <aside
+      id="sidebar"
+      className={branding.sidebarShellClassName}
+      style={{
+        background: `linear-gradient(180deg, ${sidebarBg} 0%, color-mix(in srgb, ${sidebarBg} 88%, white) 12%, color-mix(in srgb, ${sidebarBg} 70%, white) 20%, color-mix(in srgb, ${sidebarBg} 48%, white) 32%, color-mix(in srgb, ${sidebarBg} 26%, white) 48%, white 100%)`,
+        boxShadow: `0 18px 50px -28px var(--brand-shadow, rgba(15,23,42,0.24))`,
+        fontFamily: "var(--font-inter), var(--font-geist-sans), sans-serif",
+      }}
+    >
       <div
         id="sidebar-header"
         className={branding.sidebarHeaderClassName}
@@ -209,6 +238,9 @@ export function PortalSidebar() {
           height: "auto",
           minHeight: "176px",
           padding: "18px 14px",
+          background: "transparent",
+          borderBottomColor: "transparent",
+          boxShadow: "none",
         }}
       >
         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
@@ -217,9 +249,9 @@ export function PortalSidebar() {
             <Image
               src={activeLogo}
               alt={branding.appLabel || branding.organizationName || "Portal"}
-              width={1254}
-              height={1254}
-              className={branding.sidebarLogoImageClassName}
+              width={340}
+              height={120}
+              className="h-auto w-full max-w-[220px] object-contain"
               priority
             />
           ) : null}
@@ -244,10 +276,14 @@ export function PortalSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`nav-link group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200 ${
-                      active ? branding.sidebarActiveLinkClassName : branding.sidebarInactiveLinkClassName
-                    }`}
-                  >
+                  className={`nav-link group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200 ${
+                    active ? branding.sidebarActiveLinkClassName : branding.sidebarInactiveLinkClassName
+                  }`}
+                  style={{
+                    color: active ? sidebarAccent : sidebarLink,
+                    textShadow: active ? `0 0 14px var(--brand-glow, rgba(37,99,235,0.16))` : "none",
+                  }}
+                >
                     <div className={`flex items-center justify-center ${isImageIcon ? (isDocudentIcon ? "nav-link-icon nav-link-icon--docudent -my-4" : "nav-link-icon nav-link-icon--large -my-4") : iconBoxClass}`}>
                       {item.icon === "home" && <HomeIcon />}
                       {item.icon === "dashboard" && <LayoutGrid className={sharedSidebarIconSize} />}
@@ -265,7 +301,11 @@ export function PortalSidebar() {
                       {item.icon === "pen" && <PenIcon />}
                       {isImageIcon && typeof item.icon === "string" && (
                         <Image
-                          src={item.href === "/docudent" ? branding.appNavLogoUrl ?? item.icon : item.brandLogo ?? item.icon}
+                          src={
+                            item.href === "/docudent" && isInspectionTracOrg
+                              ? withPortalBasePath("/media/inspection-trac-logo.png")
+                              : item.brandLogo ?? item.icon
+                          }
                           alt={item.href === "/docudent" ? branding.appLabel ?? item.label : item.label}
                           width={isDocudentIcon ? 260 : 180}
                           height={isDocudentIcon ? 260 : 180}
@@ -274,7 +314,10 @@ export function PortalSidebar() {
                       )}
                     </div>
                     <div className="flex min-w-0 flex-1 items-center justify-start ml-[5px]">
-                      <span className="truncate text-sm font-semibold leading-tight">
+                      <span
+                        className="truncate text-sm font-semibold leading-tight"
+                        style={{ color: active ? sidebarAccent : sidebarText }}
+                      >
                         {item.href === "/docudent" ? branding.appLabel ?? item.label : item.label}
                       </span>
                     </div>
@@ -287,7 +330,14 @@ export function PortalSidebar() {
       </div>
 
       <div className={branding.sidebarFooterClassName}>
-        {branding.footerLogoUrl ? <Image src={branding.footerLogoUrl} alt="Nulane Systems" width={220} height={72} /> : null}
+        {branding.footerLogoUrl ? (
+          <Image
+            src={branding.footerLogoUrl}
+            alt="Nulane Systems"
+            width={220}
+            height={72}
+          />
+        ) : null}
         <div className="relative w-full">
           {profileOpen ? (
             <div className={branding.sidebarProfilePopoverClassName}>
@@ -296,7 +346,12 @@ export function PortalSidebar() {
                 <div className={`mx-auto ${branding.sidebarProfileAvatarClassName}`}>
                   {profileInitial}
                 </div>
-                <p className={`text-sm font-black ${branding.sidebarProfileMetaValueClassName}`}>{profileLabel}</p>
+                <p
+                  className={`text-sm font-black ${branding.sidebarProfileMetaValueClassName}`}
+                  style={{ color: sidebarAccent }}
+                >
+                  {profileLabel}
+                </p>
               </div>
               <div className="space-y-2 pt-3">
                 <button
@@ -320,8 +375,8 @@ export function PortalSidebar() {
               {profileInitial}
             </div>
             <div className="flex min-w-0 flex-1 flex-col items-start text-left leading-tight overflow-hidden">
-              <span className={branding.sidebarProfileMetaLabelClassName}>Account</span>
-              <span className={branding.sidebarProfileMetaValueClassName}>{profileLabel}</span>
+              <span className={branding.sidebarProfileMetaLabelClassName} style={{ color: sidebarText }}>Account</span>
+              <span className={branding.sidebarProfileMetaValueClassName} style={{ color: sidebarAccent }}>{profileLabel}</span>
             </div>
           </button>
         </div>

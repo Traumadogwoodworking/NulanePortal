@@ -4,7 +4,6 @@ import { usePortalSession } from "@/lib/portalSession";
 import { getPortalBranding } from "@/lib/branding";
 import { PowerBiEmbed } from "@/components/PowerBiEmbed";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PageTitle } from "@/components/ui/PageTitle";
 import { Card, CardContent } from "@/components/ui/Card";
 
 export default function DashboardPage() {
@@ -25,11 +24,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle
-        title="Dashboard"
-        subtitle="Organization-approved operational analytics."
-      />
       <Card>
+        <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 via-white to-blue-50/40 px-6 py-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Dashboard</p>
+          </div>
+        </div>
         <CardContent className="!p-0">
           <div className="relative min-h-[calc(100vh-200px)]">
             {powerBiUrl ? (

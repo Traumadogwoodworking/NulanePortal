@@ -56,30 +56,6 @@ export default function OrganizationsPage() {
             </CardContent>
           </Card>
 
-        <Card>
-          <CardHeader title="Facilities Under Current Organization" subtitle="All facilities managed by this organization." />
-          <CardContent className="p-6">
-            {facilityCount > 0 ? (
-              <ul className="space-y-2">
-                {directory?.facilities?.map(f => (
-                  <li key={f.id}>
-                    <Link
-                      href="/facilities"
-                      className="text-sm text-slate-700 flex items-center gap-2 hover:text-slate-900"
-                    >
-                      <Building2 className="w-4 h-4 text-slate-400" /> {f.name} ({f.slug})
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-sm text-slate-500 italic">
-                No facilities found or backend facilities endpoint unavailable.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
       </div>
   );
 }

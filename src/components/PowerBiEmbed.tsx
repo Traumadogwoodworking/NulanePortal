@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { resolvePowerBiEmbedUrl } from "@/lib/branding";
 
 interface PowerBiEmbedProps {
   embedUrl: string | null;
@@ -11,6 +12,7 @@ interface PowerBiEmbedProps {
 export function PowerBiEmbed({ embedUrl, organizationName }: PowerBiEmbedProps) {
   const [frameReady, setFrameReady] = useState(false);
   const [frameErrored, setFrameErrored] = useState(false);
+  const resolvedEmbedUrl = resolvePowerBiEmbedUrl(embedUrl);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -50,8 +52,8 @@ export function PowerBiEmbed({ embedUrl, organizationName }: PowerBiEmbedProps) 
               }
             />
           </div>
-        ) : embedUrl ? (
-          <div className="relative rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 min-h-[600px]">
+        ) : resolvedEmbedUrl ? (
+          <div className="relative rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ minHeight: "min(88vh, 1040px)" }}>
             {!frameReady ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-950/90">
                 <div className="flex flex-col items-center gap-3 text-center">
@@ -67,9 +69,10 @@ export function PowerBiEmbed({ embedUrl, organizationName }: PowerBiEmbedProps) 
             ) : null}
             <iframe
               title="Power BI dashboard"
-              src={embedUrl}
+              src={resolvedEmbedUrl}
               loading="lazy"
-              className="w-full h-[700px] border-0"
+              className="w-full border-0"
+              style={{ height: "min(88vh, 1040px)" }}
               allowFullScreen
               onLoad={() => setFrameReady(true)}
               onError={() => setFrameErrored(true)}
@@ -90,7 +93,7 @@ export function PowerBiEmbed({ embedUrl, organizationName }: PowerBiEmbedProps) 
         )}
       </div>
 
-      {!embedUrl ? (
+      {!resolvedEmbedUrl ? (
         <footer className="px-8 py-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
           <p className="text-[11px] text-slate-400 italic">
             Power BI content is only shown when the organization branding snapshot provides an embed URL.

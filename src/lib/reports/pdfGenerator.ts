@@ -22,12 +22,15 @@ export function buildDamageReportPdfDefinition(options: {
   const severity = deriveReportSeverity(report);
   const majorDamage = deriveMostMajorDamage(report);
 
-  const damageRows = (report.damage_entries || []).map((entry: ReportDamageEntry) => [
+  const damageRows = (report.damage_entries || []).map((entry: ReportDamageEntry) => {
+    const severityValue = normalizeSeverityText(entry.severity, "Low");
+    return [
     { text: entry.damage_area || "General", style: "tableCell" },
     { text: entry.damage_type || "Unknown", style: "tableCell" },
-    { text: (entry.severity || "Low").toUpperCase(), style: "tableCell", color: getSeverityColor(entry.severity) },
+      { text: severityValue.toUpperCase(), style: "tableCell", color: getSeverityColor(severityValue) },
     { text: entry.comments || "—", style: "tableCell" },
-  ]);
+    ];
+  });
 
   const content: any = [
     {
@@ -77,7 +80,7 @@ export function buildDamageReportPdfDefinition(options: {
             {
               columns: [
                 { text: "Severity:", style: "fieldLabel", width: 60 },
-                { text: severity.toUpperCase(), style: "fieldValue", color: getSeverityColor(severity) },
+                { text: normalizeSeverityText(severity, "Unknown").toUpperCase(), style: "fieldValue", color: getSeverityColor(severity) },
               ],
               margin: [0, 2, 0, 0],
             },
@@ -185,8 +188,17 @@ export function buildDamageReportPdfDefinition(options: {
   };
 }
 
-function getSeverityColor(severity?: string): string {
-  const s = (severity || "").toLowerCase();
+function normalizeSeverityText(severity: unknown, fallback = "Unknown"): string {
+  if (severity === undefined || severity === null) {
+    return fallback;
+  }
+  const text = typeof severity === "string" ? severity : String(severity);
+  const trimmed = text.trim();
+  return trimmed || fallback;
+}
+
+function getSeverityColor(severity?: string | number | null): string {
+  const s = normalizeSeverityText(severity, "").toLowerCase();
   if (s === "high" || s === "critical") return "#E11D48";
   if (s === "medium") return "#D97706";
   if (s === "low") return "#059669";

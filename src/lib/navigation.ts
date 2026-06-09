@@ -58,13 +58,14 @@ const portalRoutes: PortalRoute[] = [
     section: "core",
     icon: "rsa",
     moduleKey: "reports",
+    requiresAwct: true,
   },
 
   // Apps
   {
-    label: "Inspection Trac",
+    label: "Inspection-Trac",
     href: "/docudent",
-    description: "Damage capture and analysis",
+    description: "Vehicle inspection and condition reporting",
     section: "apps",
     icon: "/media/inspection-trac-logo.png",
     brandColor: "#064e3b",
@@ -183,7 +184,7 @@ export function getAccessBarrier(route: PortalRoute | null, accessInfo: SessionA
   if (accessInfo.isSuperAdmin) {
     return null;
   }
-  if (route.requiresOrgAdmin && !accessInfo.isOrgAdmin && !accessInfo.isAdmin) {
+  if (route.requiresOrgAdmin && !accessInfo.isOrgAdmin) {
     return { type: "org-admin" };
   }
   if (route.requiresSuperAdmin && !accessInfo.isSuperAdmin) {
