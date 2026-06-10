@@ -3,7 +3,6 @@ import {
   PORTAL_BRANDING_PRESETS,
   type PortalBrandingMode,
 } from "@/lib/brandingPresets";
-import { withPortalBasePath } from "@/lib/config";
 
 export interface PublicBrandingConfig {
   mode: PortalBrandingMode;
@@ -28,6 +27,22 @@ const envSupportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
 const envReportsEmail = process.env.NEXT_PUBLIC_REPORTS_EMAIL;
 const envPortalUrl = process.env.NEXT_PUBLIC_PORTAL_URL;
 
+function normalizePublicPortalUrl(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith("http")) {
+    return trimmed;
+  }
+
+  const sanitized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return sanitized;
+}
+
 const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">> = {
   inspectionTrac: {
     companyName: "Inspection-Trac",
@@ -37,7 +52,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     landingSubheadline: "Vehicle inspection and condition reporting portal.",
     landingExplainer:
       "Use this portal to access inspection reports, facility records, vehicle condition documentation, and operational review tools.",
-    supportEmail: "support@nulanesystems.com",
+    supportEmail: "support@inspection-trac.com",
     reportsEmail: "reports@inspection-trac.com",
     logoPath: "/media/inspection-trac-logo.png",
     footerLegalOwner: "Inspection-Trac",
@@ -92,12 +107,18 @@ export function getPublicBrandingConfig(mode: PortalBrandingMode = ACTIVE_PORTAL
     mode,
     supportEmail: envSupportEmail || config.supportEmail,
     reportsEmail: envReportsEmail || config.reportsEmail,
-    portalUrl: envPortalUrl || config.portalUrl,
+    portalUrl: normalizePublicPortalUrl(envPortalUrl) || config.portalUrl,
   };
 }
 
 export const publicBranding = getPublicBrandingConfig();
 
 export function getPublicBrandLogoUrl(config: PublicBrandingConfig = publicBranding): string {
-  return withPortalBasePath(config.logoPath);
+  if (!config.logoPath) {
+    return "";
+  }
+  if (config.logoPath.startsWith("http")) {
+    return config.logoPath;
+  }
+  return config.logoPath.startsWith("/") ? config.logoPath : `/${config.logoPath}`;
 }

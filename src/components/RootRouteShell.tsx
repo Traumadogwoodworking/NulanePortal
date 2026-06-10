@@ -16,14 +16,37 @@ function isHomePath(pathname: string | null) {
   return pathname === "/" || pathname === "/index.html" || pathname === "/portal" || pathname === "/portal/";
 }
 
+function isAuthStartPath(pathname: string | null) {
+  if (!pathname) return false;
+  return pathname === "/login" || pathname === "/login/" || pathname === "/portal/login" || pathname === "/portal/login/";
+}
+
+function normalizePathname(pathname: string | null) {
+  if (!pathname) return "/";
+  return pathname !== "/" ? pathname.replace(/\/+$/, "") || "/" : pathname;
+}
+
+function isPublicInspectionTracPath(pathname: string | null) {
+  const path = normalizePathname(pathname);
+  return ["/", "/index.html", "/privacy", "/terms", "/support", "/workflow"].includes(path);
+}
+
 export function RootRouteShell({ children }: RootRouteShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const hasCallbackParams = Boolean(searchParams?.get("code") && searchParams?.get("state"));
 
+  if (hasCallbackParams) {
+    return <AuthCallbackClient />;
+  }
+
   if (children) {
-    if (isHomePath(pathname) && !hasCallbackParams) {
+    if (isPublicInspectionTracPath(pathname) || isAuthStartPath(pathname)) {
+      return <>{children}</>;
+    }
+
+    if (isHomePath(pathname)) {
       return <>{children}</>;
     }
 
@@ -34,10 +57,6 @@ export function RootRouteShell({ children }: RootRouteShellProps) {
         </PortalDataProvider>
       </PortalSessionProvider>
     );
-  }
-
-  if (hasCallbackParams) {
-    return <AuthCallbackClient />;
   }
 
   return null;

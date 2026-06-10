@@ -17,16 +17,10 @@ if (process.env.ANALYZE === "true") {
   }
 }
 
-const isGithubPages = process.env.GITHUB_PAGES === "true";
-const portalBasePath = process.env.NEXT_PUBLIC_PORTAL_BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH || "/portal";
-const staticBasePath = isGithubPages ? "/DocuDent" : portalBasePath;
-
 const nextConfig = withAnalyzer({
   typedRoutes: false,
   output: "export",
   trailingSlash: true,
-  basePath: staticBasePath,
-  assetPrefix: staticBasePath,
   turbopack: {
     root: projectRoot,
   },
@@ -37,7 +31,7 @@ const nextConfig = withAnalyzer({
     "beatles-players-immediate-marijuana.trycloudflare.com",
   ],
   typescript: {
-    ignoreBuildErrors: isGithubPages,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,

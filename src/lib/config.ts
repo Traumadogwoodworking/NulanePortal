@@ -18,7 +18,7 @@ export function normalizeBaseUrl(value?: string | null): string | null {
 
 const envApiBase = normalizeBaseUrl(process.env.EXT_PUBLIC_DOCUDENT_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL);
 const envPortalBasePath = normalizeBaseUrl(process.env.NEXT_PUBLIC_PORTAL_BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH);
-const defaultPortalBasePath = "/portal";
+const defaultPortalBasePath = "";
 
 /**
  * When running in production (Static Export), we MUST use the absolute API URL.
@@ -105,9 +105,6 @@ export function normalizeMediaUrl(url: string | null | undefined): string {
     if (!url) return "";
     if (url.startsWith("http")) return url;
     const sanitized = url.replace(/^\/+/, "");
-    if (sanitized.startsWith("media/")) {
-      return withPortalBasePath(`/${sanitized}`);
-    }
     return `/${sanitized}`;
 }
 

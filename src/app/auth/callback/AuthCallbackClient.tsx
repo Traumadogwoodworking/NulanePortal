@@ -8,7 +8,7 @@ type CallbackStatus = "starting" | "processing" | "redirecting" | "failed";
 export function AuthCallbackClient() {
   const [status, setStatus] = useState<CallbackStatus>("starting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [destination, setDestination] = useState("/portal/home/");
+  const [destination, setDestination] = useState("/home/");
 
   useEffect(() => {
     let cancelled = false;

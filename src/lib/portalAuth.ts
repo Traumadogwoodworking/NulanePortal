@@ -12,9 +12,10 @@ const STORAGE_KEYS = {
 const DEFAULT_AUTH0_DOMAIN = "nulanesystems.us.auth0.com";
 const DEFAULT_AUTH0_CLIENT_ID = "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc";
 const DEFAULT_AUTH0_AUDIENCE = "https://api.nulanesystems.com";
-const DEFAULT_AUTH0_REDIRECT_URI = "https://nulanesystems.com/portal/";
+const DEFAULT_AUTH0_REDIRECT_URI = "https://inspection-trac.com/auth/callback/";
 const DEV_ACCESS_TOKEN = "dev-portal-token";
 const DEV_AUTH_BYPASS_FLAG = "true";
+const DEFAULT_PORTAL_RETURN_TO = "/home/";
 
 type Auth0Client = Auth0SpaClient;
 
@@ -132,7 +133,7 @@ function buildAuthConfig(): AuthConfig {
       ? browserOrigin.replace("://127.0.0.1", "://localhost").replace("://::1", "://localhost")
       : browserOrigin;
   const redirectOverride = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI || "").trim();
-  const redirectUri = redirectOverride || `${localRedirectUri.replace(/\/+$/, "")}/portal/` || DEFAULT_AUTH0_REDIRECT_URI;
+  const redirectUri = redirectOverride || `${localRedirectUri.replace(/\/+$/, "")}/auth/callback/` || DEFAULT_AUTH0_REDIRECT_URI;
 
   if (!domain || !clientId || !audience || !redirectUri) {
     console.error("[Auth0] configuration incomplete", { domain, clientId, audience, redirectUri });
@@ -142,6 +143,24 @@ function buildAuthConfig(): AuthConfig {
   }
 
   return { domain, clientId, audience, redirectUri };
+}
+
+export function resolveSafePortalReturnTo(rawReturnTo?: string | null): string {
+  const fallback = DEFAULT_PORTAL_RETURN_TO;
+  const value = (rawReturnTo || "").trim();
+  if (!value || !isBrowser()) {
+    return fallback;
+  }
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin) {
+      return fallback;
+    }
+    const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    return path.startsWith("/") ? path : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function getAuthConfig(): AuthConfig {
@@ -286,7 +305,7 @@ export async function completeAuth0Callback(): Promise<string> {
       console.warn("[Auth0] unable to clear stored returnTo", error);
     }
   }
-  const destination = returnTo || storedReturnTo || "/portal/home/";
+  const destination = resolveSafePortalReturnTo(returnTo || storedReturnTo);
   try {
     const token = await waitForToken(
       client.getTokenSilently({
@@ -433,13 +452,13 @@ function clearLocalInvalidAuthState() {
 export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   if (isDevAuthBypassEnabled()) {
     if (isBrowser()) {
-      window.location.replace(returnTo || "/");
+      window.location.replace(resolveSafePortalReturnTo(returnTo));
     }
     throw new AuthRedirectError("Dev auth bypass redirect");
   }
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] redirectToAuth0Login invoked", {
-      returnTo: returnTo || "/",
+      returnTo: resolveSafePortalReturnTo(returnTo),
       origin: isBrowser() ? window.location.origin : "server",
       path: isBrowser() ? window.location.pathname : "server",
     });
@@ -447,12 +466,13 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   const client = await getAuth0Client();
   clearPortalAuthStorage();
   const config = getAuthConfig();
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] starting login redirect", describeConfig(config));
   }
   try {
     await client.loginWithRedirect({
-      appState: returnTo ? { returnTo } : undefined,
+      appState: { returnTo: safeReturnTo },
       authorizationParams: {
         audience: config.audience,
         redirect_uri: config.redirectUri,
@@ -463,7 +483,7 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
     console.warn("[Auth0] loginWithRedirect failed", {
       error,
       config: describeConfig(config),
-      returnTo: returnTo || "/",
+      returnTo: safeReturnTo,
     });
     throw error;
   }
@@ -530,6 +550,10 @@ export async function getPortalAccessToken() {
         error,
         config: describeConfig(config),
       });
+    }
+    if (isLocalDevOrigin()) {
+      clearLocalInvalidAuthState();
+      return redirectToAuth0Login();
     }
     if (isInteractiveLoginError(error)) {
       clearLocalInvalidAuthState();
