@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
 
 const DEFAULT_AUTH0_DOMAIN = "nulanesystems.us.auth0.com";
 const DEFAULT_AUTH0_CLIENT_ID = "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc";
+const DEFAULT_AUTH0_ORGANIZATION_ID = "org_cmCOV936fSunCIJB";
 const DEFAULT_AUTH0_AUDIENCE = "https://api.nulanesystems.com";
 const DEFAULT_AUTH0_REDIRECT_URI = "https://inspection-trac.com/auth/callback/";
 const DEV_ACCESS_TOKEN = "dev-portal-token";
@@ -22,6 +23,7 @@ type Auth0Client = Auth0SpaClient;
 type AuthConfig = {
   domain: string;
   clientId: string;
+  organizationId: string;
   audience: string;
   redirectUri: string;
 };
@@ -44,6 +46,7 @@ function describeConfig(config: AuthConfig) {
     domain: config.domain,
     audience: config.audience,
     redirectUri: config.redirectUri,
+    organizationId: config.organizationId,
     clientId: maskSecret(config.clientId, 4, 3),
   };
 }
@@ -126,6 +129,7 @@ function buildAuthConfig(): AuthConfig {
   ensureBrowserEnv();
   const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
   const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || DEFAULT_AUTH0_CLIENT_ID).trim();
+  const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || DEFAULT_AUTH0_ORGANIZATION_ID).trim();
   const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || DEFAULT_AUTH0_AUDIENCE).trim();
   const browserOrigin = window.location.origin || DEFAULT_AUTH0_REDIRECT_URI;
   const localRedirectUri =
@@ -135,14 +139,14 @@ function buildAuthConfig(): AuthConfig {
   const redirectOverride = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI || "").trim();
   const redirectUri = redirectOverride || `${localRedirectUri.replace(/\/+$/, "")}/auth/callback/` || DEFAULT_AUTH0_REDIRECT_URI;
 
-  if (!domain || !clientId || !audience || !redirectUri) {
-    console.error("[Auth0] configuration incomplete", { domain, clientId, audience, redirectUri });
+  if (!domain || !clientId || !organizationId || !audience || !redirectUri) {
+    console.error("[Auth0] configuration incomplete", { domain, clientId, organizationId, audience, redirectUri });
     throw new AuthConfigError(
-      "Auth0 configuration is missing. Provide NEXT_PUBLIC_AUTH0_DOMAIN, NEXT_PUBLIC_AUTH0_CLIENT_ID, and NEXT_PUBLIC_AUTH0_AUDIENCE.",
+      "Auth0 configuration is missing. Provide NEXT_PUBLIC_AUTH0_DOMAIN, NEXT_PUBLIC_AUTH0_CLIENT_ID, NEXT_PUBLIC_AUTH0_ORGANIZATION_ID, and NEXT_PUBLIC_AUTH0_AUDIENCE.",
     );
   }
 
-  return { domain, clientId, audience, redirectUri };
+  return { domain, clientId, organizationId, audience, redirectUri };
 }
 
 export function resolveSafePortalReturnTo(rawReturnTo?: string | null): string {
@@ -476,6 +480,7 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
       authorizationParams: {
         audience: config.audience,
         redirect_uri: config.redirectUri,
+        organization: config.organizationId,
         prompt: "login",
       },
     });
