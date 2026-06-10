@@ -13,7 +13,7 @@ export function PublicHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-5 lg:px-8">
         <Link href="/" className="flex items-center gap-4 text-slate-900 no-underline">
-          <img src="/media/inspection-trac-logo.png" alt={brand.appName} className="h-14 w-auto shrink-0 sm:h-16" />
+          <img src={brand.logoPath} alt={brand.appName} className="h-14 w-auto shrink-0 sm:h-16" />
           <div className="hidden md:block">
             <p className="text-[10px] font-black uppercase tracking-[0.38em] text-slate-500">{brand.appName}</p>
             <p className="text-sm font-medium text-slate-600">{brand.shortDescription}</p>
@@ -52,7 +52,7 @@ export function PublicFooter() {
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4 lg:col-span-1">
             <div className="flex items-center gap-3">
-              <img src="/media/inspection-trac-logo.png" alt={brand.appName} className="h-11 w-auto" />
+              <img src={brand.logoPath} alt={brand.appName} className="h-11 w-auto" />
               <div>
                 <p className="text-sm font-black uppercase tracking-[0.28em] text-white">{brand.appName}</p>
                 <p className="text-xs text-slate-400">{brand.shortDescription}</p>

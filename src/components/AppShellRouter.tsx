@@ -16,9 +16,6 @@ function isAuthCallbackRoute(pathname: string) {
 
 export function AppShellRouter({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
-  if (pathname === "/") {
-    return <>{children}</>;
-  }
   if (isLoginRoute(pathname)) {
     return <>{children}</>;
   }

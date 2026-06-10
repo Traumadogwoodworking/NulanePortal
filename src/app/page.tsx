@@ -1,7 +1,10 @@
 import { PublicLanding } from "@/components/public-landing";
-
-export const dynamic = "force-static";
+import HomePage from "./home/page";
+import { publicBranding } from "@/lib/publicBranding";
 
 export default function RootPage() {
-  return <PublicLanding />;
+  if (publicBranding.mode === "inspectionTrac") {
+    return <PublicLanding />;
+  }
+  return <HomePage />;
 }

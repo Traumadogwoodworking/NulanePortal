@@ -62,6 +62,24 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/home",
   },
+  definianInspection: {
+    companyName: "Definian Inspection",
+    appName: "Definian Inspection",
+    shortDescription: "Vehicle inspection and condition reporting portal.",
+    landingHeadline: "Definian Inspection",
+    landingSubheadline: "Vehicle inspection and condition reporting portal.",
+    landingExplainer:
+      "Use this portal to access inspection reports, facility records, vehicle condition documentation, and operational review tools.",
+    supportEmail: "support@definian.com",
+    reportsEmail: "reports@definian.com",
+    logoPath: "/media/definian-sidebar-logo-white.png",
+    footerLegalOwner: "Definian Inspection",
+    primaryColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandColor,
+    accentColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandAccentColor,
+    loginButtonLabel: "Log In",
+    openPortalButtonLabel: "Open Portal",
+    portalUrl: "/home",
+  },
   nulaneSystems: {
     companyName: "Nulane Systems",
     appName: "Nulane Systems Portal",
@@ -101,7 +119,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
 };
 
 export function getPublicBrandingConfig(mode: PortalBrandingMode = ACTIVE_PORTAL_BRANDING): PublicBrandingConfig {
-  const config = baseConfigs[mode] ?? baseConfigs.inspectionTrac;
+  const config = baseConfigs[mode] ?? baseConfigs.definianInspection;
   return {
     ...config,
     mode,

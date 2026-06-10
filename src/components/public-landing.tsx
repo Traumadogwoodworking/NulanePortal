@@ -12,7 +12,7 @@ export function PublicLanding() {
         <div className="flex flex-col items-center gap-5">
           <span className="flex items-center justify-center rounded-[1.75rem] border border-slate-200 bg-white px-8 py-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
             <img
-              src="/media/inspection-trac-logo.png"
+              src={brand.logoPath}
               alt={brand.appName}
               className="h-32 w-auto object-contain sm:h-40"
             />
