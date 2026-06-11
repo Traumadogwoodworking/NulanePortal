@@ -13,21 +13,14 @@ export function PublicHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-5 lg:px-8">
         <Link href="/" className="flex items-center gap-4 text-slate-900 no-underline">
-          <img src={brand.logoPath} alt={brand.appName} className="h-14 w-auto shrink-0 sm:h-16" />
-          <div className="hidden md:block">
-            <p className="text-[10px] font-black uppercase tracking-[0.38em] text-slate-500">{brand.appName}</p>
-            <p className="text-sm font-medium text-slate-600">{brand.shortDescription}</p>
-          </div>
+          <img src={brand.logoPath} alt={brand.appName} className="h-18 w-auto shrink-0 sm:h-20 lg:h-24" />
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-700 lg:flex">
           <Link className="transition hover:text-slate-950 no-underline" href="/#product">
             Product
           </Link>
-          <Link className="transition hover:text-slate-950 no-underline" href="/workflow">
-            Workflow
-          </Link>
-          <Link className="transition hover:text-slate-950 no-underline" href="/support">
-            Support
+          <Link className="transition hover:text-slate-950 no-underline" href="/#screenshots">
+            Screenshots
           </Link>
         </nav>
         <div className="flex items-center gap-3">
@@ -52,11 +45,7 @@ export function PublicFooter() {
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4 lg:col-span-1">
             <div className="flex items-center gap-3">
-              <img src={brand.logoPath} alt={brand.appName} className="h-11 w-auto" />
-              <div>
-                <p className="text-sm font-black uppercase tracking-[0.28em] text-white">{brand.appName}</p>
-                <p className="text-xs text-slate-400">{brand.shortDescription}</p>
-              </div>
+              <img src={brand.logoPath} alt={brand.appName} className="h-16 w-auto sm:h-20" />
             </div>
             <p className="max-w-sm text-sm leading-7 text-slate-400">
               {brand.landingExplainer}
@@ -65,8 +54,8 @@ export function PublicFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          <FooterColumn title="Product" links={[["Overview", "/#product"], ["Workflow", "/workflow"]]} />
-          <FooterColumn title="Support" links={[["Contact Support", "/support"], ["Open Portal", PORTAL_URL]]} />
+          <FooterColumn title="Product" links={[["Overview", "/#product"], ["Screenshots", "/#screenshots"]]} />
+          <FooterColumn title="Support" links={[["Open Portal", PORTAL_URL]]} />
           <FooterColumn title="Legal" links={[["Privacy", "/privacy"], ["Terms", "/terms"]]} />
         </div>
         <div className="mt-10 border-t border-white/10 pt-6 text-sm text-slate-500">
@@ -144,48 +133,39 @@ export function SupportCard({
 }
 
 export function ScreenshotCard({
-  title,
   path,
   exists,
   featured = false,
+  kind = "landscape",
 }: {
-  title: string;
   path: string;
   exists: boolean;
   featured?: boolean;
+  kind?: "portrait" | "landscape";
 }) {
-  const imageHeight = featured ? "h-[420px]" : "h-[220px]";
+  const imageHeight = featured
+    ? "h-[620px] lg:h-[760px]"
+    : kind === "portrait"
+      ? "h-[300px] lg:h-[380px]"
+      : "h-[360px] lg:h-[440px]";
+  const imageFit = "object-contain";
   return (
-    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
-      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-        <p className="text-sm font-bold text-slate-950">{title}</p>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">
-          Portal preview
-        </span>
-      </div>
+    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_100%)] shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
       {exists ? (
-        <div className="bg-slate-950 p-4">
-          <div className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-white">
-            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+        <div className="bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.08),_transparent_44%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-2">
+          <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
+            <div className="overflow-hidden rounded-[1rem] border border-slate-100 bg-white">
+              <img src={path} alt="" aria-hidden className={`w-full ${imageFit} ${imageHeight} bg-white`} />
+              <span className="sr-only">Screenshot</span>
             </div>
-            <img src={path} alt={title} className={`w-full object-contain ${imageHeight} bg-white`} />
           </div>
         </div>
       ) : (
-        <div className="bg-slate-950 p-4">
-          <div className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)]">
-            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-            </div>
+        <div className="bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.05),_transparent_46%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] p-4">
+          <div className="overflow-hidden rounded-[1.35rem] border border-dashed border-slate-300 bg-white/92 shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
             <div className={`flex ${imageHeight} items-center justify-center p-6`}>
-              <div className="w-full max-w-sm rounded-[1.5rem] border border-dashed border-slate-300 bg-white/90 p-8 text-center shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
-                <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-500">Screenshot pending</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">{title}</p>
+              <div className="w-full max-w-sm rounded-[1.35rem] border border-slate-200 bg-white p-8 text-center shadow-[0_14px_28px_rgba(15,23,42,0.04)]">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Portal shot pending</p>
                 <p className="mt-2 text-xs text-slate-500">Add {path.replace("/images/", "")}</p>
               </div>
             </div>
