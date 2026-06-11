@@ -13,7 +13,7 @@ export function PublicHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-5 lg:px-8">
         <Link href="/" className="flex items-center gap-4 text-slate-900 no-underline">
-          <img src={brand.logoPath} alt={brand.appName} className="h-18 w-auto shrink-0 sm:h-20 lg:h-24" />
+          <img src={brand.logoPath} alt={brand.appName} className="h-[4.5rem] w-auto shrink-0 sm:h-20 lg:h-24" />
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-700 lg:flex">
           <Link className="transition hover:text-slate-950 no-underline" href="/#product">
