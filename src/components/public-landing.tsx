@@ -4,7 +4,6 @@ import { publicBranding } from "@/lib/publicBranding";
 
 const appShots = [
   { path: "/images/app-showcase-01.jpg", exists: true, kind: "portrait" as const },
-  { path: "/images/app-showcase-02.jpg", exists: true, kind: "portrait" as const },
   { path: "/images/app-showcase-03.jpg", exists: true, kind: "portrait" as const },
   { path: "/images/app-showcase-04.jpg", exists: true, kind: "portrait" as const },
   { path: "/images/app-showcase-05.jpg", exists: true, kind: "portrait" as const },
@@ -12,14 +11,13 @@ const appShots = [
   { path: "/images/app-showcase-07.jpg", exists: true, kind: "portrait" as const },
   { path: "/images/app-showcase-08.jpg", exists: true, kind: "portrait" as const },
   { path: "/images/app-showcase-09.jpg", exists: true, kind: "portrait" as const },
-  { path: "/images/app-showcase-10.jpg", exists: true, kind: "portrait" as const },
 ];
 
 const portalShots = [
   { path: "/images/portal-report-pdf-example.png", exists: true, featured: true },
   { path: "/images/portal-report-list.png", exists: true, kind: "landscape" as const },
-  { path: "/images/portal-dashboard.png", exists: true, kind: "landscape" as const },
-  { path: "/images/portal-reports.png", exists: true, kind: "landscape" as const },
+  { path: "/images/portal-chatgpt-dashboard.png", exists: true, kind: "landscape" as const },
+  { path: "/images/portal-powerbi-dashboard.png", exists: true, kind: "landscape" as const },
 ];
 
 export function PublicLanding() {
