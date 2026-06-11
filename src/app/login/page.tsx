@@ -20,7 +20,7 @@ const portalShots = [
   { path: "/images/portal-report-pdf-example.png", exists: true, featured: true },
   { path: "/images/portal-report-list.png", exists: true, kind: "landscape" as const },
   { path: "/images/portal-dashboard.png", exists: true, kind: "landscape" as const },
-  { path: "/images/portal-inspection.png", exists: true, kind: "landscape" as const },
+  { path: "/images/portal-reports.png", exists: true, kind: "landscape" as const },
 ];
 
 export default function LoginPage() {
