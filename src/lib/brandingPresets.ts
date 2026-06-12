@@ -267,7 +267,9 @@ export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
     ? "docudent"
     : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
       ? "nulaneSystems"
-      : "inspectionTrac";
+      : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
+        ? "inspectionTrac"
+        : "definianInspection";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;

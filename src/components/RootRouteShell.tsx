@@ -22,9 +22,9 @@ function normalizePathname(pathname: string | null) {
   return pathname !== "/" ? pathname.replace(/\/+$/, "") || "/" : pathname;
 }
 
-function isPublicInspectionTracPath(pathname: string | null) {
+function isPublicBrandedPath(pathname: string | null) {
   const path = normalizePathname(pathname);
-  if (path === "/" && publicBranding.mode === "inspectionTrac") {
+  if (path === "/" && (publicBranding.mode === "inspectionTrac" || publicBranding.mode === "definianInspection")) {
     return true;
   }
   return ["/index.html", "/privacy", "/terms", "/support", "/workflow", "/definian-signal"].includes(path);
@@ -41,7 +41,7 @@ export function RootRouteShell({ children }: RootRouteShellProps) {
   }
 
   if (children) {
-    if (isPublicInspectionTracPath(pathname) || isAuthStartPath(pathname)) {
+    if (isPublicBrandedPath(pathname) || isAuthStartPath(pathname)) {
       return <>{children}</>;
     }
 
