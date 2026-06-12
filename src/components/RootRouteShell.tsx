@@ -4,7 +4,6 @@ import { type ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AuthCallbackClient } from "@/app/auth/callback/AuthCallbackClient";
 import { AppShellRouter } from "@/components/AppShellRouter";
-import { publicBranding } from "@/lib/publicBranding";
 import { PortalDataProvider } from "@/lib/portalData";
 import { PortalSessionProvider } from "@/lib/portalSession";
 
@@ -24,7 +23,7 @@ function normalizePathname(pathname: string | null) {
 
 function isPublicBrandedPath(pathname: string | null) {
   const path = normalizePathname(pathname);
-  if (path === "/" && (publicBranding.mode === "inspectionTrac" || publicBranding.mode === "definianInspection")) {
+  if (path === "/") {
     return true;
   }
   return ["/index.html", "/privacy", "/terms", "/support", "/workflow", "/definian-signal"].includes(path);

@@ -14,6 +14,14 @@ Current Vercel production demo URL:
 https://vercel-portal-exact.vercel.app/definian-signal
 ```
 
+Portal-only root behavior:
+
+```text
+/
+```
+
+redirects directly to `/definian-signal` so there is no separate landing page in the Definian build.
+
 Deployment-specific URL from the June 12, 2026 production handoff:
 
 ```text
