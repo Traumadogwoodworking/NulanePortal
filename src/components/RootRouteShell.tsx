@@ -27,7 +27,7 @@ function isPublicInspectionTracPath(pathname: string | null) {
   if (path === "/" && publicBranding.mode === "inspectionTrac") {
     return true;
   }
-  return ["/index.html", "/privacy", "/terms", "/support", "/workflow"].includes(path);
+  return ["/index.html", "/privacy", "/terms", "/support", "/workflow", "/definian-signal"].includes(path);
 }
 
 export function RootRouteShell({ children }: RootRouteShellProps) {
