@@ -11,14 +11,20 @@ Demo route:
 Current Vercel production demo URL:
 
 ```text
-https://vercel-portal-exact-jv6q6l28q-traumadogwoodworkings-projects.vercel.app/definian-signal
+https://vercel-portal-exact.vercel.app/definian-signal
+```
+
+Deployment-specific URL from the June 12, 2026 production handoff:
+
+```text
+https://vercel-portal-exact-80gx9x039-traumadogwoodworkings-projects.vercel.app/definian-signal
 ```
 
 ## Iframe Embed
 
 ```html
 <iframe
-  src="https://vercel-portal-exact-jv6q6l28q-traumadogwoodworkings-projects.vercel.app/definian-signal"
+  src="https://vercel-portal-exact.vercel.app/definian-signal"
   title="Definian Signal Demo Portal"
   width="100%"
   height="900"
