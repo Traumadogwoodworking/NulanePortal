@@ -217,7 +217,7 @@ export function PortalSidebar() {
       id="sidebar"
       className={branding.sidebarShellClassName}
       style={{
-        background: `linear-gradient(180deg, ${sidebarBg} 0%, color-mix(in srgb, ${sidebarBg} 88%, white) 12%, color-mix(in srgb, ${sidebarBg} 70%, white) 20%, color-mix(in srgb, ${sidebarBg} 48%, white) 32%, color-mix(in srgb, ${sidebarBg} 26%, white) 48%, white 100%)`,
+        backgroundColor: branding.sidebarBgEnforced || sidebarBg,
         boxShadow: `0 18px 50px -28px var(--brand-shadow, rgba(15,23,42,0.24))`,
         fontFamily: "var(--font-inter), var(--font-geist-sans), sans-serif",
       }}
@@ -230,8 +230,8 @@ export function PortalSidebar() {
           height: "auto",
           minHeight: "176px",
           padding: "18px 14px",
-          background: "transparent",
-          borderBottomColor: "transparent",
+          background: branding.sidebarBgEnforced || sidebarBg,
+          borderBottomColor: "rgba(255,255,255,0.12)",
           boxShadow: "none",
         }}
       >

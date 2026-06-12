@@ -2,6 +2,7 @@ import {
   createAuth0Client,
   type Auth0Client as Auth0SpaClient,
 } from "@auth0/auth0-spa-js";
+import { ACTIVE_PORTAL_BRANDING, getPortalBrandingPreset } from "@/lib/brandingPresets";
 
 const STORAGE_KEYS = {
   token: "portal_token",
@@ -128,8 +129,9 @@ function buildDevAuth0Client(): Auth0Client {
 function buildAuthConfig(): AuthConfig {
   ensureBrowserEnv();
   const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
-  const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || DEFAULT_AUTH0_CLIENT_ID).trim();
-  const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || DEFAULT_AUTH0_ORGANIZATION_ID).trim();
+  const preset = getPortalBrandingPreset(ACTIVE_PORTAL_BRANDING);
+  const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || preset.auth0ClientId || DEFAULT_AUTH0_CLIENT_ID).trim();
+  const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || preset.auth0OrganizationId || DEFAULT_AUTH0_ORGANIZATION_ID).trim();
   const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || DEFAULT_AUTH0_AUDIENCE).trim();
   const browserOrigin = window.location.origin || DEFAULT_AUTH0_REDIRECT_URI;
   const localRedirectUri =
@@ -503,18 +505,16 @@ export async function logoutPortal(): Promise<void> {
     }
     return;
   }
-  const client = await getAuth0Client();
   clearPortalAuthStorage();
-  const config = getAuthConfig();
-  if (DEBUG_AUTH0) {
-    console.debug("[Auth0] starting logout", describeConfig(config));
+  if (DEBUG_AUTH0 && isBrowser()) {
+    console.debug("[Auth0] logout completed locally, returning to public landing", {
+      origin: window.location.origin,
+      path: window.location.pathname,
+    });
   }
-  const returnTo = config.redirectUri;
-  await client.logout({
-    logoutParams: {
-      returnTo,
-    },
-  });
+  if (isBrowser()) {
+    window.location.assign("/");
+  }
 }
 
 export async function getPortalAccessToken() {
