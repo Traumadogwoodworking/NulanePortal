@@ -1,7 +1,12 @@
-import Link from "next/link";
 import { PublicShowcaseSections } from "@/components/PublicShowcaseSections";
 import { PublicFooter, PublicHeader } from "@/components/public-site";
 import { publicBranding } from "@/lib/publicBranding";
+
+const productPoints = [
+  "Capture vehicle condition and damage details in a guided mobile flow.",
+  "Organize inspection records, photos, and reports for review.",
+  "Share clean documentation with the portal team when the inspection is complete.",
+];
 
 export function PublicLanding() {
   const brand = publicBranding;
@@ -21,19 +26,19 @@ export function PublicLanding() {
           <p className="max-w-2xl text-base leading-7 text-slate-600">
             {brand.landingExplainer}
           </p>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-6 py-3 text-sm font-bold text-white no-underline transition hover:bg-slate-800"
-            >
-              {brand.loginButtonLabel}
-            </Link>
-            <Link
-              href={brand.portalUrl}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-900 no-underline transition hover:border-slate-400 hover:bg-slate-100"
-            >
-              {brand.openPortalButtonLabel}
-            </Link>
+        </div>
+      </section>
+
+      <section id="product" className="mx-auto w-full max-w-7xl px-6 pb-6 lg:px-8">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_18px_54px_rgba(15,23,42,0.08)]">
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">Product</p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">What it does</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {productPoints.map((point) => (
+              <p key={point} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 text-slate-700">
+                {point}
+              </p>
+            ))}
           </div>
         </div>
       </section>

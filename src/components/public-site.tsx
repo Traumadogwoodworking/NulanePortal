@@ -22,8 +22,8 @@ export function PublicHeader() {
           <Link className="transition hover:text-slate-950 no-underline" href="/#product">
             Product
           </Link>
-          <Link className="transition hover:text-slate-950 no-underline" href="/#screenshots">
-            Screenshots
+          <Link className="transition hover:text-slate-950 no-underline" href="/#experience">
+            Experience
           </Link>
         </nav>
         <div className="flex items-center gap-3">
@@ -57,7 +57,7 @@ export function PublicFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          <FooterColumn title="Product" links={[["Overview", "/#product"], ["Screenshots", "/#screenshots"]]} />
+          <FooterColumn title="Product" links={[["Overview", "/#product"], ["Experience", "/#experience"]]} />
           <FooterColumn title="Support" links={[["Open Portal", PORTAL_URL]]} />
           <FooterColumn title="Legal" links={[["Privacy", "/privacy"], ["Terms", "/terms"]]} />
         </div>

@@ -4,10 +4,10 @@ import { ScreenshotCard } from "@/components/public-site";
 export function PublicShowcaseSections() {
   return (
     <>
-      <section id="screenshots" className="mx-auto w-full max-w-7xl px-6 pb-6 lg:px-8">
+      <section id="experience" className="mx-auto w-full max-w-7xl px-6 pb-6 lg:px-8">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_18px_54px_rgba(15,23,42,0.08)]">
-          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">App photos</p>
-          <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">App screenshots</h2>
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">Mobile app</p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">Inspection experience</h2>
           <div className="mx-auto mt-6 grid max-w-[680px] grid-cols-2 gap-4 sm:gap-5">
             {appShowcaseShots.map((shot) => (
               <div key={shot.path} className="w-full">
@@ -20,8 +20,8 @@ export function PublicShowcaseSections() {
 
       <section className="mx-auto w-full max-w-7xl px-6 py-6 lg:px-8">
         <div className="rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-slate-100 shadow-[0_18px_54px_rgba(15,23,42,0.16)]">
-          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-400">Portal screenshots</p>
-          <h2 className="mt-3 text-3xl font-black tracking-tight text-white">Portal screenshots</h2>
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-400">Portal</p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight text-white">Review experience</h2>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-300">
             The PDF example gets its own oversized row at the top, and the portal captures below are widened so the details stay readable.
           </p>
