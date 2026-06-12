@@ -11,13 +11,7 @@ export function PublicLanding() {
       <PublicHeader />
       <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-6 py-16 text-center lg:px-8">
         <div className="flex flex-col items-center gap-5">
-          <span className="flex items-center justify-center rounded-[1.75rem] border border-slate-200 bg-white px-8 py-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-            <img
-              src={brand.logoPath}
-              alt={brand.appName}
-              className="h-32 w-auto object-contain sm:h-40"
-            />
-          </span>
+          <img src={brand.logoPath} alt={brand.appName} className="h-36 w-auto object-contain sm:h-44" />
           <div>
             <h1 className="text-5xl font-black tracking-tight text-slate-950 sm:text-6xl">{brand.landingHeadline}</h1>
             <p className="mt-4 text-xl font-semibold text-slate-700">

@@ -12,8 +12,11 @@ export function PublicHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-5 lg:px-8">
-        <Link href="/" className="flex items-center gap-4 text-slate-900 no-underline">
-          <img src={brand.logoPath} alt={brand.appName} className="h-[4.5rem] w-auto shrink-0 sm:h-20 lg:h-24" />
+        <Link
+          href="/"
+          className="flex items-center rounded-[1.35rem] border border-slate-200 bg-white px-4 py-2 text-slate-900 no-underline shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition hover:border-slate-300 hover:shadow-[0_16px_42px_rgba(15,23,42,0.11)]"
+        >
+          <img src={brand.logoPath} alt={brand.appName} className="h-16 w-auto shrink-0 object-contain sm:h-[4.5rem] lg:h-20" />
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-700 lg:flex">
           <Link className="transition hover:text-slate-950 no-underline" href="/#product">
