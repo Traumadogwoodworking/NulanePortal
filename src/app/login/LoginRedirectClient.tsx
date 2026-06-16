@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { publicBranding } from "@/lib/publicBranding";
 import {
   AuthRedirectError,
   getPortalAuthDebugConfig,
@@ -54,8 +55,15 @@ export function LoginRedirectClient() {
     <main
       className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 text-slate-900"
     >
-      <div className="rounded-xl border border-white/70 bg-white/90 px-8 py-8 text-center shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur">
-        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Authentication</p>
+      <div className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white/90 px-8 py-8 text-center shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur">
+        <div className="flex justify-center">
+          <span className="inline-flex rounded-2xl bg-[#0d2c71] px-4 py-3 shadow-[0_16px_36px_rgba(4,14,40,0.2)]">
+            <img src={publicBranding.logoPath} alt={publicBranding.appName} className="h-10 w-auto object-contain sm:h-12" />
+          </span>
+        </div>
+        <p className="mt-4 text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">
+          {publicBranding.appName} portal
+        </p>
         <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
           {status === "failed" ? "Sign-in could not start" : "Opening sign-in"}
         </h1>

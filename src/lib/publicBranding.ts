@@ -51,7 +51,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     landingHeadline: "Inspection-Trac",
     landingSubheadline: "Vehicle inspection and condition reporting portal.",
     landingExplainer:
-      "Use this portal to access inspection reports, facility records, vehicle condition documentation, and operational review tools.",
+      "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
     supportEmail: "support@inspection-trac.com",
     reportsEmail: "reports@inspection-trac.com",
     logoPath: "/media/inspection-trac-logo.png",

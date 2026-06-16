@@ -3,9 +3,9 @@ import { PublicFooter, PublicHeader } from "@/components/public-site";
 import { publicBranding } from "@/lib/publicBranding";
 
 const productPoints = [
-  "Capture vehicle condition and damage details in a guided mobile flow.",
-  "Organize inspection records, photos, and reports for review.",
-  "Share clean documentation with the portal team when the inspection is complete.",
+  "Capture vehicle condition and damage details through a guided mobile inspection flow.",
+  "Organize inspection records, photos, and reports for easy review and follow-up.",
+  "Share clear, complete documentation with the portal team once the inspection is complete.",
 ];
 
 export function PublicLanding() {
@@ -16,7 +16,7 @@ export function PublicLanding() {
       <PublicHeader />
       <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-6 py-16 text-center lg:px-8">
         <div className="flex flex-col items-center gap-5">
-          <img src={brand.logoPath} alt={brand.appName} className="h-36 w-auto object-contain sm:h-44" />
+          <img src={brand.logoPath} alt={brand.appName} className="h-72 w-auto object-contain sm:h-96 lg:h-[27rem]" />
           <div>
             <h1 className="text-5xl font-black tracking-tight text-slate-950 sm:text-6xl">{brand.landingHeadline}</h1>
             <p className="mt-4 text-xl font-semibold text-slate-700">
@@ -31,7 +31,7 @@ export function PublicLanding() {
 
       <section id="product" className="mx-auto w-full max-w-7xl px-6 pb-6 lg:px-8">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_18px_54px_rgba(15,23,42,0.08)]">
-          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">Product</p>
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">Overview</p>
           <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">What it does</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {productPoints.map((point) => (

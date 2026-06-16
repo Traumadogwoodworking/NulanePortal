@@ -19,11 +19,14 @@ export function PublicHeader() {
           <img src={brand.logoPath} alt={brand.appName} className="h-16 w-auto shrink-0 object-contain sm:h-[4.5rem] lg:h-20" />
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-700 lg:flex">
-          <Link className="transition hover:text-slate-950 no-underline" href="/#product">
-            Product
+          <Link className="transition hover:text-slate-950 no-underline" href="/">
+            Home
           </Link>
           <Link className="transition hover:text-slate-950 no-underline" href="/#experience">
             Experience
+          </Link>
+          <Link className="transition hover:text-slate-950 no-underline" href="/contact-us">
+            Contact Us
           </Link>
         </nav>
         <div className="flex items-center gap-3">
@@ -57,8 +60,8 @@ export function PublicFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          <FooterColumn title="Product" links={[["Overview", "/#product"], ["Experience", "/#experience"]]} />
-          <FooterColumn title="Support" links={[["Open Portal", PORTAL_URL]]} />
+          <FooterColumn title="Home" links={[["Overview", "/#product"], ["Experience", "/#experience"]]} />
+          <FooterColumn title="Support" links={[["Contact Us", "/contact-us"], ["Open Portal", PORTAL_URL]]} />
           <FooterColumn title="Legal" links={[["Privacy", "/privacy"], ["Terms", "/terms"]]} />
         </div>
         <div className="mt-10 border-t border-white/10 pt-6 text-sm text-slate-500">
@@ -138,7 +141,6 @@ export function SupportCard({
 export function ScreenshotCard({
   path,
   exists,
-  featured = false,
   kind = "landscape",
 }: {
   path: string;
@@ -146,18 +148,17 @@ export function ScreenshotCard({
   featured?: boolean;
   kind?: "portrait" | "landscape";
 }) {
-  const imageHeight = featured
-    ? "h-[620px] lg:h-[760px]"
-    : kind === "portrait"
-      ? "h-[300px] lg:h-[380px]"
-      : "h-[360px] lg:h-[440px]";
+  const imageHeight =
+    kind === "portrait"
+      ? "h-[420px] md:h-[560px]"
+      : "h-[420px] md:h-[520px] xl:h-[620px]";
   const imageFit = "object-contain";
   return (
-    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_100%)] shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
+    <div className="overflow-hidden rounded-[2rem] border border-slate-700 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] shadow-[0_26px_70px_rgba(15,23,42,0.18)]">
       {exists ? (
-        <div className="bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.08),_transparent_44%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-2">
-          <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-            <div className="overflow-hidden rounded-[1rem] border border-slate-100 bg-white">
+        <div className="bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.1),_transparent_44%),linear-gradient(180deg,#ffffff_0%,#eef2f7_100%)] p-2.5 sm:p-3">
+          <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white p-2.5 shadow-[0_20px_48px_rgba(15,23,42,0.12)] sm:p-3">
+            <div className="overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white">
               <img src={path} alt="" aria-hidden className={`w-full ${imageFit} ${imageHeight} bg-white`} />
               <span className="sr-only">Screenshot</span>
             </div>
