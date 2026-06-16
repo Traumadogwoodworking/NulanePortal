@@ -9,14 +9,6 @@ function AppleIcon({ className }: { className?: string }) {
   );
 }
 
-function GooglePlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M3.609 1.814 13.792 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893 2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198 2.807 1.626a1.001 1.001 0 0 1 0 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658 16.8 8.99l-2.302 2.302-8.634-8.634z" />
-    </svg>
-  );
-}
-
 export default function GetTheAppPage() {
   const brand = publicBranding;
 
@@ -32,25 +24,15 @@ export default function GetTheAppPage() {
           Download the {brand.appName} mobile app to capture condition reports, photos, and signatures from the field.
         </p>
 
-        <div className="mt-10 flex w-full max-w-md flex-col gap-4 sm:flex-row sm:justify-center">
+        <div className="mt-10 flex justify-center">
           <a
             href={brand.appStoreUrl}
-            className="group flex items-center justify-center gap-3 rounded-2xl bg-slate-950 px-6 py-4 text-white shadow-[0_16px_48px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:bg-slate-900 hover:shadow-[0_20px_56px_rgba(15,23,42,0.24)] no-underline"
+            className="group flex items-center gap-3 rounded-2xl bg-slate-950 px-6 py-4 text-white shadow-[0_16px_48px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:bg-slate-900 hover:shadow-[0_20px_56px_rgba(15,23,42,0.24)] no-underline"
           >
             <AppleIcon className="h-8 w-8" />
             <div className="text-left">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Download on the</p>
               <p className="text-lg font-black leading-none">App Store</p>
-            </div>
-          </a>
-          <a
-            href={brand.googlePlayUrl}
-            className="group flex items-center justify-center gap-3 rounded-2xl bg-amber-400 px-6 py-4 text-slate-950 shadow-[0_16px_48px_rgba(245,158,11,0.22)] transition hover:-translate-y-0.5 hover:bg-amber-300 hover:shadow-[0_20px_56px_rgba(245,158,11,0.28)] no-underline"
-          >
-            <GooglePlayIcon className="h-8 w-8" />
-            <div className="text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900/70">Get it on</p>
-              <p className="text-lg font-black leading-none">Google Play</p>
             </div>
           </a>
         </div>
