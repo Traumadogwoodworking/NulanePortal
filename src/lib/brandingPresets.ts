@@ -115,7 +115,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     allowSnapshotLogoOverride: false,
     footerLogoUrl: null,
     showFooterLogo: false,
-    portalBrandColor: "#0f172a",
+    portalBrandColor: "#0d2c71",
     portalBrandAccentColor: "#2563eb",
     portalBrandLightColor: "rgba(37, 99, 235, 0.08)",
     auth0ClientId: "ihhAweXL47d5FlKOL9UsS87Ld18wZKxD",

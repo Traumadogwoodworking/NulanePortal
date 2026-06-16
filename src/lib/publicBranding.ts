@@ -69,7 +69,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     landingHeadline: "Definian Inspection",
     landingSubheadline: "Vehicle inspection and condition reporting portal.",
     landingExplainer:
-      "Use this portal to access inspection reports, facility records, vehicle condition documentation, and operational review tools.",
+      "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
     supportEmail: "support@definian.com",
     reportsEmail: "reports@definian.com",
     logoPath: "/media/definian-sidebar-logo-white.png",
@@ -78,7 +78,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     accentColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandAccentColor,
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
-    portalUrl: "/home",
+    portalUrl: "/login",
   },
   nulaneSystems: {
     companyName: "Nulane Systems",
