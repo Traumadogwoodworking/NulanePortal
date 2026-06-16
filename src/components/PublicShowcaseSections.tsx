@@ -54,12 +54,12 @@ function ProgressBar({
     if (event.button !== 0 || !emblaApi || slideCount <= 1) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragging.current = true;
-    emblaApi.scrollTo(indexFromClientX(event.clientX), true);
+    emblaApi.scrollTo(indexFromClientX(event.clientX), false);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging.current || !emblaApi || slideCount <= 1) return;
-    emblaApi.scrollTo(indexFromClientX(event.clientX), true);
+    emblaApi.scrollTo(indexFromClientX(event.clientX), false);
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -99,9 +99,7 @@ function ProgressBar({
           style={{ width: `${progress * 100}%` }}
         />
         <div
-          className={`absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm ${
-            isDark ? "bg-white" : "bg-slate-900"
-          }`}
+          className="absolute top-1/2 h-4 w-8 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-red-700 bg-red-600 shadow-[0_6px_14px_rgba(239,68,68,0.22)]"
           style={{ left: `${progress * 100}%` }}
         />
       </div>
@@ -127,6 +125,7 @@ function ShowcaseEmblaCarousel({
   variant,
   slideClassName,
   phoneFrame,
+  settleGroupSize = 1,
 }: {
   eyebrow: string;
   title: string;
@@ -135,15 +134,38 @@ function ShowcaseEmblaCarousel({
   variant: "light" | "dark";
   slideClassName?: string;
   phoneFrame?: boolean;
+  settleGroupSize?: number;
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
     containScroll: "trimSnaps",
-    dragFree: false,
-    skipSnaps: false,
+    dragFree: true,
+    skipSnaps: true,
   });
+  const dragging = useRef(false);
   const isDark = variant === "dark";
   const defaultSlideClass = "flex-[0_0_86%] sm:flex-[0_0_48%] lg:flex-[0_0_31%]";
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const settleToGroup = () => {
+      if (dragging.current || settleGroupSize <= 1) return;
+      const currentSnap = emblaApi.selectedScrollSnap();
+      const target = Math.max(
+        0,
+        Math.min(emblaApi.slideNodes().length - 1, Math.round(currentSnap / settleGroupSize) * settleGroupSize)
+      );
+      if (target !== currentSnap) {
+        emblaApi.scrollTo(target, false);
+      }
+    };
+    emblaApi.on("settle", settleToGroup);
+    emblaApi.on("pointerUp", settleToGroup);
+    return () => {
+      emblaApi.off("settle", settleToGroup);
+      emblaApi.off("pointerUp", settleToGroup);
+    };
+  }, [emblaApi, settleGroupSize]);
 
   return (
     <div
@@ -207,11 +229,11 @@ export function PublicShowcaseSections() {
           eyebrow="Mobile app"
           title="Inspection experience"
           description={
-            <ul className="flex flex-wrap gap-2 sm:justify-end">
+            <ul className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0">
               {workflowBullets.map((item) => (
                 <li
                   key={item}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm sm:px-4 sm:py-2 sm:text-sm"
+                  className="shrink-0 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm sm:px-4 sm:py-2 sm:text-sm"
                 >
                   {item}
                 </li>
@@ -221,6 +243,7 @@ export function PublicShowcaseSections() {
           shots={appShowcaseShots}
           variant="light"
           phoneFrame
+          settleGroupSize={3}
         />
       </section>
 
@@ -240,28 +263,30 @@ export function PublicShowcaseSections() {
 
 function AppScreenshotCard({ path, exists, showIsland }: { path: string; exists: boolean; showIsland: boolean }) {
   return (
-    <div className="rounded-[2.35rem] border border-slate-800 bg-slate-950 p-2 shadow-[0_22px_54px_rgba(15,23,42,0.2)] sm:p-2.5">
-      <div className="relative overflow-hidden rounded-[2rem] border border-slate-700 bg-black p-1.5">
+    <div className="flex h-[78svh] max-h-[900px] min-h-[420px] items-center justify-center rounded-[1.9rem] border border-slate-800 bg-slate-950 p-1.25 shadow-[0_22px_54px_rgba(15,23,42,0.2)] sm:p-1.5">
+      <div className="relative h-full overflow-hidden rounded-[2rem] border border-slate-700 bg-black p-1.5">
         {showIsland ? (
-          <div className="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black shadow-[0_0_0_1px_rgba(255,255,255,0.08)] sm:h-6 sm:w-24" />
+          <div className="absolute left-1/2 top-2 z-10 h-4 w-16 -translate-x-1/2 rounded-full bg-black shadow-[0_0_0_1px_rgba(255,255,255,0.08)] sm:h-5 sm:w-20" />
         ) : null}
-        {exists ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={path}
-            alt=""
-            aria-hidden
-            draggable={false}
-            className="aspect-[1206/2622] w-full rounded-[1.65rem] bg-white object-contain"
-          />
-        ) : (
-          <div className="flex aspect-[1206/2622] items-center justify-center rounded-[1.65rem] border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
-            <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">App shot pending</p>
-              <p className="mt-2 text-[11px] text-slate-500">{path.replace("/images/", "")}</p>
+        <div className="aspect-[1206/2622] h-full">
+          {exists ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={path}
+              alt=""
+              aria-hidden
+              draggable={false}
+              className="h-full w-full rounded-[1.35rem] bg-white object-contain"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded-[1.35rem] border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">App shot pending</p>
+                <p className="mt-2 text-[11px] text-slate-500">{path.replace("/images/", "")}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       <span className="sr-only">App screenshot</span>
     </div>

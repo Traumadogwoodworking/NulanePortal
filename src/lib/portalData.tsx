@@ -86,19 +86,25 @@ export function PortalDataProvider({ children }: { children: ReactNode }) {
   );
 }
 
+function getStorage(storage: "session" | "local") {
+  if (typeof window === "undefined") return null;
+  return storage === "local" ? window.localStorage : window.sessionStorage;
+}
+
 function readCachedPayload<T>(
   memoryCache: Map<string, CachedPayload<T>>,
   storageKey: string,
   orgId: string,
-  options?: { allowStale?: boolean }
+  options?: { allowStale?: boolean; storage?: "session" | "local" }
 ): T | null {
   const memoryEntry = memoryCache.get(orgId);
   if (memoryEntry && (options?.allowStale || Date.now() - memoryEntry.timestamp <= CACHE_TTL_MS)) {
     return memoryEntry.value;
   }
-  if (typeof window === "undefined") return null;
+  const storage = getStorage(options?.storage ?? "session");
+  if (!storage) return null;
   try {
-    const raw = window.sessionStorage.getItem(`${storageKey}:${orgId}`);
+    const raw = storage.getItem(`${storageKey}:${orgId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedPayload<T>;
     if (typeof parsed.timestamp !== "number" || !parsed.value) return null;
@@ -110,12 +116,19 @@ function readCachedPayload<T>(
   }
 }
 
-function writeCachedPayload<T>(memoryCache: Map<string, CachedPayload<T>>, storageKey: string, orgId: string, value: T) {
+function writeCachedPayload<T>(
+  memoryCache: Map<string, CachedPayload<T>>,
+  storageKey: string,
+  orgId: string,
+  value: T,
+  storage: "session" | "local" = "session"
+) {
   const payload: CachedPayload<T> = { timestamp: Date.now(), value };
   memoryCache.set(orgId, payload);
-  if (typeof window === "undefined") return;
+  const store = getStorage(storage);
+  if (!store) return;
   try {
-    window.sessionStorage.setItem(`${storageKey}:${orgId}`, JSON.stringify(payload));
+    store.setItem(`${storageKey}:${orgId}`, JSON.stringify(payload));
   } catch {
     // ignore cache write failures
   }
@@ -404,12 +417,31 @@ export function usePortalEmailListMembers(listId?: string | null) {
   );
 }
 
+function mergeCachedReports<T extends { report_id?: string; id?: string }>(
+  cached: T[],
+  fresh: T[]
+): T[] {
+  const map = new Map<string, T>();
+  cached.forEach((item) => {
+    const id = (item.report_id || item.id) as string | undefined;
+    if (id) map.set(id, item);
+  });
+  fresh.forEach((item) => {
+    const id = (item.report_id || item.id) as string | undefined;
+    if (id) map.set(id, item);
+  });
+  return Array.from(map.values());
+}
+
 export function usePortalReportsSnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const scope = getPortalScopeKey(resolvedOrgId, null);
   const cachedValue = resolvedOrgId
-    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, { allowStale: true })
+    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, {
+        allowStale: true,
+        storage: "local",
+      })
     : null;
   const usableCache = hasUsefulReportsData(cachedValue);
   if (process.env.NODE_ENV !== "production") {
@@ -427,6 +459,7 @@ export function usePortalReportsSnapshot() {
       if (!resolvedOrgId) {
         return { damageReports: [], rsaReports: [], partialError: null };
       }
+      const previousSnapshot = cachedValue ?? { damageReports: [], rsaReports: [], partialError: null };
       const [damageReportsResult, rsaReportsResult] = await Promise.allSettled([
         ReportsAdapter.fetchDamageReports({ organization_id: resolvedOrgId }),
         ReportsAdapter.fetchRsaReports(),
@@ -440,11 +473,17 @@ export function usePortalReportsSnapshot() {
           : null,
       ].filter((entry): entry is string => Boolean(entry));
       const snapshot = {
-        damageReports: damageReportsResult.status === "fulfilled" ? damageReportsResult.value : [],
-        rsaReports: rsaReportsResult.status === "fulfilled" ? rsaReportsResult.value : [],
+        damageReports: mergeCachedReports(
+          previousSnapshot.damageReports,
+          damageReportsResult.status === "fulfilled" ? damageReportsResult.value : []
+        ),
+        rsaReports: mergeCachedReports(
+          previousSnapshot.rsaReports,
+          rsaReportsResult.status === "fulfilled" ? rsaReportsResult.value : []
+        ),
         partialError: partialErrors.length ? partialErrors.join(" | ") : null,
       };
-      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, snapshot);
+      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, snapshot, "local");
       return snapshot;
     },
     {

@@ -21,6 +21,8 @@ export interface PublicBrandingConfig {
   loginButtonLabel: string;
   openPortalButtonLabel: string;
   portalUrl: string;
+  appStoreUrl: string;
+  googlePlayUrl: string;
 }
 
 const envSupportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
@@ -48,8 +50,8 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     companyName: "Inspection-Trac",
     appName: "Inspection-Trac",
     shortDescription: "Vehicle inspection and condition reporting portal.",
-    landingHeadline: "Inspection-Trac",
-    landingSubheadline: "Vehicle inspection and condition reporting portal.",
+    landingHeadline: "THE EXPERIENCE",
+    landingSubheadline: "Built for Fast, Clear, and Consistent Inspections",
     landingExplainer:
       "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
     supportEmail: "support@inspection-trac.com",
@@ -61,13 +63,15 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/home",
+    appStoreUrl: "https://apps.apple.com/app/inspection-trac",
+    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.inspectiontrac.app",
   },
   definianInspection: {
     companyName: "Definian Inspection",
     appName: "Definian Inspection",
     shortDescription: "Vehicle inspection and condition reporting portal.",
-    landingHeadline: "Definian Inspection",
-    landingSubheadline: "Vehicle inspection and condition reporting portal.",
+    landingHeadline: "THE EXPERIENCE",
+    landingSubheadline: "Built for Fast, Clear, and Consistent Inspections",
     landingExplainer:
       "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
     supportEmail: "support@definian.com",
@@ -79,6 +83,8 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/login",
+    appStoreUrl: "https://apps.apple.com/app/definian-inspection",
+    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.definian.inspection",
   },
   nulaneSystems: {
     companyName: "Nulane Systems",
@@ -97,6 +103,8 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/home",
+    appStoreUrl: "https://apps.apple.com/app/nulane-systems",
+    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.app",
   },
   docudent: {
     companyName: "DocuDent",
@@ -115,6 +123,8 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/home",
+    appStoreUrl: "https://apps.apple.com/app/docudent",
+    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.docudent.app",
   },
 };
 

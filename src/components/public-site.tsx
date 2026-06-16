@@ -25,6 +25,9 @@ export function PublicHeader() {
           <Link className="transition hover:text-slate-950 no-underline" href="/#experience">
             Experience
           </Link>
+          <Link className="transition hover:text-slate-950 no-underline" href="/get-app">
+            Get the App
+          </Link>
           <Link className="transition hover:text-slate-950 no-underline" href="/contact-us">
             Contact Us
           </Link>
@@ -32,7 +35,7 @@ export function PublicHeader() {
         <div className="flex items-center gap-3">
           <Link
             href={PORTAL_URL}
-            className="rounded-full bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-amber-300 no-underline"
+            className="rounded-full bg-amber-400 px-6 py-3.5 text-base font-extrabold text-slate-950 shadow-md transition hover:bg-amber-300 hover:shadow-lg no-underline"
           >
             {brand.openPortalButtonLabel}
           </Link>
@@ -60,7 +63,7 @@ export function PublicFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          <FooterColumn title="Home" links={[["Overview", "/#product"], ["Experience", "/#experience"]]} />
+          <FooterColumn title="Home" links={[["Overview", "/#product"], ["Experience", "/#experience"], ["Get the App", "/get-app"]]} />
           <FooterColumn title="Support" links={[["Contact Us", "/contact-us"], ["Open Portal", PORTAL_URL]]} />
           <FooterColumn title="Legal" links={[["Privacy", "/privacy"], ["Terms", "/terms"]]} />
         </div>
@@ -141,16 +144,18 @@ export function SupportCard({
 export function ScreenshotCard({
   path,
   exists,
+  caption,
   kind = "landscape",
 }: {
   path: string;
   exists: boolean;
   featured?: boolean;
   kind?: "portrait" | "landscape";
+  caption?: string;
 }) {
   const imageHeight =
     kind === "portrait"
-      ? "h-[420px] md:h-[560px]"
+      ? "h-[360px] md:h-[480px]"
       : "h-[420px] md:h-[520px] xl:h-[620px]";
   const imageFit = "object-contain";
   return (
@@ -176,6 +181,11 @@ export function ScreenshotCard({
           </div>
         </div>
       )}
+      {caption ? (
+        <div className="border-t border-slate-200 bg-white px-4 py-3 text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">{caption}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

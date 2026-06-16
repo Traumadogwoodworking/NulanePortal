@@ -120,6 +120,26 @@ function csvEscape(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function numericSortKey(label: string, prefix: string): [number, string] {
+  const match = label.match(new RegExp(`^${prefix}\\s*(\\d+)$`));
+  if (match) return [parseInt(match[1], 10), ""];
+  return [Infinity, label];
+}
+
+function sortTrackNames(a: string, b: string): number {
+  const [aNum, aLabel] = numericSortKey(a, "Track");
+  const [bNum, bLabel] = numericSortKey(b, "Track");
+  if (aNum !== bNum) return aNum - bNum;
+  return aLabel.localeCompare(bLabel);
+}
+
+function sortSpotNames(a: string, b: string): number {
+  const [aNum, aLabel] = numericSortKey(a, "Spot");
+  const [bNum, bLabel] = numericSortKey(b, "Spot");
+  if (aNum !== bNum) return aNum - bNum;
+  return aLabel.localeCompare(bLabel);
+}
+
 function useRsaReports() {
   const { data: reportsSnapshot, mutate: refreshReportsSnapshot } = usePortalReportsSnapshot();
   const loadRsaReports = useCallback(() => {
@@ -645,7 +665,9 @@ export function RsaReportsManager() {
                       </div>
                     </td>
                   </tr>
-                  {Object.entries(tracks).map(([trackName, spots], trackIdx) => {
+                  {Object.entries(tracks)
+                    .sort(([a], [b]) => sortTrackNames(a, b))
+                    .map(([trackName, spots], trackIdx) => {
                     let rcCount = 0;
                     let vinCountSum = 0;
                     Object.values(spots).forEach((railcars) => {
@@ -670,7 +692,9 @@ export function RsaReportsManager() {
                             </div>
                           </td>
                         </tr>
-                        {Object.entries(spots).map(([spotName, railcars]) => {
+                        {Object.entries(spots)
+                          .sort(([a], [b]) => sortSpotNames(a, b))
+                          .map(([spotName, railcars]) => {
                           const spotVinCount = railcars.reduce((acc, car) => acc + car.vins.length, 0);
                           return (
                             <React.Fragment key={spotName}>
