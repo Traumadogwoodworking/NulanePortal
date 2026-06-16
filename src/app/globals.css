@@ -265,6 +265,11 @@
   --metric-danger-detail: #9f1239;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font-geist-sans), var(--font-inter), "Geist Sans", "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
   background: var(--bg);
