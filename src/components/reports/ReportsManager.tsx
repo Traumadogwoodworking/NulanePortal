@@ -89,6 +89,8 @@ function getDamageReportPhotoUrls(report: ReportDamageApiRow | null): string[] {
   return report ? buildReportGallery(report).photoUrls.filter(Boolean) : [];
 }
 
+const DAMAGE_MEDIA_RENDER_LIMIT = 50;
+
 function toDateInputValue(value: Date): string {
   const year = value.getFullYear();
   const month = `${value.getMonth() + 1}`.padStart(2, "0");
@@ -502,7 +504,15 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }, [damageSortDirections, damageSortField, filteredDamageSummaries]);
 
   const selectedDamageFullRow = useMemo(() => damageReports.find(r => r.report_id === selectedDamageReportId) ?? null, [damageReports, selectedDamageReportId]);
-  const selectedDamagePhotos = useMemo(() => getDamageReportPhotoUrls(selectedDamageFullRow), [selectedDamageFullRow]);
+  const selectedDamageRank = useMemo(
+    () => sortedDamageSummaries.findIndex((summary) => summary.id === selectedDamageReportId),
+    [selectedDamageReportId, sortedDamageSummaries]
+  );
+  const selectedDamageMediaEnabled = selectedDamageRank >= 0 && selectedDamageRank < DAMAGE_MEDIA_RENDER_LIMIT;
+  const selectedDamagePhotos = useMemo(
+    () => (selectedDamageMediaEnabled ? getDamageReportPhotoUrls(selectedDamageFullRow) : []),
+    [selectedDamageFullRow, selectedDamageMediaEnabled]
+  );
   const [brokenDamagePhotoUrls, setBrokenDamagePhotoUrls] = useState<Record<string, boolean>>({});
   const [activeDamagePhotoUrl, setActiveDamagePhotoUrl] = useState<string | null>(null);
   const selectedDamagePdfUrl = useMemo(
@@ -637,6 +647,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     () => selectedDamagePhotos.filter((url) => !brokenDamagePhotoUrls[url]),
     [brokenDamagePhotoUrls, selectedDamagePhotos]
   );
+  const selectedDamageMediaLimitMessage =
+    selectedDamageFullRow && !selectedDamageMediaEnabled
+      ? `Media is only rendered for the first ${DAMAGE_MEDIA_RENDER_LIMIT} reports in this view.`
+      : null;
 
   useEffect(() => {
     if (!isDamageEditOpen || !selectedDamageFullRow) {
@@ -1287,7 +1301,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         variant="outline"
                         size="lg"
                         className="h-10 gap-2 px-4"
-                        disabled={!selectedDamageFullRow.report_id || !selectedDamagePhotos.length || isDownloadingPhotos}
+                        disabled={!selectedDamageMediaEnabled || !selectedDamageFullRow.report_id || !selectedDamagePhotos.length || isDownloadingPhotos}
                         onClick={async () => {
                           if (!selectedDamageFullRow.report_id || isDownloadingPhotos) return;
                           setIsDownloadingPhotos(true);
@@ -1432,6 +1446,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                   </div>
                                 </button>
                               ))}
+                            </div>
+                          ) : selectedDamageMediaLimitMessage ? (
+                            <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+                              <p className="text-sm font-medium text-slate-600">{selectedDamageMediaLimitMessage}</p>
                             </div>
                           ) : (
                             <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
