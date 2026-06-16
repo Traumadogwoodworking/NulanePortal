@@ -4,9 +4,13 @@ import { usePortalSession } from "@/lib/portalSession";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RsaReportsManager } from "@/components/reports/RsaReportsManager";
 
+function normalizeOrganizationName(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
+}
+
 export default function RsaReportsPage() {
   const { organizationId, session } = usePortalSession();
-  const normalizedOrganizationName = (session?.organization?.name ?? "").trim().toLowerCase();
+  const normalizedOrganizationName = normalizeOrganizationName(session?.organization?.name);
   const hasRsaAccess =
     organizationId === "org-awct" ||
     organizationId === "awct.inc" ||
@@ -14,6 +18,8 @@ export default function RsaReportsPage() {
     normalizedOrganizationName === "american wheel & car" ||
     normalizedOrganizationName === "awct.inc" ||
     normalizedOrganizationName === "awc.inc" ||
+    normalizedOrganizationName === "inspection trac" ||
+    normalizedOrganizationName === "inspection track" ||
     normalizedOrganizationName === "signature vehicle logistics";
 
   if (!organizationId) {

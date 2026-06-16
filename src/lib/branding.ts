@@ -123,7 +123,7 @@ function normalizeOrgKey(value?: string | null): string {
   if (!value) {
     return "";
   }
-  return value.toLowerCase().trim();
+  return value.toLowerCase().trim().replace(/[\s_-]+/g, " ");
 }
 
 function normalizeLogoUrl(value?: string | null): string | null {
@@ -160,13 +160,17 @@ function normalizeBrandColor(value?: string | null): string | null {
 const INSPECTION_TRAC_ORG_KEYS = new Set([
   "inspection-trac",
   "inspection trac",
+  "inspection_trac",
   "inspection track",
 ]);
 
 const INSPECTION_TRAC_CUSTOMER_KEYS = new Set([
   "awct.inc",
   "awc.inc",
+  "awct_inc",
+  "awc_inc",
   "signature vehicle logistics",
+  "signature_vehicle_logistics",
 ]);
 
 function pickSwatchColor(swatch?: Record<string, string> | null): string | null {

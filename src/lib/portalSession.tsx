@@ -79,6 +79,10 @@ function normalizeRoleKey(value: string | undefined | null): string {
   return value?.toString().trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
 }
 
+function normalizeOrganizationKey(value: string | undefined | null): string {
+  return value?.toString().trim().toLowerCase().replace(/[\s_-]+/g, " ") ?? "";
+}
+
 function buildDevSession(): PortalSessionResponse {
   const roleOverride = typeof window !== "undefined" ? window.localStorage.getItem("portalDevSessionRole") : null;
   const isLimited = roleOverride === "limited";
@@ -339,11 +343,15 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     const requiresAds = Boolean(session?.requires_ads);
     const portalAccess = session?.portal_access ?? true;
 
-    const normalizedOrganizationName = session?.organization?.name?.trim().toLowerCase() ?? "";
+    const normalizedOrganizationName = normalizeOrganizationKey(session?.organization?.name ?? null);
     const isAwct =
       normalizedOrganizationName === "american wheel & car" ||
       normalizedOrganizationName === "awct.inc" ||
       normalizedOrganizationName === "awc.inc" ||
+      normalizedOrganizationName === "inspection trac" ||
+      normalizedOrganizationName === "inspection track" ||
+      normalizedOrganizationName === "inspection_trac" ||
+      normalizedOrganizationName === "inspection-track" ||
       normalizedOrganizationName === "signature vehicle logistics";
 
     const hasPermission = (key: PermissionKey) => {

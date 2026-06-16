@@ -500,6 +500,10 @@ function normalizeKnownModelLabel(value?: string | null): string {
   return normalized;
 }
 
+function normalizeOrganizationName(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
+}
+
 type ChartSectionRow = {
   section: string;
   car: string;
@@ -1340,11 +1344,14 @@ export default function HomePage() {
     session?.organization?.organization_id ||
     organizationId ||
     "Current organization";
+  const normalizedOrganizationName = normalizeOrganizationName(currentOrganizationLabel);
   const isInspectionTracOrg =
-    (currentOrganizationLabel ?? "").trim().toLowerCase() === "american wheel & car" ||
-    (currentOrganizationLabel ?? "").trim().toLowerCase() === "awct.inc" ||
-    (currentOrganizationLabel ?? "").trim().toLowerCase() === "awc.inc" ||
-    (currentOrganizationLabel ?? "").trim().toLowerCase() === "signature vehicle logistics";
+    normalizedOrganizationName === "american wheel & car" ||
+    normalizedOrganizationName === "awct.inc" ||
+    normalizedOrganizationName === "awc.inc" ||
+    normalizedOrganizationName === "inspection trac" ||
+    normalizedOrganizationName === "inspection track" ||
+    normalizedOrganizationName === "signature vehicle logistics";
   const hideFacilitySelector = currentOrganizationLabel.trim().toLowerCase() === "free tier organization";
   const hideInspectorSections = hideFacilitySelector;
   const sanitizeFacilityDisplay = (value: string): string => stripFacilitySuffix(value);
