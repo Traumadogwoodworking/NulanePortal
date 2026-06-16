@@ -39,6 +39,9 @@ type CachedPayload<T> = {
 
 const directoryMemoryCache = new Map<string, CachedPayload<DirectorySnapshot>>();
 const reportsMemoryCache = new Map<string, CachedPayload<ReportsSnapshot>>();
+const brandingMemoryCache = new Map<string, CachedPayload<BrandingSnapshot | null>>();
+const controlMemoryCache = new Map<string, CachedPayload<ControlSnapshot>>();
+const emailMembersMemoryCache = new Map<string, CachedPayload<EmailListMemberSummary[]>>();
 
 interface DirectorySnapshot {
   users: UserSummary[];
@@ -248,24 +251,38 @@ export function usePortalBrandingSnapshot() {
   const resolvedOrgId = ensureOrgId(organizationId);
   const sessionBranding = (session?.branding_snapshot as BrandingSnapshot | undefined) ?? null;
   const scope = getPortalScopeKey(resolvedOrgId, session?.user?.user_id ?? null);
+  const cachedValue = resolvedOrgId
+    ? readCachedPayload(brandingMemoryCache, BRANDING_CACHE_KEY_PREFIX, resolvedOrgId, {
+        allowStale: true,
+        storage: "local",
+      })
+    : null;
   return useSWR<BrandingSnapshot | null>(
     scope ? [...scope, "branding", "v1"] : null,
     async () => {
-      if (!resolvedOrgId) return null;
-      return fetchBranding(resolvedOrgId).catch(
-        () => sessionBranding
-      );
+      if (!resolvedOrgId) return sessionBranding;
+      return fetchBranding(resolvedOrgId).catch(() => cachedValue ?? sessionBranding);
     },
     {
-      fallbackData: sessionBranding,
+      fallbackData: cachedValue ?? sessionBranding,
       revalidateIfStale: true,
+      onSuccess: (data) => {
+        if (resolvedOrgId) {
+          writeCachedPayload(brandingMemoryCache, BRANDING_CACHE_KEY_PREFIX, resolvedOrgId, data, "local");
+        }
+      },
     }
   );
 }
 
+const CONTROL_CACHE_KEY_PREFIX = "portalControlCache";
+
 export function usePortalControlSnapshots() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
+  const cachedValue = resolvedOrgId
+    ? readCachedPayload(controlMemoryCache, CONTROL_CACHE_KEY_PREFIX, resolvedOrgId, { storage: "local" })
+    : null;
   return useSWR<ControlSnapshot>(
     resolvedOrgId ? ["portal/control-snapshot", resolvedOrgId] : null,
     async () => {
@@ -291,8 +308,13 @@ export function usePortalControlSnapshots() {
       };
     },
     {
-      fallbackData: { status: null, readiness: null, statusError: null, readinessError: null },
+      fallbackData: cachedValue ?? { status: null, readiness: null, statusError: null, readinessError: null },
       revalidateIfStale: true,
+      onSuccess: (data) => {
+        if (resolvedOrgId) {
+          writeCachedPayload(controlMemoryCache, CONTROL_CACHE_KEY_PREFIX, resolvedOrgId, data, "local");
+        }
+      },
     }
   );
 }
@@ -301,7 +323,12 @@ export function usePortalDirectorySnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const scope = getPortalScopeKey(resolvedOrgId, null);
-  const cachedValue = resolvedOrgId ? readCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId) : null;
+  const cachedValue = resolvedOrgId
+    ? readCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId, {
+        allowStale: true,
+        storage: "local",
+      })
+    : null;
   const usableCache = hasUsefulDirectoryData(cachedValue);
   if (process.env.NODE_ENV !== "production") {
     console.debug("[portalData] usePortalDirectorySnapshot", {
@@ -315,15 +342,16 @@ export function usePortalDirectorySnapshot() {
   return useSWR<DirectorySnapshot | undefined>(
     scope ? [...scope, "directory", "v1"] : null,
     async () => {
+      const previousSnapshot = cachedValue ?? {
+        users: [],
+        facilities: [],
+        locationMemberships: [],
+        emailLists: [],
+        emailListMembersByListId: {},
+        partialError: null,
+      };
       if (!resolvedOrgId) {
-        return {
-          users: [],
-          facilities: [],
-          locationMemberships: [],
-          emailLists: [],
-          emailListMembersByListId: {},
-          partialError: null,
-        };
+        return previousSnapshot;
       }
       const ENABLE_ADMIN_DATA = true;
       const [usersResult, facilitiesResult, membershipsResult, emailListsResult] = await Promise.allSettled([
@@ -374,21 +402,34 @@ export function usePortalDirectorySnapshot() {
         {}
       );
 
+      const mergedUsers = mergeById(
+        previousSnapshot.users,
+        usersResult.status === "fulfilled" ? usersResult.value : []
+      );
+      const mergedFacilities = mergeById(
+        previousSnapshot.facilities,
+        facilitiesResult.status === "fulfilled" ? facilitiesResult.value : []
+      );
+      const mergedMemberships = mergeByKey(
+        previousSnapshot.locationMemberships,
+        membershipsResult.status === "fulfilled" ? membershipsResult.value : [],
+        (m) => m.location_membership_id
+      );
+      const mergedEmailLists = mergeByKey(previousSnapshot.emailLists, emailLists, (l) => l.email_list_id);
+      const mergedEmailListMembers = mergeEmailListMembers(
+        previousSnapshot.emailListMembersByListId,
+        emailListMembersByListId
+      );
+
       const snapshot = {
-        users:
-          usersResult.status === "fulfilled"
-            ? normalizeDirectoryUsers(
-                usersResult.value,
-                membershipsResult.status === "fulfilled" ? membershipsResult.value : []
-              )
-            : [],
-        facilities: facilitiesResult.status === "fulfilled" ? facilitiesResult.value : [],
-        locationMemberships: membershipsResult.status === "fulfilled" ? membershipsResult.value : [],
-        emailLists,
-        emailListMembersByListId,
+        users: normalizeDirectoryUsers(mergedUsers, mergedMemberships),
+        facilities: mergedFacilities,
+        locationMemberships: mergedMemberships,
+        emailLists: mergedEmailLists,
+        emailListMembersByListId: mergedEmailListMembers,
         partialError: partialErrors.length ? partialErrors.join(" | ") : null,
       };
-      writeCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId, snapshot);
+      writeCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, resolvedOrgId, snapshot, "local");
       return snapshot;
     },
     {
@@ -398,21 +439,35 @@ export function usePortalDirectorySnapshot() {
   );
 }
 
+const EMAIL_MEMBERS_CACHE_KEY_PREFIX = "portalEmailMembersCache";
+
 export function usePortalEmailListMembers(listId?: string | null) {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const resolvedListId = ensureOrgId(listId);
+  const cacheKey = resolvedOrgId && resolvedListId ? `${resolvedOrgId}:${resolvedListId}` : null;
+  const cachedValue = cacheKey
+    ? readCachedPayload(emailMembersMemoryCache, EMAIL_MEMBERS_CACHE_KEY_PREFIX, cacheKey, {
+        allowStale: true,
+        storage: "local",
+      })
+    : null;
   return useSWR<EmailListMemberSummary[]>(
     resolvedOrgId && resolvedListId ? ["portal/email-list-members", resolvedOrgId, resolvedListId] : null,
     async () => {
       if (!resolvedOrgId || !resolvedListId) {
-        return [];
+        return cachedValue ?? [];
       }
-      return fetchEmailListMembers(resolvedOrgId, resolvedListId);
+      return fetchEmailListMembers(resolvedOrgId, resolvedListId).catch(() => cachedValue ?? []);
     },
     {
-      fallbackData: [],
+      fallbackData: cachedValue ?? [],
       revalidateIfStale: true,
+      onSuccess: (data) => {
+        if (cacheKey) {
+          writeCachedPayload(emailMembersMemoryCache, EMAIL_MEMBERS_CACHE_KEY_PREFIX, cacheKey, data, "local");
+        }
+      },
     }
   );
 }
@@ -431,6 +486,41 @@ function mergeCachedReports<T extends { report_id?: string; id?: string }>(
     if (id) map.set(id, item);
   });
   return Array.from(map.values());
+}
+
+function mergeById<T extends { id?: string }>(cached: T[], fresh: T[]): T[] {
+  const map = new Map<string, T>();
+  cached.forEach((item) => {
+    if (item.id) map.set(item.id, item);
+  });
+  fresh.forEach((item) => {
+    if (item.id) map.set(item.id, item);
+  });
+  return Array.from(map.values());
+}
+
+function mergeByKey<T>(cached: T[], fresh: T[], keyFn: (item: T) => string | undefined): T[] {
+  const map = new Map<string, T>();
+  cached.forEach((item) => {
+    const key = keyFn(item);
+    if (key) map.set(key, item);
+  });
+  fresh.forEach((item) => {
+    const key = keyFn(item);
+    if (key) map.set(key, item);
+  });
+  return Array.from(map.values());
+}
+
+function mergeEmailListMembers(
+  cached: Record<string, EmailListMemberSummary[]>,
+  fresh: Record<string, EmailListMemberSummary[]>
+): Record<string, EmailListMemberSummary[]> {
+  const merged = { ...cached };
+  Object.entries(fresh).forEach(([listId, members]) => {
+    merged[listId] = mergeByKey(cached[listId] ?? [], members, (m) => m.email_list_member_id || m.user_id);
+  });
+  return merged;
 }
 
 export function usePortalReportsSnapshot() {
