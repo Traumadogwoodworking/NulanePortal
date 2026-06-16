@@ -35,9 +35,14 @@ function installMissingPackages(packages) {
     process.platform === "win32" && process.env.npm_execpath
       ? [process.env.npm_execpath, "install", "--no-save", "--force", ...packages.map((pkg) => pkg.spec)]
       : ["install", "--no-save", "--force", ...packages.map((pkg) => pkg.spec)];
-  execFileSync(npmCommand, npmArgs, {
-    stdio: "inherit",
-  });
+  try {
+    execFileSync(npmCommand, npmArgs, {
+      stdio: "inherit",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[native-deps] optional repair failed; continuing without it: ${message}`);
+  }
 }
 
 const currentPlatformPackages = PLATFORM_PACKAGES.filter((pkg) => {
