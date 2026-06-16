@@ -63,8 +63,8 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/home",
-    appStoreUrl: "https://apps.apple.com/app/inspection-trac",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.inspectiontrac.app",
+    appStoreUrl: "https://apps.apple.com/us/app/inspection-trac/id6774376762",
+    googlePlayUrl: "#",
   },
   definianInspection: {
     companyName: "Definian Inspection",
