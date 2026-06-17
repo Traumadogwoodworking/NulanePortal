@@ -26,7 +26,19 @@ function isPublicBrandedPath(pathname: string | null) {
   if (path === "/") {
     return true;
   }
-  return ["/index.html", "/privacy", "/terms", "/support", "/contact-us", "/workflow", "/definian-signal", "/get-app"].includes(path);
+  return [
+    "/index.html",
+    "/privacy",
+    "/privacy-policy",
+    "/terms",
+    "/terms-of-service",
+    "/support",
+    "/contact",
+    "/contact-us",
+    "/workflow",
+    "/definian-signal",
+    "/get-app",
+  ].includes(path);
 }
 
 export function RootRouteShell({ children }: RootRouteShellProps) {

@@ -75,7 +75,7 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     sidebarLinkHoverEnforced: "#ffffff",
     topbarTextClassName: "text-slate-900",
     sidebarLogoShellClassName:
-      "relative z-10 flex w-full items-center justify-center transition-transform duration-300 group-hover:translate-y-px",
+      "relative z-10 flex w-full items-center justify-center rounded-[1.65rem] bg-white px-5 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.12)] transition-transform duration-300 group-hover:translate-y-px",
     sidebarLogoImageClassName: "h-auto w-full max-w-[420px] object-contain",
     appNavLabel: "Definian Inspection",
     sidebarShellClassName: "border-r border-[#081838] bg-[#0d2c71] transition-all duration-300",
@@ -264,12 +264,12 @@ export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
   process.env.NEXT_PUBLIC_PORTAL_BRANDING === "definianInspection"
     ? "definianInspection"
     : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "docudent"
-    ? "docudent"
-    : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
-      ? "nulaneSystems"
-      : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
-        ? "inspectionTrac"
-        : "inspectionTrac";
+      ? "docudent"
+      : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
+        ? "nulaneSystems"
+        : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
+          ? "inspectionTrac"
+          : "inspectionTrac";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;
