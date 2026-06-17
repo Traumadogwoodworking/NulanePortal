@@ -22,8 +22,8 @@ export const appShowcaseShots: ShowcaseShot[] = [
 ];
 
 export const portalShowcaseShots: ShowcaseShot[] = [
-  { path: "/images/portal-report-pdf-example.png", exists: true, featured: true, caption: "PDF" },
-  { path: "/images/portal-report-list.png", exists: true, kind: "landscape", caption: "Reports" },
+  { path: "/images/portal-report-pdf-example.png", exists: true, featured: true, caption: "Report PDF" },
+  { path: "/images/portal-report-list.png", exists: true, kind: "landscape", caption: "Portal Reports Page" },
   { path: "/images/portal-chatgpt-dashboard.png", exists: true, kind: "landscape", caption: "Metrics" },
-  { path: "/images/portal-powerbi-dashboard.png", exists: true, kind: "landscape", caption: "Dashboards" },
+  { path: "/images/portal-powerbi-dashboard.png", exists: true, kind: "landscape", caption: "Portal Dashboards" },
 ];

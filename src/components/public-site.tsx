@@ -165,7 +165,13 @@ export function ScreenshotCard({
           <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white p-2.5 shadow-[0_20px_48px_rgba(15,23,42,0.12)] sm:p-3">
             <div className="overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white">
               <img src={path} alt="" aria-hidden draggable={false} className={`w-full ${imageFit} ${imageHeight} bg-white`} />
-              <span className="sr-only">Screenshot</span>
+              {caption ? (
+                <div className="border-t border-slate-100 bg-white px-4 py-3 text-center">
+                  <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-900 sm:text-base">{caption}</p>
+                </div>
+              ) : (
+                <span className="sr-only">Screenshot</span>
+              )}
             </div>
           </div>
         </div>
@@ -181,11 +187,6 @@ export function ScreenshotCard({
           </div>
         </div>
       )}
-      {caption ? (
-        <div className="border-t border-slate-200 bg-white px-4 py-3 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">{caption}</p>
-        </div>
-      ) : null}
     </div>
   );
 }

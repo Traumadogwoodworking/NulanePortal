@@ -5,6 +5,7 @@ import useEmblaCarousel from "embla-carousel-react";
 import type { EmblaCarouselType } from "embla-carousel";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { appShowcaseShots, portalShowcaseShots } from "@/lib/publicShowcase";
+import { publicBranding } from "@/lib/publicBranding";
 import { ScreenshotCard } from "@/components/public-site";
 
 const workflowBullets = [
@@ -222,6 +223,10 @@ function ShowcaseEmblaCarousel({
 }
 
 export function PublicShowcaseSections() {
+  if (publicBranding.mode === "definianInspection") {
+    return null;
+  }
+
   return (
     <>
       <section id="experience" className="mx-auto flex min-h-screen w-full max-w-[92rem] items-center px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
@@ -229,11 +234,11 @@ export function PublicShowcaseSections() {
           eyebrow="Mobile app"
           title="Inspection experience"
           description={
-            <ul className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0">
+            <ul className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1 sm:justify-end sm:overflow-visible sm:pb-0">
               {workflowBullets.map((item) => (
                 <li
                   key={item}
-                  className="shrink-0 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm sm:px-4 sm:py-2 sm:text-sm"
+                  className="shrink-0 whitespace-nowrap rounded-full bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-[0_4px_14px_rgba(15,23,42,0.22)] ring-1 ring-white/10 sm:px-5 sm:py-2.5 sm:text-sm"
                 >
                   {item}
                 </li>
