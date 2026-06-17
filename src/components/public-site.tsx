@@ -23,12 +23,12 @@ export function PublicHeader() {
             Home
           </Link>
           <Link className="transition hover:text-slate-950 no-underline" href="/#experience">
-            Experience
+            The Experience
           </Link>
-          <Link className="transition hover:text-slate-950 no-underline" href="/get-app">
+          <Link className="transition hover:text-slate-950 no-underline" href="/get-app/">
             Get the App
           </Link>
-          <Link className="transition hover:text-slate-950 no-underline" href="/contact-us">
+          <Link className="transition hover:text-slate-950 no-underline" href="/contact-us/">
             Contact Us
           </Link>
         </nav>
@@ -63,9 +63,9 @@ export function PublicFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          <FooterColumn title="Home" links={[["Overview", "/#product"], ["Experience", "/#experience"], ["Get the App", "/get-app"]]} />
-          <FooterColumn title="Support" links={[["Contact Us", "/contact-us"], ["Open Portal", PORTAL_URL]]} />
-          <FooterColumn title="Legal" links={[["Privacy", "/privacy"], ["Terms", "/terms"]]} />
+          <FooterColumn title="Home" links={[["Overview", "/#product"], ["The Experience", "/#experience"], ["Get the App", "/get-app/"]]} />
+          <FooterColumn title="Support" links={[["Contact Us", "/contact-us/"], ["Support Tickets", "/support/"], ["Open Portal", PORTAL_URL]]} />
+          <FooterColumn title="Legal" links={[["Privacy", "/privacy/"], ["Terms", "/terms/"]]} />
         </div>
         <div className="mt-10 border-t border-white/10 pt-6 text-sm text-slate-500">
           © {new Date().getFullYear()} {brand.footerLegalOwner}. All rights reserved.
