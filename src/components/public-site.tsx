@@ -18,7 +18,7 @@ export function PublicHeader() {
         >
           <img src={brand.logoPath} alt={brand.appName} className="h-16 w-auto max-w-full shrink-0 object-contain sm:h-[4.5rem] lg:h-20" draggable={false} />
         </Link>
-        <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-700 lg:flex">
+        <nav className="hidden items-center gap-8 text-sm font-bold text-slate-900 lg:flex">
           <Link className="transition hover:text-slate-950 no-underline" href="/">
             Home
           </Link>

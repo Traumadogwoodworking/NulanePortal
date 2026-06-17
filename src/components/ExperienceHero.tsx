@@ -127,20 +127,20 @@ export function ExperienceHero() {
   return (
     <section
       id="experience"
-      className="relative overflow-hidden bg-white px-4 py-14 text-center sm:px-6 sm:py-20 lg:px-8 lg:py-28"
+      className="relative bg-white px-4 py-14 text-center sm:px-6 sm:py-20 lg:px-8 lg:py-28"
     >
       <RibbonField />
 
       <div className="relative z-10 mx-auto max-w-7xl">
         {/* Eyebrow */}
-        <p className="text-xs font-black uppercase tracking-[0.35em] text-slate-500 sm:text-sm">
+        <p className="text-3xl font-black uppercase tracking-[0.22em] text-slate-900 sm:text-4xl lg:text-5xl">
           THE EXPERIENCE
         </p>
 
         {/* Device + logo composition */}
         <div className="relative mt-8 grid items-center gap-6 md:mt-10 lg:grid-cols-[1fr_minmax(20rem,36rem)_1fr] lg:gap-10">
           {/* Center logo and heading */}
-          <div className="order-1 mx-auto flex max-w-xl flex-col items-center lg:order-2">
+          <div className="relative z-20 order-1 mx-auto flex max-w-xl flex-col items-center lg:order-2">
             <div className="relative rounded-[2rem] border border-slate-200 bg-white/90 px-6 py-5 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:px-8 sm:py-6">
               <img
                 src={brand.logoPath}
@@ -150,11 +150,11 @@ export function ExperienceHero() {
               />
             </div>
 
-            <h1 className="mt-7 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+            <h1 className="mt-7 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
               Built for Fast, Clear, and Consistent Inspections
             </h1>
 
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+            <p className="mx-auto mt-4 max-w-2xl text-base font-semibold leading-7 text-slate-700 sm:text-lg">
               Vehicle inspection and condition reporting for teams that need clean reports, reliable media, and faster review.
             </p>
 
@@ -175,9 +175,9 @@ export function ExperienceHero() {
           </div>
 
           {/* Phone - right */}
-          <div className="order-2 flex justify-center lg:order-3 lg:justify-start">
+          <div className="relative z-10 order-2 flex justify-center lg:order-3 lg:justify-start">
             <div
-              className="w-[56%] max-w-[280px] drop-shadow-2xl sm:w-[50%] lg:w-[78%] lg:max-w-none"
+              className="w-[64%] max-w-[320px] drop-shadow-2xl sm:w-[58%] lg:w-[78%] lg:max-w-none"
               style={{
                 transform: "perspective(1200px) rotateY(-14deg) rotateZ(5deg)",
                 transformOrigin: "center center",
@@ -196,11 +196,11 @@ export function ExperienceHero() {
           </div>
 
           {/* Tablet - left */}
-          <div className="order-3 flex justify-center lg:order-1 lg:justify-end">
+          <div className="relative z-10 order-3 flex justify-center lg:order-1 lg:justify-end">
             <div
               className="w-[88%] max-w-[520px] drop-shadow-2xl lg:w-[115%] lg:max-w-none"
               style={{
-                transform: "perspective(1200px) rotateY(14deg) rotateZ(-5deg)",
+                transform: "perspective(1200px) rotateY(14deg) rotateZ(-5deg) scale(1.25)",
                 transformOrigin: "center center",
               }}
             >

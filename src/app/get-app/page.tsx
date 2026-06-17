@@ -71,7 +71,7 @@ export default function GetTheAppPage() {
 
               <div className="order-2 flex justify-center lg:order-3 lg:justify-start">
                 <div
-                  className="w-[52%] max-w-[240px] drop-shadow-2xl sm:w-[46%] lg:w-[72%] lg:max-w-none"
+                  className="w-[42%] max-w-[200px] drop-shadow-2xl sm:w-[38%] lg:w-[58%] lg:max-w-none"
                   style={{
                     transform: "perspective(1200px) rotateY(-14deg) rotateZ(5deg)",
                     transformOrigin: "center center",
@@ -91,9 +91,9 @@ export default function GetTheAppPage() {
 
               <div className="order-3 flex justify-center lg:order-1 lg:justify-end">
                 <div
-                  className="w-[80%] max-w-[420px] drop-shadow-2xl lg:w-[120%] lg:max-w-none"
+                  className="w-[72%] max-w-[380px] drop-shadow-2xl lg:w-[100%] lg:max-w-none"
                   style={{
-                    transform: "perspective(1200px) rotateY(14deg) rotateZ(-5deg)",
+                    transform: "perspective(1200px) rotateY(14deg) rotateZ(-5deg) scale(1.25)",
                     transformOrigin: "center center",
                   }}
                 >
