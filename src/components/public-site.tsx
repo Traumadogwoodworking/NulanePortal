@@ -25,7 +25,7 @@ export function PublicHeader() {
           <Link className="transition hover:text-slate-950 no-underline" href="/#experience">
             The Experience
           </Link>
-          <Link className="transition hover:text-slate-950 no-underline" href="/get-app/">
+          <Link className="transition hover:text-slate-950 no-underline" href="/#get-app">
             Get the App
           </Link>
           <Link className="transition hover:text-slate-950 no-underline" href="/contact-us/">
@@ -63,7 +63,7 @@ export function PublicFooter() {
               {SUPPORT_EMAIL}
             </a>
           </div>
-          <FooterColumn title="Home" links={[["Overview", "/#product"], ["The Experience", "/#experience"], ["Get the App", "/get-app/"]]} />
+          <FooterColumn title="Home" links={[["Overview", "/#product"], ["The Experience", "/#experience"], ["Get the App", "/#get-app"]]} />
           <FooterColumn title="Support" links={[["Contact Us", "/contact-us/"], ["Support Tickets", "/support/"], ["Open Portal", PORTAL_URL]]} />
           <FooterColumn title="Legal" links={[["Privacy", "/privacy/"], ["Terms", "/terms/"]]} />
         </div>
