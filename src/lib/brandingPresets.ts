@@ -269,7 +269,7 @@ export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
         ? "nulaneSystems"
         : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
           ? "inspectionTrac"
-          : "inspectionTrac";
+          : "definianInspection";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;
