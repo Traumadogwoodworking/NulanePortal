@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-unused-vars, @next/next/no-img-element, react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -33,11 +33,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildReportGallery } from "@/lib/reportGallery";
-import { ReportsAdapter } from "@/lib/services/reportService";
-import { usePortalDirectorySnapshot, usePortalReportsSnapshot } from "@/lib/portalData";
+import { ReportsAdapter, fetchDamageReportDetail, fetchReportList } from "@/lib/services/reportService";
 import {
   DAMAGE_FILTER_OPTIONS,
   DEFAULT_DAMAGE_REPORT_FILTERS,
+  getActiveInspectionTypeOptions,
   type DamageReportFilterKey,
   matchesDamageReportFilters,
   normalizeDamageReportFilters,
@@ -58,8 +58,9 @@ import {
   Filter,
   FilterX,
   ChevronDown,
+  CheckCircle2,
 } from "lucide-react";
-import { resolveDamageReportLocationName, slugForFacilityLabel } from "@/lib/reportUtils";
+import { deriveReportSeverity, resolveDamageReportLocationName, slugForFacilityLabel } from "@/lib/reportUtils";
 import { usePortalSession } from "@/lib/portalSession";
 import {
   DAMAGE_AREAS,
@@ -70,6 +71,7 @@ import {
 } from "@/lib/docudent/damageTaxonomy";
 import { toneForReportStatus } from "@/lib/status";
 import { severityPillClass } from "@/lib/severityTheme";
+import { normalizeReportListRow } from "@/lib/reportNormalizer";
 import type {
   FacilitySummary,
   ReportDamageApiRow,
@@ -81,6 +83,43 @@ interface ReportsManagerProps {
   mode: string;
 }
 
+type ReportListRow = {
+  report_id: string;
+  organization_id?: string;
+  vin?: string;
+  make?: string;
+  model?: string;
+  year?: number | string | null;
+  status?: string;
+  inspector_email?: string;
+  created_at?: string;
+  updated_at?: string;
+  inspection_type_number?: string | number | null;
+  module_key?: string | null;
+  location_id?: string | null;
+  facility_id?: string | null;
+  location_label?: string | null;
+  location_name?: string | null;
+  facility?: string | null;
+  navigation?: string | null;
+  location?: unknown;
+  damage_summary?: unknown[];
+  damage_entries?: ReportDamageApiRow["damage_entries"];
+  damage_status?: string | null;
+  damageStatus?: string | null;
+  damage_found?: boolean | string | number | null;
+  damageFound?: boolean | string | number | null;
+  clean?: boolean | string | number | null;
+  entry_kind?: string | null;
+  source?: string | null;
+  scan_status?: string | null;
+  submitted_at?: string | null;
+  submitted_by_email?: string | null;
+  inventory_bay?: string | null;
+  confirmed_bay?: string | null;
+  sector?: string | null;
+};
+
 function getDamageReportGalleryUrls(report: ReportDamageApiRow | null): string[] {
   return report ? buildReportGallery(report).galleryUrls.filter(Boolean) : [];
 }
@@ -88,8 +127,6 @@ function getDamageReportGalleryUrls(report: ReportDamageApiRow | null): string[]
 function getDamageReportPhotoUrls(report: ReportDamageApiRow | null): string[] {
   return report ? buildReportGallery(report).photoUrls.filter(Boolean) : [];
 }
-
-const DAMAGE_MEDIA_RENDER_LIMIT = 50;
 
 function toDateInputValue(value: Date): string {
   const year = value.getFullYear();
@@ -212,6 +249,59 @@ function normalizeEntryText(value: unknown): string {
   return value === null || value === undefined ? "" : String(value).trim();
 }
 
+function readRecordString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return "";
+}
+
+function readClearBoolean(value: unknown): boolean | null {
+  if (value === true || value === false) return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "yes", "1"].includes(normalized)) return true;
+    if (["false", "no", "0"].includes(normalized)) return false;
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return null;
+}
+
+function isClearInspectionScanReport(report: ReportDamageApiRow | null): boolean {
+  if (!report) return false;
+  const record = report as unknown as Record<string, unknown>;
+  const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+  const summaryEntries = Array.isArray(report.damage_summary) ? report.damage_summary : [];
+  const damageStatus = readRecordString(record, ["damage_status", "damageStatus", "damage_result", "damageResult"]).toLowerCase();
+  const inspectionType = readRecordString(record, ["inspection_type_number", "inspectionTypeNumber", "inspection_type", "inspectionType"]);
+  const source = readRecordString(record, ["entry_kind", "source_type", "sourceType", "source", "type"]).toLowerCase();
+  const clean = readClearBoolean(record.clean);
+  const damageFound = readClearBoolean(record.damage_found ?? record.damageFound);
+  const isInspectionScan =
+    inspectionType.replace(/\D+/g, "").replace(/^0+/, "") === "2" ||
+    source === "inspection_scan" ||
+    source === "inspection_scan_submission" ||
+    source === "mobile_app";
+  const hasClearSignal = damageStatus === "no_damage" || clean === true || damageFound === false;
+  return isInspectionScan && hasClearSignal && entries.length === 0 && summaryEntries.length === 0;
+}
+
+function getClearInspectionScanMeta(report: ReportDamageApiRow | null) {
+  const record = (report ?? {}) as unknown as Record<string, unknown>;
+  return {
+    timestamp: readRecordString(record, ["submitted_at", "submittedAt", "created_at", "createdAt", "updated_at", "updatedAt"]),
+    inspectorEmail: readRecordString(record, ["submitted_by_email", "submittedByEmail", "inspector_email", "inspectorEmail"]),
+    inventoryBay: readRecordString(record, ["inventory_bay", "inventoryBay"]),
+    confirmedBay: readRecordString(record, ["confirmed_bay", "confirmedBay"]),
+    sector: readRecordString(record, ["sector"]),
+  };
+}
+
 function toEditSeverityValue(value: unknown): string {
   const normalized = normalizeEntryText(value);
   return normalized || "1";
@@ -256,6 +346,103 @@ function buildDamageReportEditDraft(report: ReportDamageApiRow | null): DamageRe
 
 function getDamageTypesForArea(areaCode: string): DamageTypeOption[] {
   return areaCode ? getDamageTypeOptionsForArea(areaCode) : [];
+}
+
+function resolveListLocationLabel(location: unknown): string {
+  if (typeof location === "string") {
+    const normalized = location.trim();
+    return normalized ? normalized : "Unavailable";
+  }
+  if (location && typeof location === "object") {
+    const record = location as Record<string, unknown>;
+    const candidates = [
+      record.location_label,
+      record.location_name,
+      record.display_name,
+      record.name,
+      record.label,
+      record.facility,
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+  return "Unavailable";
+}
+
+function normalizeFacilityChoiceLabel(value: string | null | undefined): string {
+  const normalized = (value ?? "").toString().trim().replace(/\s+/g, " ");
+  const lower = normalized.toLowerCase();
+  if (
+    !normalized ||
+    lower === "unknown" ||
+    lower === "unknown facility" ||
+    lower === "unavailable" ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower === "null" ||
+    lower === "undefined"
+  ) {
+    return "Other";
+  }
+  return normalized;
+}
+
+function listRowToSummary(report: ReportListRow): ReportSummary {
+  const normalized = normalizeReportListRow(report);
+  const pseudoReport = {
+    ...(report as unknown as ReportDamageApiRow),
+    report_id: normalized.reportId || normalized.id || report.report_id,
+    vin: normalized.vin || report.vin,
+    make: report.make,
+    model: report.model,
+    year: typeof report.year === "number" ? report.year : undefined,
+    status: normalized.status as ReportStatus | undefined,
+    inspector_email: normalized.inspectorEmail || report.inspector_email,
+    created_at: normalized.createdAt || normalized.submittedAt || report.created_at,
+    updated_at: normalized.updatedAt || report.updated_at,
+    location_id: normalized.facilityId || report.location_id || undefined,
+    facility_id: normalized.facilityId || report.facility_id || undefined,
+    location_label: normalized.locationLabel || normalized.facilityName || report.location_label || undefined,
+    location_name: normalized.locationLabel || normalized.facilityName || report.location_name || undefined,
+    facility: normalized.facilityName || report.facility || undefined,
+    navigation: normalized.locationLabel || normalized.facilityName || report.navigation || undefined,
+    location: report.location && typeof report.location === "object" ? (report.location as Record<string, unknown>) : null,
+    damage_summary: Array.isArray(report.damage_summary) ? (report.damage_summary as Array<Record<string, unknown>>) : [],
+    damage_entries: Array.isArray((report as unknown as ReportDamageApiRow).damage_entries)
+      ? (report as unknown as ReportDamageApiRow).damage_entries
+      : normalized.damageStatus === "no_damage"
+        ? []
+        : undefined,
+    photo_urls: normalized.photoUrls,
+    splat_urls: normalized.splatUrls,
+    pdf_url: normalized.pdfUrl,
+  } as ReportDamageApiRow;
+  const locationName = resolveDamageReportLocationName(pseudoReport);
+  const severity = deriveReportSeverity(pseudoReport);
+  return {
+    id: normalized.reportId || normalized.id || report.report_id,
+    type: "damage",
+    status: (normalized.status as ReportStatus) || "open",
+    title: `${report.make || ""} ${report.model || ""}`.trim() || normalized.reportId || report.report_id,
+    vin: normalized.vin || "",
+    make: report.make,
+    model: report.model,
+    year:
+      typeof report.year === "number"
+        ? report.year
+        : typeof report.year === "string" && report.year.trim()
+          ? Number(report.year)
+          : undefined,
+    inspectorEmail: normalized.inspectorEmail || report.inspector_email,
+    locationName,
+    facilityName: locationName,
+    createdAt: normalized.createdAt || normalized.submittedAt || report.created_at,
+    updatedAt: normalized.updatedAt || report.updated_at,
+    severity,
+  };
 }
 
 function findDamageAreaByCode(code: string): DamageAreaOption | null {
@@ -328,15 +515,33 @@ function severitySortValue(value?: string | number | null): number {
   return Number.isFinite(numeric) ? numeric : DAMAGE_SEVERITIES.findIndex((entry) => entry.value === normalized);
 }
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [delayMs, value]);
+  return debouncedValue;
+}
+
+function normalizeReportListResponseRows(rows: unknown[] | undefined): ReportListRow[] {
+  return (rows ?? []).map((row) => {
+    const normalized = normalizeReportListRow(row);
+    const record = row && typeof row === "object" ? row : {};
+    return { ...record, report_id: normalized.reportId || normalized.id || (record as ReportListRow).report_id } as ReportListRow;
+  });
+}
+
 export function ReportsManager({ mode }: ReportsManagerProps) {
   const { organizationId, status: sessionStatus, isPortalAccessAllowed, session } = usePortalSession();
-  const { data: directory } = usePortalDirectorySnapshot();
-  const { data: reportsSnapshot, mutate: refreshReportsSnapshot } = usePortalReportsSnapshot();
   const [statusFilter, setStatusFilter] = useState<ReportStatus | "">(DEFAULT_DAMAGE_REPORT_FILTERS.statusFilter);
   const [facilityFilter, setFacilityFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.facilityFilter);
   const [searchTerm, setSearchTerm] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.searchTerm);
   const [reportIdFilter, setReportIdFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.reportIdFilter);
   const [vinFilter, setVinFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.vinFilter);
+  const [inspectionTypeFilter, setInspectionTypeFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectionTypeFilter);
+  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectionTypeFilter);
+  const [inspectionTypeSuggestionsOpen, setInspectionTypeSuggestionsOpen] = useState(false);
   const [makeFilter, setMakeFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.makeFilter);
   const [modelFilter, setModelFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.modelFilter);
   const [inspectorEmailFilter, setInspectorEmailFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectorEmailFilter);
@@ -360,25 +565,75 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const [isDownloadingSelectedCsv, setIsDownloadingSelectedCsv] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [hasNextPage, setHasNextPage] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [listRows, setListRows] = useState<ReportListRow[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [listSort, setListSort] = useState("created_at_desc");
+  const [reloadToken, setReloadToken] = useState(0);
   const hideFacilitySelector = (session?.organization?.name ?? "").trim().toLowerCase() === "free tier organization";
   const hideFacilityColumn = hideFacilitySelector;
+  const debouncedBackendSearch = useDebouncedValue(
+    [searchTerm, reportIdFilter, vinFilter, makeFilter, modelFilter].map((value) => value.trim()).filter(Boolean).join(" "),
+    300
+  );
+  const debouncedInspectorEmailFilter = useDebouncedValue(inspectorEmailFilter, 300);
 
   const isMounted = useRef(true);
   const damageSortFieldRef = useRef(damageSortField);
+  const hydratedDamageReportIdsRef = useRef(new Set<string>());
+  const autoExpandedFilterKeyRef = useRef<string | null>(null);
+  const listPageRequestInFlightRef = useRef(false);
+  const listRowIdsRef = useRef(new Set<string>());
   useEffect(() => {
     damageSortFieldRef.current = damageSortField;
   }, [damageSortField]);
-  const damageReports = reportsSnapshot?.damageReports ?? [];
-  const rsaReports = reportsSnapshot?.rsaReports ?? [];
+  const listFilters = useMemo(
+    () => ({
+      search: debouncedBackendSearch || undefined,
+      facility_id: facilityFilter !== "all" && facilityFilter !== "other" ? facilityFilter : undefined,
+      inspection_type: inspectionTypeFilter || undefined,
+      status: statusFilter || undefined,
+      from: createdFrom || undefined,
+      to: createdTo || undefined,
+      inspector_email: debouncedInspectorEmailFilter || undefined,
+      sort: listSort,
+      pageSize,
+    }),
+    [createdFrom, createdTo, debouncedBackendSearch, debouncedInspectorEmailFilter, facilityFilter, inspectionTypeFilter, listSort, pageSize, statusFilter]
+  );
+  const listFilterRequestKey = useMemo(() => JSON.stringify(listFilters), [listFilters]);
+  const hasActiveBackendOrLocalFilter = Boolean(
+    debouncedBackendSearch ||
+      facilityFilter !== "all" ||
+      inspectionTypeFilter ||
+      statusFilter ||
+      createdFrom ||
+      createdTo ||
+      debouncedInspectorEmailFilter
+  );
+  const activeInspectionTypeOptions = useMemo(() => getActiveInspectionTypeOptions(listRows as unknown as ReportDamageApiRow[]), [listRows]);
+  const filteredInspectionTypeOptions = useMemo(() => {
+    const query = inspectionTypeSearch.trim().toLowerCase();
+    if (!query) return activeInspectionTypeOptions;
+    return activeInspectionTypeOptions.filter((option) =>
+      `${option.number} ${option.label} ${option.displayLabel}`.toLowerCase().includes(query)
+    );
+  }, [activeInspectionTypeOptions, inspectionTypeSearch]);
   const selectedDamageReports = useMemo(
-    () => selectedDamageReportIds.map((reportId) => damageReports.find((report) => report.report_id === reportId)).filter((report): report is ReportDamageApiRow => Boolean(report)),
-    [damageReports, selectedDamageReportIds]
+    () =>
+      selectedDamageReportIds
+        .map((reportId) => listRows.find((report) => report.report_id === reportId))
+        .filter((report): report is ReportListRow => Boolean(report)),
+    [listRows, selectedDamageReportIds]
   );
   const selectedDamageReportsCount = selectedDamageReports.length;
   const selectedDamageReportVins = useMemo(
     () =>
-      selectedDamageReports
-        .map((report) => report.vin || "VIN unavailable")
+      selectedDamageReports.map((report) => report.vin || "VIN unavailable")
         .filter((vin, index, values) => values.indexOf(vin) === index),
     [selectedDamageReports]
   );
@@ -399,32 +654,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       setError("Authentication required to fetch reports.");
       return;
     }
-    setError(reportsSnapshot?.partialError ?? null);
-  }, [organizationId, reportsSnapshot?.partialError, sessionStatus]);
+    setError(listError);
+  }, [listError, organizationId, sessionStatus]);
 
-  const damageSummaries = useMemo<ReportSummary[]>(() => {
-    return damageReports.map((report) => {
-      const locationName = resolveDamageReportLocationName(report);
-      const severity = resolveTopDamageSeverity(report, report.damage_entries);
-      const normalizedStatus = (report.status as ReportStatus) || "open";
-      return {
-        id: report.report_id,
-        type: "damage",
-        status: normalizedStatus,
-        title: `${report.make || ""} ${report.model || ""}`.trim() || report.report_id,
-        vin: report.vin || "",
-        make: report.make,
-        model: report.model,
-        year: report.year,
-        inspectorEmail: report.inspector_email,
-        locationName,
-        facilityName: locationName,
-        createdAt: report.created_at,
-        updatedAt: report.updated_at,
-        severity: severity ?? "n/a",
-      };
-    });
-  }, [damageReports]);
+  const damageSummaries = useMemo<ReportSummary[]>(() => listRows.map(listRowToSummary), [listRows]);
 
   const normalizedDamageFilters = useMemo(
     () =>
@@ -456,31 +689,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const damageFilterKey = useMemo(() => serializeDamageReportFilters(normalizedDamageFilters), [normalizedDamageFilters]);
 
   const filteredDamageReports = useMemo(() => {
-    return damageReports.filter((report) => matchesDamageReportFilters(report, normalizedDamageFilters));
-  }, [damageFilterKey, damageReports, normalizedDamageFilters]);
+    return damageSummaries.filter((report) => matchesDamageReportFilters(report as unknown as ReportDamageApiRow, normalizedDamageFilters));
+  }, [damageFilterKey, damageSummaries, normalizedDamageFilters]);
 
   const filteredDamageSummaries = useMemo(() => {
-    return filteredDamageReports.map((report) => {
-      const locationName = resolveDamageReportLocationName(report);
-      const severity = resolveTopDamageSeverity(report, report.damage_entries);
-      const normalizedStatus = (report.status as ReportStatus) || "open";
-      return {
-        id: report.report_id,
-        type: "damage",
-        status: normalizedStatus,
-        title: `${report.make || ""} ${report.model || ""}`.trim() || report.report_id,
-        vin: report.vin || "",
-        make: report.make,
-        model: report.model,
-        year: report.year,
-        inspectorEmail: report.inspector_email,
-        locationName,
-        facilityName: locationName,
-        createdAt: report.created_at,
-        updatedAt: report.updated_at,
-        severity: severity ?? "n/a",
-      };
-    });
+    return filteredDamageReports;
   }, [filteredDamageReports]);
 
   const sortedDamageSummaries = useMemo(() => {
@@ -503,15 +716,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     return withIndex.map(({ summary }) => summary);
   }, [damageSortDirections, damageSortField, filteredDamageSummaries]);
 
-  const selectedDamageFullRow = useMemo(() => damageReports.find(r => r.report_id === selectedDamageReportId) ?? null, [damageReports, selectedDamageReportId]);
-  const selectedDamageRank = useMemo(
-    () => sortedDamageSummaries.findIndex((summary) => summary.id === selectedDamageReportId),
-    [selectedDamageReportId, sortedDamageSummaries]
+  const selectedDamageFullRow = useMemo(
+    () => (listRows.find((r) => r.report_id === selectedDamageReportId) as unknown as ReportDamageApiRow | null) ?? null,
+    [listRows, selectedDamageReportId]
   );
-  const selectedDamageMediaEnabled = selectedDamageRank >= 0 && selectedDamageRank < DAMAGE_MEDIA_RENDER_LIMIT;
   const selectedDamagePhotos = useMemo(
-    () => (selectedDamageMediaEnabled ? getDamageReportPhotoUrls(selectedDamageFullRow) : []),
-    [selectedDamageFullRow, selectedDamageMediaEnabled]
+    () => getDamageReportPhotoUrls(selectedDamageFullRow),
+    [selectedDamageFullRow]
   );
   const [brokenDamagePhotoUrls, setBrokenDamagePhotoUrls] = useState<Record<string, boolean>>({});
   const [activeDamagePhotoUrl, setActiveDamagePhotoUrl] = useState<string | null>(null);
@@ -523,37 +734,81 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     () => (selectedDamageFullRow && Array.isArray(selectedDamageFullRow.damage_entries) ? selectedDamageFullRow.damage_entries : []),
     [selectedDamageFullRow]
   );
+  const selectedDamageIsClearScan = useMemo(
+    () => isClearInspectionScanReport(selectedDamageFullRow),
+    [selectedDamageFullRow]
+  );
+  const selectedDamageClearMeta = useMemo(
+    () => getClearInspectionScanMeta(selectedDamageFullRow),
+    [selectedDamageFullRow]
+  );
+
+  useEffect(() => {
+    if (
+      !selectedDamageReportId ||
+      selectedDamageIsClearScan ||
+      hydratedDamageReportIdsRef.current.has(selectedDamageReportId)
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const match = await fetchDamageReportDetail(selectedDamageReportId);
+        if (cancelled) return;
+        hydratedDamageReportIdsRef.current.add(selectedDamageReportId);
+        if (match) {
+          setSelectedDamageReportId(match.report_id);
+          hydratedDamageReportIdsRef.current.add(match.report_id);
+          setListRows((current) =>
+            current.map((row) =>
+              row.report_id === selectedDamageReportId || row.report_id === match.report_id
+                ? ({ ...row, ...match, report_id: match.report_id || row.report_id } as ReportListRow)
+                : row
+            )
+          );
+        }
+      } catch {
+        hydratedDamageReportIdsRef.current.add(selectedDamageReportId);
+        // keep the list-row fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDamageFullRow, selectedDamageIsClearScan, selectedDamageReportId]);
   const facilityChoices = useMemo<FacilitySummary[]>(() => {
-    const choices = new Map<string, string>();
-    damageSummaries.forEach((summary) => {
-      const label = summary.locationName || summary.facilityName || "Unknown facility";
+    const choices = new Map<string, { id: string; label: string; slug: string }>();
+    listRows.forEach((row) => {
+      const normalized = normalizeReportListRow(row);
+      const label = normalizeFacilityChoiceLabel(normalized.locationLabel || normalized.facilityName || row.location_label || row.location_name || row.facility || "");
+      const id = label === "Other" ? "other" : String(normalized.facilityId || row.facility_id || row.location_id || slugForFacilityLabel(label));
       const slug = slugForFacilityLabel(label);
-      if (!choices.has(slug)) choices.set(slug, label);
+      if (!choices.has(id)) choices.set(id, { id, label, slug });
     });
-    return Array.from(choices.entries()).map(([slug, label]) => ({
-      id: slug,
-      name: label,
-      slug,
+    damageSummaries.forEach((summary) => {
+      const label = normalizeFacilityChoiceLabel(summary.locationName || summary.facilityName || "");
+      const slug = slugForFacilityLabel(label);
+      const id = label === "Other" ? "other" : slug;
+      if (!choices.has(id)) choices.set(id, { id, label, slug });
+    });
+    return Array.from(choices.values()).map((choice) => ({
+      id: choice.id,
+      name: choice.label,
+      slug: choice.slug,
       active: true,
       locationCount: 1,
     }));
-  }, [damageSummaries]);
+  }, [damageSummaries, listRows]);
   const inspectorChoices = useMemo(() => {
     const usersByEmail = new Map<string, { email: string; label: string }>();
-    (directory?.users ?? []).forEach((user) => {
-      if (!user.email) return;
-      usersByEmail.set(user.email.toLowerCase(), {
-        email: user.email,
-        label: user.name ? `${user.name} (${user.email})` : user.email,
-      });
-    });
     damageSummaries.forEach((summary) => {
       const email = summary.inspectorEmail?.trim();
       if (!email || usersByEmail.has(email.toLowerCase())) return;
       usersByEmail.set(email.toLowerCase(), { email, label: email });
     });
     return Array.from(usersByEmail.values()).sort((left, right) => left.label.localeCompare(right.label));
-  }, [damageSummaries, directory?.users]);
+  }, [damageSummaries]);
   const reportDateBounds = useMemo(() => {
     const dates = damageSummaries
       .map((summary) => (summary.createdAt ? new Date(summary.createdAt) : null))
@@ -564,12 +819,113 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       maxDate: dates[dates.length - 1] ? toDateInputValue(dates[dates.length - 1]) : null,
     };
   }, [damageSummaries]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPage(nextPage: number, reset = false) {
+      if (listPageRequestInFlightRef.current) return;
+      listPageRequestInFlightRef.current = true;
+      setListLoading(true);
+      setListError(null);
+      try {
+        const response = await fetchReportList({ ...listFilters, page: nextPage, pageSize });
+        if (cancelled) return;
+        const nextRows = normalizeReportListResponseRows(response.rows);
+        const responsePage = Number(response.page ?? nextPage);
+        const responseHasMore =
+          Boolean(response.hasNextPage) &&
+          nextRows.length >= Number(response.pageSize ?? pageSize);
+        listRowIdsRef.current = new Set(nextRows.map((row) => row.report_id).filter(Boolean));
+        setHasNextPage(responseHasMore);
+        setTotalCount(Number(response.total ?? 0));
+        setPage(responsePage);
+        setListRows(reset ? nextRows : (current) => [...current, ...nextRows.filter((row) => !current.some((existing) => existing.report_id === row.report_id))]);
+      } catch (err) {
+        if (!cancelled) {
+          setListError(err instanceof Error ? err.message : "Unable to load reports.");
+        }
+      } finally {
+        listPageRequestInFlightRef.current = false;
+        if (!cancelled) {
+          setListLoading(false);
+        }
+      }
+    }
+    setPage(1);
+    setHasNextPage(true);
+    listRowIdsRef.current = new Set();
+    void loadPage(1, true);
+    return () => {
+      cancelled = true;
+    };
+  }, [listFilters, pageSize, reloadToken]);
+
+  const loadNextPage = useCallback(() => {
+    if (listLoading || !hasNextPage || listPageRequestInFlightRef.current) return;
+    void (async () => {
+      listPageRequestInFlightRef.current = true;
+      setListLoading(true);
+      setListError(null);
+      await fetchReportList({ ...listFilters, page: page + 1, pageSize }).then((response) => {
+        const responsePage = Number(response.page ?? page + 1);
+        const nextRows = normalizeReportListResponseRows(response.rows);
+        const uniqueRows = nextRows.filter((row) => {
+          const reportId = row.report_id;
+          return reportId && !listRowIdsRef.current.has(reportId);
+        });
+        uniqueRows.forEach((row) => {
+          if (row.report_id) listRowIdsRef.current.add(row.report_id);
+        });
+        const madeProgress = responsePage > page && uniqueRows.length > 0;
+        const responseHasMore =
+          Boolean(response.hasNextPage) &&
+          madeProgress &&
+          nextRows.length >= Number(response.pageSize ?? pageSize);
+        setHasNextPage(responseHasMore);
+        setTotalCount(Number(response.total ?? 0));
+        setPage(responsePage > page ? responsePage : page);
+        if (uniqueRows.length > 0) {
+          setListRows((current) => [...current, ...uniqueRows]);
+        }
+      }).catch((err) => {
+        setListError(err instanceof Error ? err.message : "Unable to load more reports.");
+      }).finally(() => {
+        listPageRequestInFlightRef.current = false;
+        setListLoading(false);
+      });
+    })();
+  }, [hasNextPage, listFilters, listLoading, page, pageSize]);
+
+  useEffect(() => {
+    if (!hasActiveBackendOrLocalFilter || listLoading || !hasNextPage || listRows.length === 0) {
+      return;
+    }
+    if (autoExpandedFilterKeyRef.current === listFilterRequestKey) {
+      return;
+    }
+    if (totalCount <= listRows.length) {
+      return;
+    }
+    autoExpandedFilterKeyRef.current = listFilterRequestKey;
+    loadNextPage();
+  }, [
+    hasActiveBackendOrLocalFilter,
+    hasNextPage,
+    listFilterRequestKey,
+    listLoading,
+    listRows.length,
+    loadNextPage,
+    totalCount,
+  ]);
   const clearDamageFilters = useCallback(() => {
     setActiveDamageFilterKeys([]);
     setFacilityFilter("all");
     setSearchTerm("");
     setReportIdFilter("");
     setVinFilter("");
+    setInspectionTypeFilter("");
+    setInspectionTypeSearch("");
+    setInspectionTypeSuggestionsOpen(false);
     setMakeFilter("");
     setModelFilter("");
     setInspectorEmailFilter("");
@@ -589,6 +945,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     if (key === "facility") setFacilityFilter("all");
     if (key === "report_id") setReportIdFilter("");
     if (key === "vin") setVinFilter("");
+    if (key === "inspection_type") setInspectionTypeFilter("");
     if (key === "make") setMakeFilter("");
     if (key === "model") setModelFilter("");
     if (key === "inspector_email") setInspectorEmailFilter("");
@@ -634,12 +991,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }, [selectedDamageReportId, selectedDamageReportIds]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBrokenDamagePhotoUrls({});
   }, [selectedDamageReportId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveDamagePhotoUrl(null);
   }, [selectedDamageReportId]);
 
@@ -647,16 +1002,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     () => selectedDamagePhotos.filter((url) => !brokenDamagePhotoUrls[url]),
     [brokenDamagePhotoUrls, selectedDamagePhotos]
   );
-  const selectedDamageMediaLimitMessage =
-    selectedDamageFullRow && !selectedDamageMediaEnabled
-      ? `Media is only rendered for the first ${DAMAGE_MEDIA_RENDER_LIMIT} reports in this view.`
-      : null;
-
   useEffect(() => {
     if (!isDamageEditOpen || !selectedDamageFullRow) {
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDamageEditDraft(buildDamageReportEditDraft(selectedDamageFullRow));
     setDamageEditStatus("Edit the report details and save changes when ready.");
   }, [isDamageEditOpen, selectedDamageFullRow]);
@@ -730,19 +1079,20 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         damage_summary: selectedDamageFullRow.damage_summary ?? [],
         photo_urls: selectedDamageFullRow.photo_urls ?? [],
         splat_urls: selectedDamageFullRow.splat_urls ?? [],
+        splatImageUrl: selectedDamageFullRow.splatImageUrl ?? "",
         pdf_url: selectedDamageFullRow.pdf_url ?? selectedDamageFullRow.overview?.pdf_url ?? "",
         status: selectedDamageFullRow.status ?? "open",
       };
       await ReportsAdapter.updateDamageReport(selectedDamageFullRow.report_id, payload);
       setDamageEditStatus("Report saved successfully.");
-      await refreshReportsSnapshot();
+      setReloadToken((current) => current + 1);
       setIsDamageEditOpen(false);
       setDamageEditDraft(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save damage report.";
       setDamageEditStatus(message);
     }
-  }, [damageEditDraft, refreshReportsSnapshot, selectedDamageFullRow]);
+  }, [damageEditDraft, selectedDamageFullRow]);
 
   const toggleDamageMultiSelect = useCallback(() => {
     setDamageMultiSelectEnabled((current) => !current);
@@ -777,7 +1127,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   const downloadSelectedDamageCsv = useCallback(() => {
     if (selectedDamageReports.length === 0) return;
-    const rows = buildFilteredReportCsvRows(selectedDamageReports, "facility");
+    const rows = buildFilteredReportCsvRows(selectedDamageReports as unknown as ReportDamageApiRow[], "facility");
     if (rows.length <= 1) return;
     const csv = rows
       .map((row) =>
@@ -799,7 +1149,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       const zip = new JSZip();
       const fetched: Array<{ vin: string; bytes: Uint8Array } | null> = await Promise.all(
         selectedDamageReports.map(async (report) => {
-          const pdfUrl = ReportsAdapter.resolveDamageReportPdfUrl(report);
+          const pdfUrl = ReportsAdapter.resolveDamageReportPdfUrl(report as unknown as ReportDamageApiRow);
           if (!pdfUrl) return null;
           const response = await fetch(pdfUrl);
           if (!response.ok) return null;
@@ -875,6 +1225,55 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             onChange={(event) => setVinFilter(event.target.value.toUpperCase())}
             className={`${damageFilterInputClass} sticky top-0 w-full pl-9`}
           />
+        </div>
+      );
+    }
+    if (key === "inspection_type") {
+      return (
+        <div className="relative w-96">
+          <input
+            type="search"
+            placeholder="Type inspection number or name"
+            value={inspectionTypeSearch}
+            onChange={(event) => {
+              const nextSearch = event.target.value;
+              setInspectionTypeSearch(nextSearch);
+              setInspectionTypeSuggestionsOpen(Boolean(nextSearch.trim()));
+              if (!nextSearch.trim()) {
+                setInspectionTypeFilter("");
+              }
+            }}
+            onFocus={() => setInspectionTypeSuggestionsOpen(Boolean(inspectionTypeSearch.trim()))}
+            onBlur={() => {
+              window.setTimeout(() => setInspectionTypeSuggestionsOpen(false), 120);
+            }}
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+          />
+          {inspectionTypeSuggestionsOpen && inspectionTypeSearch.trim() ? (
+            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
+              <div className="max-h-64 overflow-auto py-1">
+                {filteredInspectionTypeOptions.length > 0 ? (
+                  filteredInspectionTypeOptions.map((option) => (
+                    <button
+                      key={option.number}
+                      type="button"
+                      onClick={() => {
+                        setInspectionTypeFilter(option.number);
+                        setInspectionTypeSearch(`${option.number} - ${option.label}`);
+                        setInspectionTypeSuggestionsOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-slate-900 transition hover:bg-slate-100"
+                    >
+                      <span className="font-semibold text-slate-900">{option.number}</span>
+                      <span className="min-w-0 flex-1 truncate text-right text-slate-600">{option.label}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-sm text-slate-500">No matching inspection type.</div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
       );
     }
@@ -979,9 +1378,9 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                       </Badge>
                       <Button
                         type="button"
-                        variant={damageMultiSelectEnabled ? "default" : "outline"}
+                        variant="outline"
                         size="sm"
-                        className="gap-2"
+                        className="gap-2 border-black bg-white text-black hover:bg-slate-100 data-[state=on]:bg-slate-900 data-[state=on]:text-white"
                         onClick={toggleDamageMultiSelect}
                       >
                         <ListFilter className="h-4 w-4" />
@@ -1002,7 +1401,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     </div>
                     <DropdownMenu open={damageFilterMenuOpen} onOpenChange={setDamageFilterMenuOpen}>
                       <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="outline" size="sm" className="gap-2">
+                        <Button type="button" variant="outline" size="sm" className="gap-2 border-black bg-white text-black hover:bg-slate-100 data-[state=open]:bg-slate-900 data-[state=open]:text-white">
                           <Filter className="h-4 w-4" />
                           + Add filter
                         </Button>
@@ -1031,27 +1430,28 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         setDamageFilterMenuOpen(false);
                         clearDamageFilters();
                       }}
+                      className="border-black bg-white text-black hover:bg-slate-100"
                     >
                       <FilterX className="mr-2 h-4 w-4" />
                       Clear
                     </Button>
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
-                    onClick={() => void refreshReportsSnapshot()}
-                      disabled={loading}
-                      title={loading ? "Refresh in progress" : "Refresh reports"}
+                      onClick={() => setReloadToken((current) => current + 1)}
+                      disabled={listLoading}
+                      title={listLoading ? "Refresh in progress" : "Refresh reports"}
                     >
-                      <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`mr-2 h-4 w-4 ${listLoading ? "animate-spin" : ""}`} />
                       Refresh
                     </Button>
                     <Button
                       type="button"
-                      variant="default"
+                      variant="outline"
                       size="sm"
                       onClick={() => {
-                        const rows = buildFilteredReportCsvRows(filteredDamageReports, "facility");
+                        const rows = buildFilteredReportCsvRows(filteredDamageReports as unknown as ReportDamageApiRow[], "facility");
                         if (rows.length <= 1) return;
                         const csv = rows
                           .map((row) =>
@@ -1077,13 +1477,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         {activeDamageFilterKeys.filter((key) => !(hideFacilitySelector && key === "facility")).map((key) => {
                           const label = DAMAGE_FILTER_OPTIONS.find((option) => option.key === key)?.label ?? key;
                           return (
-                            <div key={key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                            <div key={key} className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
                               <span className="w-24 shrink-0 truncate text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
                               {renderDamageFilterControl(key)}
                               <button
                                 type="button"
                                 onClick={() => removeDamageFilter(key)}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
+                                className="mt-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
                                 aria-label={`Remove ${label} filter`}
                               >
                                 Remove
@@ -1096,7 +1496,17 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                   ) : null}
                 </div>
                 <CardContent className="min-h-0 flex-1 p-0">
-                  <ScrollArea className="h-full">
+                  <ScrollArea
+                    className="h-full"
+                    onScrollCapture={(event) => {
+                      const target = event.currentTarget;
+                      if (!target || listLoading || !hasNextPage) return;
+                      const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+                      if (distanceFromBottom < 240) {
+                        loadNextPage();
+                      }
+                    }}
+                  >
                     <Table>
                       <TableHeader className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur">
                         <TableRow className="bg-slate-50/95">
@@ -1138,7 +1548,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {loading ? (
+                        {listLoading && listRows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
                               <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
@@ -1147,23 +1557,34 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                               </div>
                             </TableCell>
                           </TableRow>
-                        ) : error ? (
+                        ) : listError ? (
                           <TableRow>
                             <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
                               <div className="space-y-2 text-center">
                                 <div className="text-sm font-semibold text-rose-600">Damage reports could not be loaded.</div>
-                                <div className="break-all whitespace-normal text-xs text-rose-500">{error}</div>
+                                <div className="break-all whitespace-normal text-xs text-rose-500">{listError}</div>
                               </div>
                             </TableCell>
                           </TableRow>
                         ) : sortedDamageSummaries.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
-                              <EmptyState title="No Reports Found" description="No matching reports for your criteria." />
+                              <div className="space-y-4">
+                                <EmptyState title="No Reports Found" description="No matching reports in the rows loaded so far." />
+                                {hasNextPage ? (
+                                  <div className="flex justify-center">
+                                    <Button type="button" variant="outline" size="sm" onClick={loadNextPage} disabled={listLoading}>
+                                      <RefreshCw className={`mr-2 h-4 w-4 ${listLoading ? "animate-spin" : ""}`} />
+                                      Load next rows
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ) : (
-                          sortedDamageSummaries.map((entry) => {
+                          <>
+                            {sortedDamageSummaries.map((entry) => {
                             const isSelected = entry.id === selectedDamageReportId;
                             const isMultiSelected = selectedDamageReportIds.includes(entry.id);
                             const rowTone = isMultiSelected ? "bg-blue-50/80" : "bg-white";
@@ -1195,7 +1616,28 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                 </TableCell>
                               </TableRow>
                             );
-                          })
+                          })}
+                            {listLoading ? (
+                              <TableRow>
+                                <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-6">
+                                  <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                    Loading more...
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : hasNextPage ? (
+                              <TableRow>
+                                <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-5">
+                                  <div className="flex justify-center">
+                                    <Button type="button" variant="outline" size="sm" onClick={loadNextPage}>
+                                      Load next rows
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : null}
+                          </>
                         )}
                       </TableBody>
                     </Table>
@@ -1225,7 +1667,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     <div className="space-y-3">
                       <Button
                         type="button"
-                        variant="secondary"
+                        variant="outline"
                         size="lg"
                         className="h-11 gap-2 px-4 mx-auto flex"
                         disabled={isDownloadingSelectedPdf || selectedDamageReportsCount === 0}
@@ -1282,8 +1724,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <StatusBadge label={selectedDamageFullRow.status || "open"} tone={toneForReportStatus(selectedDamageFullRow.status || "open")} />
+                      {selectedDamageIsClearScan ? (
+                        <Badge variant="secondary" className="rounded-full border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                          Damage clear
+                        </Badge>
+                      ) : null}
                       <Badge variant="secondary" className="rounded-full border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800">
-                        {formatDamageReportTimestamp(selectedDamageFullRow.created_at || selectedDamageFullRow.updated_at)}
+                        {formatDamageReportTimestamp(selectedDamageClearMeta.timestamp || selectedDamageFullRow.created_at || selectedDamageFullRow.updated_at)}
                       </Badge>
                       {!hideFacilitySelector ? (
                         <Badge variant="secondary" className="rounded-full border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
@@ -1301,7 +1748,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         variant="outline"
                         size="lg"
                         className="h-10 gap-2 px-4"
-                        disabled={!selectedDamageMediaEnabled || !selectedDamageFullRow.report_id || !selectedDamagePhotos.length || isDownloadingPhotos}
+                        disabled={!selectedDamageFullRow.report_id || !selectedDamagePhotos.length || isDownloadingPhotos}
                         onClick={async () => {
                           if (!selectedDamageFullRow.report_id || isDownloadingPhotos) return;
                           setIsDownloadingPhotos(true);
@@ -1319,7 +1766,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                       </Button>
                       <Button
                         type="button"
-                        variant="secondary"
+                        variant="outline"
                         size="lg"
                         className="h-10 gap-2 px-4"
                         disabled={!selectedDamagePdfUrl}
@@ -1363,7 +1810,49 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                               <p className="mt-1 text-sm leading-6 text-slate-700">{selectedDamageReportComment}</p>
                             </div>
                           ) : null}
-                          {selectedDamageEntries.length > 0 ? (
+                          {selectedDamageIsClearScan ? (
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                              <div className="flex items-start gap-3">
+                                <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                                  <CheckCircle2 className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0 flex-1 space-y-3">
+                                  <div>
+                                    <p className="text-sm font-black text-emerald-950">Damage clear</p>
+                                    <p className="mt-1 text-sm leading-6 text-emerald-900">
+                                      This was scanned and marked as damage clear.
+                                    </p>
+                                  </div>
+                                  <div className="grid gap-2 text-sm sm:grid-cols-2">
+                                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 px-3 py-2">
+                                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Scan time</p>
+                                      <p className="mt-1 font-semibold text-slate-900">
+                                        {formatDamageReportTimestamp(selectedDamageClearMeta.timestamp)}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 px-3 py-2">
+                                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Marked by</p>
+                                      <p className="mt-1 break-all font-semibold text-slate-900">
+                                        {selectedDamageClearMeta.inspectorEmail || "Unavailable"}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 px-3 py-2">
+                                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Inventory bay</p>
+                                      <p className="mt-1 font-semibold text-slate-900">
+                                        {selectedDamageClearMeta.inventoryBay || selectedDamageClearMeta.sector || "Unavailable"}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 px-3 py-2">
+                                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Confirmed bay</p>
+                                      <p className="mt-1 font-semibold text-slate-900">
+                                        {selectedDamageClearMeta.confirmedBay || "Unavailable"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : selectedDamageEntries.length > 0 ? (
                             <div className="space-y-3">
                               {selectedDamageEntries.map((entry, index) => {
                                 const entryRecord = entry as unknown as Record<string, unknown>;
@@ -1446,10 +1935,6 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                   </div>
                                 </button>
                               ))}
-                            </div>
-                          ) : selectedDamageMediaLimitMessage ? (
-                            <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
-                              <p className="text-sm font-medium text-slate-600">{selectedDamageMediaLimitMessage}</p>
                             </div>
                           ) : (
                             <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
@@ -1673,7 +2158,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
               type="button"
               onClick={() => void saveDamageReportEditor()}
               disabled={!damageEditDraft || !selectedDamageFullRow}
-              className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Save changes
             </button>
@@ -1687,7 +2172,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
               <button
                 type="button"
                 onClick={() => setActiveDamagePhotoUrl(null)}
-                className="absolute right-4 top-4 z-10 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white transition hover:bg-black/80"
+                className="absolute right-4 top-4 z-10 rounded-full border border-[color:var(--portal-button-border)] bg-[color:var(--portal-button-bg)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-button-fg)] transition hover:bg-[color:var(--portal-button-bg-hover)]"
               >
                 Close
               </button>

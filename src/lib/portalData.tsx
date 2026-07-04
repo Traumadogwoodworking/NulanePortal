@@ -7,7 +7,13 @@ import { usePortalSession } from "@/lib/portalSession";
 import { fetchBranding } from "@/lib/services/brandingService";
 import { fetchControlPlaneBootstrap, fetchOperationsStatus, fetchReadinessStatus } from "@/lib/services/controlPlaneService";
 import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
-import { ReportsAdapter } from "@/lib/services/reportService";
+import {
+  type DashboardAnalyticsParams,
+  type DashboardAnalyticsResponse,
+  fetchDashboardAnalytics,
+  fetchReportList,
+  ReportsAdapter,
+} from "@/lib/services/reportService";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { fetchEmailLists, fetchEmailListMembers } from "@/lib/services/notificationsService";
 import type { ControlPlaneBootstrapPayload } from "@/lib/services/controlPlaneService";
@@ -28,8 +34,8 @@ const REVALIDATE_ON_RECONNECT = true;
 const KEEP_PREVIOUS_DATA = true;
 const DIRECTORY_CACHE_KEY_PREFIX = "portalDirectoryCache";
 const BRANDING_CACHE_KEY_PREFIX = "portalBrandingCache";
-const REPORTS_CACHE_KEY_PREFIX_V2 = "portalReportsSnapshotCacheV2";
-const REPORTS_CACHE_KEY_PREFIX = "portalReportsSnapshotCache";
+const REPORTS_CACHE_KEY_PREFIX = "portalReportsSnapshotCacheV4";
+const DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX = "portalDashboardAnalyticsCacheV2";
 const CACHE_TTL_MS = STALE_TIME_MS;
 
 type CachedPayload<T> = {
@@ -42,6 +48,7 @@ const reportsMemoryCache = new Map<string, CachedPayload<ReportsSnapshot>>();
 const brandingMemoryCache = new Map<string, CachedPayload<BrandingSnapshot | null>>();
 const controlMemoryCache = new Map<string, CachedPayload<ControlSnapshot>>();
 const emailMembersMemoryCache = new Map<string, CachedPayload<EmailListMemberSummary[]>>();
+const dashboardAnalyticsMemoryCache = new Map<string, CachedPayload<DashboardAnalyticsResponse>>();
 
 interface DirectorySnapshot {
   users: UserSummary[];
@@ -56,7 +63,16 @@ interface ReportsSnapshot {
   damageReports: ReportDamageApiRow[];
   rsaReports: RsaReportApiRow[];
   partialError: string | null;
+  damageStatus?: ReportStreamStatus;
+  rsaStatus?: ReportStreamStatus;
+  lastUpdated?: string | null;
 }
+
+type ReportStreamStatus = {
+  refreshing: boolean;
+  error: string | null;
+  lastUpdated: string | null;
+};
 
 export type ReportSnapshotKind = "damage" | "rsa";
 
@@ -137,6 +153,32 @@ function writeCachedPayload<T>(
   }
 }
 
+function normalizeDashboardAnalyticsParams(params: DashboardAnalyticsParams = {}): DashboardAnalyticsParams {
+  return Object.keys(params)
+    .sort()
+    .reduce<DashboardAnalyticsParams>((acc, key) => {
+      const value = params[key as keyof DashboardAnalyticsParams];
+      if (value === undefined || value === null) {
+        return acc;
+      }
+      const stringValue = String(value).trim();
+      if (!stringValue) {
+        return acc;
+      }
+      acc[key as keyof DashboardAnalyticsParams] = stringValue;
+      return acc;
+    }, {});
+}
+
+function getDashboardAnalyticsCacheScope(
+  organizationId: string,
+  userId: string | null | undefined,
+  normalizedParams: DashboardAnalyticsParams
+): string {
+  const userScope = typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
+  return `${userScope}:${organizationId}:${JSON.stringify(normalizedParams)}`;
+}
+
 function hasUsefulDirectoryData(value: DirectorySnapshot | null): boolean {
   return Boolean(
     value &&
@@ -150,6 +192,55 @@ function hasUsefulDirectoryData(value: DirectorySnapshot | null): boolean {
 
 function hasUsefulReportsData(value: ReportsSnapshot | null): boolean {
   return Boolean(value && (value.damageReports.length > 0 || value.rsaReports.length > 0));
+}
+
+function emptyReportStreamStatus(): ReportStreamStatus {
+  return {
+    refreshing: false,
+    error: null,
+    lastUpdated: null,
+  };
+}
+
+function normalizeReportsSnapshot(value?: Partial<ReportsSnapshot> | null): ReportsSnapshot {
+  return {
+    damageReports: value?.damageReports ?? [],
+    rsaReports: value?.rsaReports ?? [],
+    partialError: value?.partialError ?? null,
+    damageStatus: value?.damageStatus ?? emptyReportStreamStatus(),
+    rsaStatus: value?.rsaStatus ?? emptyReportStreamStatus(),
+    lastUpdated: value?.lastUpdated ?? null,
+  };
+}
+
+function normalizeRsaOnlyReportsSnapshot(value?: Partial<ReportsSnapshot> | null): ReportsSnapshot {
+  const snapshot = normalizeReportsSnapshot(value);
+  return finalizeReportsSnapshot({
+    ...snapshot,
+    damageReports: [],
+    damageStatus: emptyReportStreamStatus(),
+  });
+}
+
+function getReportsPartialError(snapshot: ReportsSnapshot): string | null {
+  const errors = [snapshot.damageStatus?.error, snapshot.rsaStatus?.error].filter((entry): entry is string =>
+    Boolean(entry)
+  );
+  return errors.length ? errors.join(" | ") : null;
+}
+
+function finalizeReportsSnapshot(value?: Partial<ReportsSnapshot> | null): ReportsSnapshot {
+  const snapshot = normalizeReportsSnapshot(value);
+  return {
+    ...snapshot,
+    partialError: getReportsPartialError(snapshot),
+  };
+}
+
+function formatReportStreamError(kind: ReportSnapshotKind, error: unknown): string {
+  const label = kind === "damage" ? "damage reports" : "rsa reports";
+  const fallback = kind === "damage" ? "Unable to load damage reports." : "Unable to load RSA reports.";
+  return `${label}: ${error instanceof Error ? error.message : fallback}`;
 }
 
 function normalizeDirectoryUsers(users: UserSummary[], memberships: LocationMembership[]): UserSummary[] {
@@ -527,13 +618,15 @@ export function usePortalReportsSnapshot() {
   const { organizationId } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const scope = getPortalScopeKey(resolvedOrgId, null);
-  const cachedValue = resolvedOrgId
-    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, {
+  const rawCachedValue = resolvedOrgId
+    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, {
         allowStale: true,
         storage: "local",
       })
     : null;
+  const cachedValue = rawCachedValue ? normalizeRsaOnlyReportsSnapshot(rawCachedValue) : null;
   const usableCache = hasUsefulReportsData(cachedValue);
+  const swrKey = scope ? [...scope, "reports", "snapshot", "v4"] : null;
   if (process.env.NODE_ENV !== "production") {
     console.debug("[portalData] usePortalReportsSnapshot", {
       organizationId,
@@ -544,37 +637,76 @@ export function usePortalReportsSnapshot() {
     });
   }
   return useSWR<ReportsSnapshot | undefined>(
-    scope ? [...scope, "reports", "snapshot", "v2"] : null,
+    swrKey,
     async () => {
       if (!resolvedOrgId) {
-        return { damageReports: [], rsaReports: [], partialError: null };
+        return finalizeReportsSnapshot();
       }
-      const previousSnapshot = cachedValue ?? { damageReports: [], rsaReports: [], partialError: null };
-      const [damageReportsResult, rsaReportsResult] = await Promise.allSettled([
-        ReportsAdapter.fetchDamageReports({ organization_id: resolvedOrgId }),
-        ReportsAdapter.fetchRsaReports(),
-      ]);
-      const partialErrors = [
-        damageReportsResult.status === "rejected"
-          ? `damage reports: ${damageReportsResult.reason instanceof Error ? damageReportsResult.reason.message : "Unable to load damage reports."}`
-          : null,
-        rsaReportsResult.status === "rejected"
-          ? `rsa reports: ${rsaReportsResult.reason instanceof Error ? rsaReportsResult.reason.message : "Unable to load RSA reports."}`
-          : null,
-      ].filter((entry): entry is string => Boolean(entry));
-      const snapshot = {
-        damageReports: mergeCachedReports(
-          previousSnapshot.damageReports,
-          damageReportsResult.status === "fulfilled" ? damageReportsResult.value : []
-        ),
-        rsaReports: mergeCachedReports(
-          previousSnapshot.rsaReports,
-          rsaReportsResult.status === "fulfilled" ? rsaReportsResult.value : []
-        ),
-        partialError: partialErrors.length ? partialErrors.join(" | ") : null,
+
+      const readLatestSnapshot = () =>
+        normalizeRsaOnlyReportsSnapshot(
+          readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, {
+            allowStale: true,
+            storage: "local",
+          }) ?? cachedValue
+        );
+      const publishSnapshot = (snapshot: ReportsSnapshot) => {
+        const finalizedSnapshot = normalizeRsaOnlyReportsSnapshot(snapshot);
+        writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, finalizedSnapshot, "local");
+        if (swrKey) {
+          void globalMutate(swrKey, finalizedSnapshot, false);
+        }
+        return finalizedSnapshot;
       };
-      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX_V2, resolvedOrgId, snapshot, "local");
-      return snapshot;
+
+      const initialSnapshot = readLatestSnapshot();
+      const startedSnapshot = publishSnapshot({
+        ...initialSnapshot,
+        damageReports: [],
+        damageStatus: emptyReportStreamStatus(),
+        rsaStatus: { ...(initialSnapshot.rsaStatus ?? emptyReportStreamStatus()), refreshing: true, error: null },
+      });
+
+      const rsaTask = ReportsAdapter.fetchRsaReports()
+        .then((rsaReports) => {
+          const latestSnapshot = readLatestSnapshot();
+          return publishSnapshot({
+            ...latestSnapshot,
+            rsaReports: mergeCachedReports(latestSnapshot.rsaReports, rsaReports),
+            rsaStatus: {
+              refreshing: false,
+              error: null,
+              lastUpdated: new Date().toISOString(),
+            },
+            lastUpdated: new Date().toISOString(),
+          });
+        })
+        .catch((error) => {
+          const latestSnapshot = readLatestSnapshot();
+          publishSnapshot({
+            ...latestSnapshot,
+            rsaStatus: {
+              ...(latestSnapshot.rsaStatus ?? emptyReportStreamStatus()),
+              refreshing: false,
+              error: formatReportStreamError("rsa", error),
+            },
+          });
+          throw error;
+        });
+
+      await Promise.allSettled([rsaTask]);
+      const latestSnapshot = readLatestSnapshot();
+      const completedSnapshot = normalizeRsaOnlyReportsSnapshot({
+        ...latestSnapshot,
+        damageReports: [],
+        damageStatus: emptyReportStreamStatus(),
+        rsaStatus: {
+          ...(latestSnapshot.rsaStatus ?? startedSnapshot.rsaStatus ?? emptyReportStreamStatus()),
+          refreshing: false,
+        },
+      });
+      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, completedSnapshot, "local");
+      return completedSnapshot;
     },
     {
       fallbackData: cachedValue ?? undefined,
@@ -583,4 +715,83 @@ export function usePortalReportsSnapshot() {
       revalidateOnMount: !usableCache,
     }
   );
+}
+
+export function useDashboardAnalyticsSnapshot(params: DashboardAnalyticsParams = {}) {
+  const { organizationId, session } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  const normalizedParams = normalizeDashboardAnalyticsParams(params);
+  const paramsKey = JSON.stringify(normalizedParams);
+  const cacheScope = resolvedOrgId
+    ? getDashboardAnalyticsCacheScope(resolvedOrgId, session?.user?.user_id ?? null, normalizedParams)
+    : null;
+  const cachedValue = cacheScope
+    ? readCachedPayload(dashboardAnalyticsMemoryCache, DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX, cacheScope, {
+        allowStale: true,
+        storage: "local",
+      })
+    : null;
+  const key = resolvedOrgId
+    ? ["portal/dashboard-analytics", session?.user?.user_id ?? "anonymous", resolvedOrgId, "v2", paramsKey]
+    : null;
+  const swr = useSWR<DashboardAnalyticsResponse>(
+    key,
+    async () => {
+      const data = await fetchDashboardAnalytics(normalizedParams);
+      if (cacheScope) {
+        writeCachedPayload(
+          dashboardAnalyticsMemoryCache,
+          DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX,
+          cacheScope,
+          data,
+          "local"
+        );
+      }
+      return data;
+    },
+    {
+      fallbackData: cachedValue ?? undefined,
+      revalidateIfStale: true,
+      revalidateOnMount: true,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: STALE_TIME_MS,
+      focusThrottleInterval: STALE_TIME_MS,
+      keepPreviousData: true,
+      onSuccess: (data) => {
+        if (cacheScope) {
+          writeCachedPayload(
+            dashboardAnalyticsMemoryCache,
+            DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX,
+            cacheScope,
+            data,
+            "local"
+          );
+        }
+      },
+    }
+  );
+  return {
+    ...swr,
+    hasCachedData: Boolean(cachedValue),
+    normalizedParams,
+  };
+}
+
+export function useReportListSnapshot(params: Parameters<typeof fetchReportList>[0] = {}) {
+  const { organizationId } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  const requestedPageSize = Number(params.pageSize ?? params.limit ?? 50);
+  const pageSize = Number.isFinite(requestedPageSize) ? Math.min(Math.max(Math.floor(requestedPageSize), 1), 50) : 50;
+  const effectiveParams = {
+    ...params,
+    page: params.page ?? 1,
+    limit: pageSize,
+    pageSize,
+  };
+  const key = resolvedOrgId ? ["portal/report-list", resolvedOrgId, JSON.stringify(effectiveParams)] : null;
+  return useSWR(key, async () => fetchReportList(effectiveParams), {
+    revalidateIfStale: true,
+    keepPreviousData: true,
+  });
 }

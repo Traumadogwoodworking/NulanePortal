@@ -31,6 +31,107 @@ function mockTimestamp(offsetMinutes = 0): string {
   return new Date(Date.now() - offsetMinutes * 60_000).toISOString();
 }
 
+function buildMockReportRows() {
+  return [
+    {
+      report_id: "damage-001",
+      organization_id: "org-awct",
+      vin: "1HGBH41JXMN109186",
+      make: "Atlas",
+      model: "Rover",
+      year: 2025,
+      status: "open",
+      inspector_email: "ops@example.com",
+      splat_urls: [MOCK_BRAND_LOGO],
+      photo_urls: [MOCK_BRAND_LOGO],
+      pdf_url: "/media/mock-damage-report.pdf",
+      damage_summary: [{ damage_area: "Front Fascia", damage_type: "Impact", severity: "high" }],
+      location: {
+        location_label: "A-Peak",
+        location_name: "Western Hub",
+        facility: "Western Hub",
+      },
+      created_at: mockTimestamp(120),
+      updated_at: mockTimestamp(45),
+    },
+    {
+      report_id: "damage-002",
+      organization_id: "org-awct",
+      vin: "1HGBH41JXMN109187",
+      make: "Atlas",
+      model: "Carrier",
+      year: 2024,
+      status: "review",
+      inspector_email: "ops@example.com",
+      splat_urls: [],
+      photo_urls: [],
+      damage_summary: [],
+      location: {
+        location_label: "B-Zone",
+        location_name: "Eastern Yard",
+        facility: "Eastern Yard",
+      },
+      created_at: mockTimestamp(80),
+      updated_at: mockTimestamp(35),
+    },
+  ];
+}
+
+function buildMockDashboardAnalytics() {
+  return {
+    totals: {
+      totalReports: 3,
+      damageReports: 2,
+      noDamageReports: 1,
+      twentyFourHourReports: 1,
+      inspection02Reports: 1,
+      rsaReports: 1,
+      damageReportsToday: 2,
+      rsaReportsToday: 1,
+      reportsToday: 3,
+      reportsLast7Days: 3,
+      reportsThisMonth: 3,
+      reportsThisYear: 3,
+      vins: 2,
+      entries: 1,
+      facilities: 2,
+    },
+    currentPeriod: {
+      damageToday: 2,
+      rsaToday: 1,
+      damageLast7Days: 2,
+      rsaLast7Days: 1,
+      damageMonthToDate: 2,
+      damageYearToDate: 2,
+    },
+    severity: [{ level: "high", label: "High", count: 1, percent: 100 }],
+    severityGroups: { low: 0, medium: 0, high: 1 },
+    byFacility: [
+      { key: "western-hub", label: "Western Hub", totalReports: 2, damageReports: 1, noDamageReports: 1, rsaReports: 1, reportsToday: 2, reportsLast7Days: 2, reportsThisMonth: 2, reportsThisYear: 2, vins: 1, entries: 1 },
+      { key: "eastern-yard", label: "Eastern Yard", totalReports: 1, damageReports: 1, noDamageReports: 0, rsaReports: 0, reportsToday: 1, reportsLast7Days: 1, reportsThisMonth: 1, reportsThisYear: 1, vins: 1, entries: 0 },
+    ],
+    byFacilityDaily: [
+      { date: new Date().toISOString().slice(0, 10), label: "Western Hub", damageReports: 1, noDamageReports: 1 },
+      { date: new Date().toISOString().slice(0, 10), label: "Eastern Yard", damageReports: 1, noDamageReports: 0 },
+    ],
+    byInspector: [{ email: "ops@example.com", label: "ops@example.com", reportCount: 3 }],
+    byInspectorDaily: [
+      {
+        date: new Date().toISOString().slice(0, 10),
+        email: "ops@example.com",
+        label: "ops@example.com",
+        reportCount: 3,
+        damageReports: 2,
+        noDamageReports: 1,
+      },
+    ],
+    byInspectionType: [{ number: "02", label: "Interchange", count: 1 }],
+    topAreas: [{ name: "Front Fascia", count: 1 }],
+    topTypes: [{ name: "Impact", count: 1 }],
+    dailyTrend: [{ date: new Date().toISOString().slice(0, 10), damageReports: 2, rsaReports: 1 }],
+  };
+}
+
 function buildMockOutbox(): ControlOutboxItem[] {
   return [
     {
@@ -302,6 +403,10 @@ function toJsonResponse(body: unknown): Response {
 }
 
 function resolveForcedDevResponse(path: string): Response | null {
+  if (path.includes("/dashboard/analytics")) {
+    return toJsonResponse(buildMockDashboardAnalytics());
+  }
+
   if (path.includes("/dashboard/summary")) {
     return toJsonResponse({
       organizationId: "org-awct",
@@ -312,6 +417,11 @@ function resolveForcedDevResponse(path: string): Response | null {
       alerts: 0,
       lastUpdated: mockTimestamp(5),
     });
+  }
+
+  if (path.includes("/reports/list")) {
+    const rows = buildMockReportRows();
+    return toJsonResponse({ rows, page: 1, pageSize: rows.length, limit: rows.length, total: rows.length, hasNextPage: false });
   }
 
   if (path.includes("/reports/rsa") || path.includes("/report/pull")) {
@@ -419,6 +529,10 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
     return buildMockSession();
   }
 
+  if (path.includes("/dashboard/analytics")) {
+    return buildMockDashboardAnalytics();
+  }
+
   if (path.includes("/dashboard/summary")) {
     return {
       organizationId: "org-awct",
@@ -431,21 +545,16 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
     };
   }
 
+  if (path.includes("/reports/list")) {
+    const rows = buildMockReportRows();
+    return { rows, page: 1, pageSize: rows.length, limit: rows.length, total: rows.length, hasNextPage: false };
+  }
+
   if (path.includes("/report/pull")) {
     return {
       vin: "1HGBH41JXMN109186",
-      reports: [
-        {
-          report_id: "damage-001",
-          organization_id: "org-awct",
-          vin: "1HGBH41JXMN109186",
-          make: "Atlas",
-          model: "Rover",
-          year: 2025,
-          status: "open",
-          inspector_email: "ops@example.com",
-          splat_urls: [MOCK_BRAND_LOGO],
-          pdf_url: "/media/mock-damage-report.pdf",
+      reports: buildMockReportRows().map((row) => ({
+        ...row,
           damage_entries: [
             {
               damage_area: "Front Fascia",
@@ -457,38 +566,11 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
               ],
             },
           ],
-          location: {
-            location_label: "A-Peak",
-            location_name: "Western Hub",
-            facility: "Western Hub",
-          },
-          created_at: mockTimestamp(120),
-          updated_at: mockTimestamp(45),
-        },
-        {
-          report_id: "damage-002",
-          organization_id: "org-awct",
-          vin: "1HGBH41JXMN109187",
-          make: "Atlas",
-          model: "Carrier",
-          year: 2024,
-          status: "review",
-          inspector_email: "ops@example.com",
-          splat_urls: [],
-          damage_entries: [],
-          location: {
-            location_label: "B-Zone",
-            location_name: "Eastern Yard",
-            facility: "Eastern Yard",
-          },
-          created_at: mockTimestamp(80),
-          updated_at: mockTimestamp(35),
-        },
-      ],
+      })),
     };
   }
 
-  if (path.includes("/reports/rsa")) {
+  if (path.includes("/railcar-scans/report/pull") || path.includes("/reports/rsa")) {
     return {
       reports: [
         {

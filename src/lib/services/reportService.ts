@@ -2,15 +2,198 @@ import { apiFetch, apiFetchResponse } from "@/lib/apiClient";
 import { isDevMockEnabled } from "@/lib/devMockApi";
 import { buildApiUrl, normalizeMediaUrl } from "@/lib/config";
 import { getPortalAccessToken } from "@/lib/portalAuth";
+import { normalizeReportListRows } from "@/lib/reportNormalizer";
 import type {
   ReportDamageApiRow,
   ReportFilters,
   RsaReportApiRow,
 } from "@/lib/types";
 
+export type DashboardAnalyticsParams = {
+  from?: string;
+  to?: string;
+  facility_id?: string;
+  location_id?: string;
+  inspection_type?: string;
+  module_key?: string;
+  status?: string;
+  user_id?: string;
+  inspector_email?: string;
+  report_id?: string;
+  vin?: string;
+  make?: string;
+  model?: string;
+  yard?: string;
+  severity?: string;
+  damage_area?: string;
+  search?: string;
+};
+
+export type DashboardAnalyticsResponse = {
+  range?: {
+    from?: string | null;
+    to?: string | null;
+  };
+  scope?: Record<string, unknown>;
+  totals?: {
+    totalReports?: number;
+    damageReports?: number;
+    noDamageReports?: number;
+    noDamageCount?: number;
+    noDamageScans?: number;
+    twentyFourHourReports?: number;
+    twentyFourHourCount?: number;
+    inspection02Reports?: number;
+    inspection02Count?: number;
+    rsaReports?: number;
+    damageReportsToday?: number;
+    rsaReportsToday?: number;
+    reportsToday?: number;
+    reportsLast7Days?: number;
+    reportsThisWeek?: number;
+    reportsThisMonth?: number;
+    reportsThisYear?: number;
+    vins?: number;
+    entries?: number;
+    facilities?: number;
+  };
+  currentPeriod?: {
+    damageToday?: number;
+    rsaToday?: number;
+    damageLast7Days?: number;
+    rsaLast7Days?: number;
+    damageMonthToDate?: number;
+    damageYearToDate?: number;
+  };
+  severity?: Array<{ level: string; label: string; count: number; percent?: number }>;
+  severityGroups?: {
+    low?: number;
+    medium?: number;
+    high?: number;
+  };
+  dailyTrend?: Array<{ date: string; damageReports: number; rsaReports: number }>;
+  byFacilityDaily?: Array<Record<string, unknown>>;
+  facilityDaily?: Array<Record<string, unknown>>;
+  byFacility?: Array<Record<string, unknown>>;
+  facilities?: Array<Record<string, unknown>>;
+  topAreas?: Array<{ name: string; count: number }>;
+  topTypes?: Array<{ name: string; count: number }>;
+  byInspector?: Array<{ email: string; label?: string; reportCount: number; damageEntries?: number; totalDamages?: number; severity?: unknown[] }>;
+  byInspectorDaily?: Array<Record<string, unknown>>;
+  recentActivity?: Array<Record<string, unknown>>;
+  byInspectionType?: Array<Record<string, unknown>>;
+};
+
+export type ReportListParams = {
+  page?: number;
+  pageSize?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  report_id?: string;
+  vin?: string;
+  make?: string;
+  model?: string;
+  yard?: string;
+  facility_id?: string;
+  location_id?: string;
+  inspection_type?: string;
+  module_key?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+  inspector_email?: string;
+  severity?: string;
+  damage_area?: string;
+};
+
+export type ReportListRow = {
+  report_id: string;
+  reportId?: string;
+  id?: string;
+  organization_id?: string;
+  sourceType?: string;
+  source_type?: string;
+  vin?: string;
+  vehicleVin?: string;
+  make?: string;
+  model?: string;
+  year?: number | string | null;
+  status?: string;
+  damageStatus?: string;
+  damage_status?: string;
+  scanStatus?: string;
+  scan_status?: string;
+  inspectorName?: string;
+  inspector_name?: string;
+  inspector_email?: string;
+  inspectorEmail?: string;
+  userEmail?: string;
+  created_at?: string;
+  createdAt?: string;
+  submitted_at?: string;
+  submittedAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  inspection_type_number?: string | number | null;
+  inspectionTypeNumber?: string | number | null;
+  inspection_type_label?: string | null;
+  inspectionTypeLabel?: string | null;
+  module_key?: string | null;
+  moduleKey?: string | null;
+  location_id?: string | null;
+  locationId?: string | null;
+  facility_id?: string | null;
+  facilityId?: string | null;
+  location_label?: string | null;
+  locationLabel?: string | null;
+  location_name?: string | null;
+  locationName?: string | null;
+  facility?: string | null;
+  facilityName?: string | null;
+  navigation?: string | null;
+  yard?: string | null;
+  yardId?: string | null;
+  yard_id?: string | null;
+  yardName?: string | null;
+  yard_name?: string | null;
+  yardLabel?: string | null;
+  yard_label?: string | null;
+  location?: unknown;
+  damage_summary?: unknown[];
+  damage_entries?: unknown[];
+  photoUrls?: unknown[];
+  photo_urls?: unknown[];
+  photos?: unknown[];
+  splatUrls?: unknown[];
+  splat_urls?: unknown[];
+  pdfUrl?: string | null;
+  pdf_url?: string | null;
+  media?: Record<string, unknown> | null;
+  mediaPayload?: Record<string, unknown> | null;
+  media_payload?: Record<string, unknown> | null;
+  raw?: Record<string, unknown>;
+};
+
+export type ReportListResponse = {
+  rows: ReportListRow[];
+  page: number;
+  pageSize: number;
+  limit?: number;
+  total: number;
+  hasNextPage: boolean;
+  sort?: string;
+  filters?: Record<string, unknown>;
+};
+
 const REPORTS_ENDPOINT = "/report/pull";
+const REPORTS_LIST_ENDPOINT = "/reports/list";
 const REPORT_MUTATIONS_ENDPOINT = "/reports";
-const RSA_REPORTS_ENDPOINT = "/reports/rsa";
+const RSA_REPORTS_ENDPOINT = "/railcar-scans/report/pull";
+const RSA_REPORTS_PAGE_SIZE = 500;
+const RSA_REPORTS_MAX_PAGES = 200;
+const REPORTS_PAGINATION_BATCH_SIZE = 4;
+const DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES = 80;
 const MILESTONE_FETCH_ENDPOINT = "/reports/milestones";
 const MILESTONE_SUBMIT_ENDPOINT = "/milestones/reports";
 
@@ -47,6 +230,115 @@ function extractReportsArray<T>(response: unknown): T[] {
     console.warn("Unknown report response shape:", response);
   }
   return []; // Default to empty array if shape is unknown
+}
+
+function readNumericResponseField(response: unknown, fieldName: string): number | null {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    return null;
+  }
+  const value = (response as Record<string, unknown>)[fieldName];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function readBooleanResponseField(response: unknown, fieldName: string): boolean | null {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    return null;
+  }
+  const value = (response as Record<string, unknown>)[fieldName];
+  return typeof value === "boolean" ? value : null;
+}
+
+function mergeReportsById<T extends { report_id?: string }>(existing: T[], incoming: T[]): T[] {
+  const mergedById = new Map<string, T>();
+
+  [...existing, ...incoming].forEach((report, index) => {
+    const key = report.report_id?.trim() || `__missing_${index}`;
+    mergedById.set(key, report);
+  });
+
+  return Array.from(mergedById.values());
+}
+
+function getPaginatedFetchEndPage(total: number | null, pageSize: number, maxPages: number): number {
+  if (total !== null && total > 0 && pageSize > 0) {
+    return Math.min(maxPages, Math.max(1, Math.ceil(total / pageSize)));
+  }
+  return maxPages;
+}
+
+async function fetchAllRsaReportPages(): Promise<RsaReportApiRow[]> {
+  const firstResponse = await apiFetch<unknown>(
+    `${RSA_REPORTS_ENDPOINT}${buildNamedQueryString({ page: 1, pageSize: RSA_REPORTS_PAGE_SIZE })}`
+  );
+  const firstPage = extractReportsArray<RsaReportApiRow>(firstResponse).map((report) => normalizeRsaReportRow(report));
+  const total = readNumericResponseField(firstResponse, "total");
+  const hasNextPage = readBooleanResponseField(firstResponse, "hasNextPage");
+  const effectiveTotal = hasNextPage === true && total !== null && total <= firstPage.length ? null : total;
+
+  if (!firstPage.length || (hasNextPage !== true && (effectiveTotal === null || firstPage.length >= effectiveTotal || firstPage.length < RSA_REPORTS_PAGE_SIZE))) {
+    return firstPage;
+  }
+
+  let merged = firstPage;
+  const endPage = getPaginatedFetchEndPage(effectiveTotal, RSA_REPORTS_PAGE_SIZE, RSA_REPORTS_MAX_PAGES);
+
+  for (let batchStart = 2; batchStart <= endPage; batchStart += REPORTS_PAGINATION_BATCH_SIZE) {
+    const batchPages = Array.from(
+      { length: Math.min(REPORTS_PAGINATION_BATCH_SIZE, endPage - batchStart + 1) },
+      (_, index) => batchStart + index
+    );
+    const pageResults = await Promise.allSettled(
+      batchPages.map(async (page) => ({
+        page,
+        response: await apiFetch<unknown>(
+          `${RSA_REPORTS_ENDPOINT}${buildNamedQueryString({ page, pageSize: RSA_REPORTS_PAGE_SIZE })}`
+        ),
+      }))
+    );
+    const rejectedResult = pageResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (rejectedResult) {
+      throw rejectedResult.reason;
+    }
+
+    let shouldStop = false;
+    for (const result of pageResults) {
+      if (result.status !== "fulfilled") continue;
+      const { response } = result.value;
+      const pageRows = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
+      if (!pageRows.length) {
+        shouldStop = true;
+        break;
+      }
+
+      const beforeCount = merged.length;
+      merged = mergeReportsById(merged, pageRows);
+      const responseHasNextPage = readBooleanResponseField(response, "hasNextPage");
+      const rawResponseTotal = readNumericResponseField(response, "total") ?? effectiveTotal;
+      const responseTotal =
+        responseHasNextPage === true && rawResponseTotal !== null && rawResponseTotal <= merged.length
+          ? null
+          : rawResponseTotal;
+
+      if (responseHasNextPage === false) shouldStop = true;
+      if (responseTotal !== null && merged.length >= responseTotal) shouldStop = true;
+      if (pageRows.length < RSA_REPORTS_PAGE_SIZE) shouldStop = true;
+      if (merged.length === beforeCount) shouldStop = true;
+      if (shouldStop) break;
+    }
+
+    if (shouldStop) {
+      break;
+    }
+  }
+
+  return merged;
 }
 
 function extractDamageReportsArray(response: unknown): ReportDamageApiRow[] {
@@ -166,7 +458,7 @@ function extractDamageReportsArray(response: unknown): ReportDamageApiRow[] {
 function buildReportQueryString(filters: ReportFilters = {}) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    const candidate = value?.toString().trim();
+    const candidate = normalizeQueryParamValue(key, value);
     if (candidate) {
       params.set(key, candidate);
     }
@@ -175,8 +467,232 @@ function buildReportQueryString(filters: ReportFilters = {}) {
   return queryString ? `?${queryString}` : "";
 }
 
+function buildNamedQueryString(filters: Record<string, unknown> = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    const candidate = normalizeQueryParamValue(key, value);
+    if (candidate) {
+      params.set(key, candidate);
+    }
+  });
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
+function normalizeQueryParamValue(key: string, value: unknown): string {
+  const candidate = value?.toString().trim() ?? "";
+  if (!candidate) return "";
+  if ((key === "from" || key === "to") && /^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+    const [year, month, day] = candidate.split("-").map(Number);
+    if (year && month && day) {
+      const date =
+        key === "from"
+          ? new Date(year, month - 1, day, 0, 0, 0, 0)
+          : new Date(year, month - 1, day, 23, 59, 59, 999);
+      return date.toISOString();
+    }
+  }
+  return candidate;
+}
+
 export function buildNormalizedReportQueryString(filters: ReportFilters = {}) {
   return buildReportQueryString(filters);
+}
+
+export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams = {}): Promise<DashboardAnalyticsResponse> {
+  return apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`);
+}
+
+export async function fetchReportList(params: ReportListParams = {}): Promise<ReportListResponse> {
+  const resolvedPageSize = params.limit ?? params.pageSize ?? 50;
+  const queryParams = {
+    page: params.page ?? 1,
+    pageSize: resolvedPageSize,
+    limit: params.limit,
+    sort: params.sort ?? "created_at_desc",
+    search: params.search,
+    report_id: params.report_id,
+    vin: params.vin,
+    make: params.make,
+    model: params.model,
+    yard: params.yard,
+    facility_id: params.facility_id,
+    location_id: params.location_id,
+    inspection_type: params.inspection_type,
+    module_key: params.module_key,
+    status: params.status,
+    from: params.from,
+    to: params.to,
+    inspector_email: params.inspector_email,
+    severity: params.severity,
+    damage_area: params.damage_area,
+  };
+  const response = await apiFetch<unknown>(`${REPORTS_LIST_ENDPOINT}${buildNamedQueryString(queryParams)}`);
+  if (Array.isArray(response)) {
+    return {
+      rows: response as ReportListRow[],
+      page: params.page ?? 1,
+      pageSize: resolvedPageSize,
+      limit: resolvedPageSize,
+      total: response.length,
+      hasNextPage: response.length >= resolvedPageSize,
+      sort: queryParams.sort,
+      filters: queryParams,
+    };
+  }
+  const record = response && typeof response === "object" ? (response as Record<string, unknown>) : {};
+  const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? (record.data as Record<string, unknown>) : null;
+  const rows =
+    (Array.isArray(record.rows) ? record.rows : null) ??
+    (Array.isArray(record.reports) ? record.reports : null) ??
+    (Array.isArray(record.items) ? record.items : null) ??
+    (Array.isArray(record.results) ? record.results : null) ??
+    (Array.isArray(record.data) ? record.data : null) ??
+    (data && Array.isArray(data.rows) ? data.rows : null) ??
+    (data && Array.isArray(data.reports) ? data.reports : null) ??
+    [];
+  const page = Number(record.page ?? data?.page ?? params.page ?? 1);
+  const pageSize = Number(record.pageSize ?? record.limit ?? data?.pageSize ?? data?.limit ?? resolvedPageSize);
+  const total = Number(record.total ?? data?.total ?? rows.length);
+  const hasNextPage =
+    typeof record.hasNextPage === "boolean"
+      ? record.hasNextPage
+      : typeof data?.hasNextPage === "boolean"
+        ? data.hasNextPage
+        : rows.length >= pageSize && page * pageSize < total;
+  return {
+    rows: rows as ReportListRow[],
+    page,
+    pageSize,
+    limit: Number(record.limit ?? data?.limit ?? pageSize),
+    total,
+    hasNextPage,
+    sort: typeof record.sort === "string" ? record.sort : queryParams.sort,
+    filters: (record.filters && typeof record.filters === "object" ? record.filters : queryParams) as Record<string, unknown>,
+  };
+}
+
+function reportListRowToDamageReport(row: ReportListRow): ReportDamageApiRow {
+  const normalized = normalizeReportListRows([row])[0];
+  const raw = row as Record<string, unknown>;
+  return normalizeDamageReportRow({
+    ...raw,
+    report_id: normalized?.reportId || normalized?.id || row.report_id || raw.id,
+    vin: normalized?.vin || row.vin,
+    inspection_type_number: normalized?.inspectionTypeNumber || raw.inspection_type_number,
+    status: normalized?.status || raw.status,
+    inspector_email: normalized?.inspectorEmail || raw.inspector_email,
+    created_at: normalized?.createdAt || raw.created_at,
+    updated_at: normalized?.updatedAt || raw.updated_at,
+    location_id: normalized?.facilityId || raw.location_id,
+    facility_id: normalized?.facilityId || raw.facility_id,
+    location_label: normalized?.locationLabel || raw.location_label,
+    location_name: normalized?.locationLabel || raw.location_name,
+    facility: normalized?.facilityName || raw.facility,
+    navigation: normalized?.locationLabel || raw.navigation,
+    yard: normalized?.yardName || raw.yard,
+    yard_id: normalized?.yardId || raw.yard_id,
+    yard_name: normalized?.yardName || raw.yard_name,
+    yard_label: normalized?.yardName || raw.yard_label,
+    photo_urls: normalized?.photoUrls ?? raw.photo_urls,
+    splat_urls: normalized?.splatUrls ?? raw.splat_urls,
+    pdf_url: normalized?.pdfUrl || raw.pdf_url,
+    damage_summary: Array.isArray(raw.damage_summary) ? raw.damage_summary : [],
+    damage_entries: Array.isArray(raw.damage_entries)
+      ? raw.damage_entries
+      : Array.isArray(raw.damageEntries)
+        ? raw.damageEntries
+        : [],
+    metadata: {
+      ...(raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata) ? raw.metadata : {}),
+      listEndpoint: REPORTS_LIST_ENDPOINT,
+      listRow: true,
+    },
+  } as ReportDamageApiRow);
+}
+
+export async function fetchDamageReportListSnapshot(params: ReportListParams = {}): Promise<ReportDamageApiRow[]> {
+  const resolvedPage = params.page ?? 1;
+  const resolvedPageSize = params.pageSize ?? params.limit ?? 100;
+  const response = await fetchReportList({
+    ...params,
+    page: resolvedPage,
+    pageSize: resolvedPageSize,
+    limit: params.limit ?? params.pageSize ?? resolvedPageSize,
+    sort: params.sort ?? "created_at_desc",
+  });
+  let merged = response.rows.map(reportListRowToDamageReport);
+
+  if (
+    resolvedPage !== 1 ||
+    !response.hasNextPage ||
+    !response.rows.length ||
+    response.rows.length < response.pageSize
+  ) {
+    return merged;
+  }
+
+  const effectiveTotal = response.hasNextPage && response.total <= merged.length ? null : response.total;
+  const endPage = getPaginatedFetchEndPage(effectiveTotal, response.pageSize, DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES);
+  for (let batchStart = 2; batchStart <= endPage; batchStart += REPORTS_PAGINATION_BATCH_SIZE) {
+    const batchPages = Array.from(
+      { length: Math.min(REPORTS_PAGINATION_BATCH_SIZE, endPage - batchStart + 1) },
+      (_, index) => batchStart + index
+    );
+    const pageResults = await Promise.allSettled(
+      batchPages.map(async (page) => ({
+        page,
+        response: await fetchReportList({
+          ...params,
+          page,
+          pageSize: response.pageSize,
+          limit: response.pageSize,
+          sort: params.sort ?? "created_at_desc",
+        }),
+      }))
+    );
+    const rejectedResult = pageResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (rejectedResult) {
+      throw rejectedResult.reason;
+    }
+
+    let shouldStop = false;
+    for (const result of pageResults) {
+      if (result.status !== "fulfilled") continue;
+      const nextResponse = result.value.response;
+      const nextRows = nextResponse.rows.map(reportListRowToDamageReport);
+      if (!nextRows.length) {
+        shouldStop = true;
+        break;
+      }
+
+      const beforeCount = merged.length;
+      merged = mergeReportsById(merged, nextRows);
+      const hasReliableTotal = nextResponse.total > merged.length || !nextResponse.hasNextPage;
+      if (!nextResponse.hasNextPage) shouldStop = true;
+      if (hasReliableTotal && nextResponse.total > 0 && merged.length >= nextResponse.total) shouldStop = true;
+      if (nextResponse.rows.length < nextResponse.pageSize) shouldStop = true;
+      if (merged.length === beforeCount) shouldStop = true;
+      if (shouldStop) break;
+    }
+
+    if (shouldStop) {
+      break;
+    }
+  }
+
+  return merged;
+}
+
+export async function fetchDamageReportDetail(reportId: string): Promise<ReportDamageApiRow | null> {
+  const normalizedReportId = reportId.trim();
+  if (!normalizedReportId) return null;
+  const response = await apiFetch<unknown>(
+    `${REPORTS_ENDPOINT}${buildReportQueryString({ report_id: normalizedReportId })}`
+  );
+  const parsedReports = extractDamageReportsArray(response);
+  const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
+  return normalizedReports.find((report) => report.report_id === normalizedReportId) ?? normalizedReports[0] ?? null;
 }
 
 function getDamageReportOrganizationId(filters: ReportFilters = {}): string | null {
@@ -197,8 +713,49 @@ function resolveStringCandidate(...candidates: unknown[]): string | null {
   return null;
 }
 
+function normalizeSplatImageUrl(report: Record<string, unknown>): string | null {
+  const nestedReport = report.report && typeof report.report === "object" ? (report.report as Record<string, unknown>) : null;
+  const nestedPayload = report.payload && typeof report.payload === "object" ? (report.payload as Record<string, unknown>) : null;
+  return resolveStringCandidate(
+    report.splatImageUrl,
+    report.splat_image_url,
+    report.splatUrl,
+    report.splat_url,
+    report.splat_chart_url,
+    report.splatChartUrl,
+    report.splatChart,
+    report.mapPhoto,
+    nestedReport?.splatImageUrl,
+    nestedReport?.splat_image_url,
+    nestedReport?.splatUrl,
+    nestedReport?.splat_url,
+    nestedPayload?.splatImageUrl,
+    nestedPayload?.splat_image_url,
+    nestedPayload?.splatUrl,
+    nestedPayload?.splat_url,
+    Array.isArray(report.splat_urls) ? report.splat_urls[0] : null,
+    Array.isArray(report.splat_urls_original) ? report.splat_urls_original[0] : null
+  );
+}
+
+function readNestedObject(record: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  const value = record[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+export function resolveDamageReportSplatImageUrl(report: ReportDamageApiRow | Record<string, unknown>): string | null {
+  const record = report as Record<string, unknown>;
+  return normalizeSplatImageUrl(record);
+}
+
 function normalizeDamageReportRow(report: ReportDamageApiRow | Record<string, unknown>): ReportDamageApiRow {
   const record = report as Record<string, unknown>;
+  const location = readNestedObject(record, "location");
+  const metadata = readNestedObject(record, "metadata");
+  const payload = readNestedObject(record, "payload");
+  const nestedReport = readNestedObject(record, "report");
+  const payloadMetadata = payload ? readNestedObject(payload, "metadata") : null;
+  const nestedReportMetadata = nestedReport ? readNestedObject(nestedReport, "metadata") : null;
   const reportId = resolveStringCandidate(
     record.report_id,
     record.reportId,
@@ -230,17 +787,167 @@ function normalizeDamageReportRow(report: ReportDamageApiRow | Record<string, un
     record.submitted_at,
     record.submittedAt
   );
+  const locationId = resolveStringCandidate(
+    record.location_id,
+    record.locationId,
+    record.facility_id,
+    record.facilityId,
+    location?.location_id,
+    location?.locationId,
+    location?.facility_id,
+    location?.facilityId,
+    metadata?.location_id,
+    metadata?.facility_id,
+    payload?.location_id,
+    payload?.facility_id,
+    nestedReport?.location_id,
+    nestedReport?.facility_id
+  );
+  const facilityId = resolveStringCandidate(
+    record.facility_id,
+    record.facilityId,
+    record.location_id,
+    record.locationId,
+    location?.facility_id,
+    location?.facilityId,
+    location?.location_id,
+    location?.locationId,
+    metadata?.facility_id,
+    metadata?.location_id,
+    payload?.facility_id,
+    payload?.location_id,
+    nestedReport?.facility_id,
+    nestedReport?.location_id
+  );
+  const locationLabel = resolveStringCandidate(
+    record.location_label,
+    record.locationLabel,
+    location?.location_label,
+    location?.locationLabel,
+    metadata?.location_label,
+    payload?.location_label,
+    nestedReport?.location_label
+  );
+  const locationName = resolveStringCandidate(
+    record.location_name,
+    record.locationName,
+    location?.location_name,
+    location?.locationName,
+    metadata?.location_name,
+    payload?.location_name,
+    nestedReport?.location_name
+  );
+  const facility = resolveStringCandidate(
+    record.facility,
+    record.facility_name,
+    record.facilityName,
+    location?.facility,
+    metadata?.facility,
+    metadata?.facility_name,
+    metadata?.facilityName,
+    payload?.facility,
+    payload?.facility_name,
+    payload?.facilityName,
+    nestedReport?.facility,
+    nestedReport?.facility_name,
+    nestedReport?.facilityName
+  );
+  const navigation = resolveStringCandidate(
+    record.navigation,
+    record.navFacility,
+    location?.navigation,
+    metadata?.navigation,
+    metadata?.navigation_row,
+    payload?.navigation,
+    payload?.navigation_row,
+    nestedReport?.navigation,
+    nestedReport?.navigation_row
+  );
+  const yardId = resolveStringCandidate(
+    record.yard_id,
+    record.yardId,
+    metadata?.yard_id,
+    metadata?.yardId,
+    payload?.yard_id,
+    payload?.yardId,
+    payloadMetadata?.yard_id,
+    payloadMetadata?.yardId,
+    nestedReport?.yard_id,
+    nestedReport?.yardId,
+    nestedReportMetadata?.yard_id,
+    nestedReportMetadata?.yardId,
+    location?.yard_id,
+    location?.yardId
+  );
+  const yard = resolveStringCandidate(
+    record.yard,
+    record.yard_name,
+    record.yardName,
+    record.yard_label,
+    record.yardLabel,
+    metadata?.yard,
+    metadata?.yard_name,
+    metadata?.yardName,
+    metadata?.yard_label,
+    metadata?.yardLabel,
+    payload?.yard,
+    payload?.yard_name,
+    payload?.yardName,
+    payload?.yard_label,
+    payload?.yardLabel,
+    payloadMetadata?.yard,
+    payloadMetadata?.yard_name,
+    payloadMetadata?.yardName,
+    payloadMetadata?.yard_label,
+    payloadMetadata?.yardLabel,
+    nestedReport?.yard,
+    nestedReport?.yard_name,
+    nestedReport?.yardName,
+    nestedReport?.yard_label,
+    nestedReport?.yardLabel,
+    nestedReportMetadata?.yard,
+    nestedReportMetadata?.yard_name,
+    nestedReportMetadata?.yardName,
+    nestedReportMetadata?.yard_label,
+    nestedReportMetadata?.yardLabel,
+    location?.yard,
+    location?.yard_name,
+    location?.yardName,
+    location?.yard_label,
+    location?.yardLabel
+  );
+  const splatImageUrl = normalizeSplatImageUrl(record);
+  const splatUrls = Array.isArray(record.splat_urls)
+    ? record.splat_urls.map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean)
+    : [];
+  const splatUrlsOriginal = Array.isArray(record.splat_urls_original)
+    ? record.splat_urls_original.map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean)
+    : [];
+  const normalizedSplatUrls = Array.from(new Set([...(splatUrlsOriginal.length ? splatUrlsOriginal : splatUrls), ...(splatImageUrl ? [splatImageUrl] : [])]));
   return {
     ...(report as ReportDamageApiRow),
     report_id: reportId || (record.report_id as string) || "",
     ...(organizationId ? { organization_id: organizationId } : {}),
     ...(createdAt ? { created_at: createdAt } : {}),
     ...(updatedAt ? { updated_at: updatedAt } : {}),
+    ...(locationId ? { location_id: locationId } : {}),
+    ...(facilityId ? { facility_id: facilityId } : {}),
+    ...(locationLabel ? { location_label: locationLabel } : {}),
+    ...(locationName ? { location_name: locationName } : {}),
+    ...(facility ? { facility } : {}),
+    ...(navigation ? { navigation } : {}),
+    ...(yardId ? { yard_id: yardId } : {}),
+    ...(yard ? { yard, yard_name: yard, yard_label: yard } : {}),
+    ...(splatImageUrl ? { splatImageUrl } : {}),
+    ...(normalizedSplatUrls.length ? { splat_urls: normalizedSplatUrls } : {}),
   };
 }
 
 function normalizeRsaReportRow(report: RsaReportApiRow | Record<string, unknown>): RsaReportApiRow {
   const record = report as Record<string, unknown>;
+  const location = readNestedObject(record, "location");
+  const payload = readNestedObject(record, "payload");
+  const railcarScan = readNestedObject(record, "railcar_scan");
   const reportId = resolveStringCandidate(record.report_id, record.reportId, record.id);
   const organizationId = resolveStringCandidate(record.organization_id, record.organizationId, record.org_id, record.orgId);
   const createdAt = resolveStringCandidate(
@@ -259,12 +966,24 @@ function normalizeRsaReportRow(report: RsaReportApiRow | Record<string, unknown>
     record.submitted_at,
     record.submittedAt
   );
+  const locationId = resolveStringCandidate(record.location_id, record.locationId, record.facility_id, record.facilityId, location?.location_id, location?.locationId, location?.facility_id, location?.facilityId, payload?.location_id, payload?.facility_id, railcarScan?.location_id, railcarScan?.facility_id);
+  const facilityId = resolveStringCandidate(record.facility_id, record.facilityId, record.location_id, record.locationId, location?.facility_id, location?.facilityId, location?.location_id, location?.locationId, payload?.facility_id, payload?.location_id, railcarScan?.facility_id, railcarScan?.location_id);
+  const locationLabel = resolveStringCandidate(record.location_label, record.locationLabel, location?.location_label, location?.locationLabel, payload?.location_label, railcarScan?.location_label);
+  const locationName = resolveStringCandidate(record.location_name, record.locationName, location?.location_name, location?.locationName, payload?.location_name, railcarScan?.location_name);
+  const facility = resolveStringCandidate(record.facility, record.facility_name, record.facilityName, location?.facility, payload?.facility, payload?.facility_name, payload?.facilityName, railcarScan?.facility, railcarScan?.facility_name, railcarScan?.facilityName);
+  const navigation = resolveStringCandidate(record.navigation, record.navFacility, location?.navigation, payload?.navigation, payload?.navigation_row, railcarScan?.navigation, railcarScan?.navigation_row);
   return {
     ...(report as RsaReportApiRow),
     report_id: reportId || (record.report_id as string) || "",
     ...(organizationId ? { organization_id: organizationId } : {}),
     ...(createdAt ? { created_at: createdAt } : {}),
     ...(updatedAt ? { updated_at: updatedAt } : {}),
+    ...(locationId ? { location_id: locationId } : {}),
+    ...(facilityId ? { facility_id: facilityId } : {}),
+    ...(locationLabel ? { location_label: locationLabel } : {}),
+    ...(locationName ? { location_name: locationName } : {}),
+    ...(facility ? { facility } : {}),
+    ...(navigation ? { navigation } : {}),
   };
 }
 
@@ -360,8 +1079,7 @@ export async function fetchDamageReportsUncached(filters: ReportFilters = {}): P
 }
 
 export async function fetchRsaReportsUncached(): Promise<RsaReportApiRow[]> {
-  const response = await apiFetch<unknown>(RSA_REPORTS_ENDPOINT);
-  const results = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
+  const results = await fetchAllRsaReportPages();
   if (process.env.NODE_ENV === "development") {
     console.info("[rsa-reports] uncached", {
       reportPullCount: results.length,
@@ -481,9 +1199,7 @@ export class ReportsAdapter {
 
   static async fetchRsaReports(): Promise<RsaReportApiRow[]> {
     try {
-      const response = await apiFetch<unknown>(RSA_REPORTS_ENDPOINT);
-      const results = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
-      return results;
+      return await fetchAllRsaReportPages();
     } catch (err) {
       const responseError = err as { status?: number; message?: string };
       if (responseError.status === 404) {
@@ -527,12 +1243,26 @@ export class ReportsAdapter {
   }
 
   static resolveDamageReportPdfUrl(report: ReportDamageApiRow): string | null {
+    const reportRecord = report as unknown as Record<string, unknown>;
+    const media = reportRecord.media && typeof reportRecord.media === "object" ? (reportRecord.media as Record<string, unknown>) : {};
+    const mediaPayload =
+      reportRecord.mediaPayload && typeof reportRecord.mediaPayload === "object"
+        ? (reportRecord.mediaPayload as Record<string, unknown>)
+        : reportRecord.media_payload && typeof reportRecord.media_payload === "object"
+          ? (reportRecord.media_payload as Record<string, unknown>)
+          : {};
     const candidates = [
       report.pdf_url,
       (report as { pdfUrl?: unknown }).pdfUrl,
       (report as { report_pdf_url?: unknown }).report_pdf_url,
       (report as { pdf_url_original?: unknown }).pdf_url_original,
       report.overview?.pdf_url,
+      media.pdfUrl,
+      media.pdf_url,
+      mediaPayload.pdfUrl,
+      mediaPayload.pdf_url,
+      Array.isArray(mediaPayload.pdfUrls) ? mediaPayload.pdfUrls[0] : null,
+      Array.isArray(mediaPayload.pdf_urls) ? mediaPayload.pdf_urls[0] : null,
     ]
       .map((value) => value?.toString().trim())
       .filter(Boolean) as string[];
