@@ -1,5 +1,5 @@
 import { ANALYTICS_DAILY_FACILITY_REQUIREMENTS, ANALYTICS_DAILY_INSPECTOR_REQUIREMENTS, DASHBOARD_ANALYTICS_ENDPOINT } from "./constants";
-import type { HomeDashboardVisualConfig } from "./types";
+import type { HomeDashboardSectionConfig, HomeDashboardVisualConfig } from "./types";
 
 export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
   {
@@ -8,6 +8,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Damage workflow submissions, with clear/no-damage kept visible and RSA excluded.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["totals.damageReports", "totals.noDamageReports"],
+    dataSource: "dashboard-analytics",
+    measures: ["damageReports", "noDamageReports"],
+    dimensions: ["organization", "date range"],
+    slicers: ["from", "to", "facility", "inspector", "status", "inspection type", "VIN", "report id"],
+    adapter: "summary totals selector in src/app/home/page.tsx, backed by analytics-adapters.ts readers",
+    component: "MetricCard",
+    exportFile: "sections/card-data.csv",
+    emptyState: "Show zero or backend coverage warning; do not infer damaged from total reports.",
   },
   {
     id: "summary-damaged-today",
@@ -15,6 +23,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Daily damaged submission count from explicit backend damaged fields.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["totals.damageReportsToday or currentPeriod.damageToday"],
+    dataSource: "dashboard-analytics",
+    measures: ["damageReportsToday", "clearReportsToday"],
+    dimensions: ["date"],
+    slicers: ["from", "to", "facility", "inspector", "status", "inspection type"],
+    adapter: "summary currentPeriod selector in src/app/home/page.tsx",
+    component: "MetricCard",
+    exportFile: "sections/card-data.csv",
+    emptyState: "Show explicit zero when the backend sends no today value.",
   },
   {
     id: "summary-damage-vs-clear",
@@ -22,6 +38,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Side-by-side split when backend sends damaged and clear fields.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["totals.damageReports", "totals.noDamageReports or totals.clearReports"],
+    dataSource: "dashboard-analytics",
+    measures: ["damageReports", "noDamageReports"],
+    dimensions: ["organization", "date range"],
+    slicers: ["from", "to", "facility", "inspector", "status", "inspection type"],
+    adapter: "readAnalyticsSplitPair for row-level splits; summary totals selector for headline split",
+    component: "DamageClearMetricValue inside MetricCard",
+    exportFile: "sections/card-data.csv",
+    emptyState: "Show backend coverage warning when split fields are missing.",
   },
   {
     id: "summary-rsa-reports",
@@ -29,6 +53,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "RSA kept as a separate report family, not mixed into damage submissions.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["totals.rsaReports"],
+    dataSource: "dashboard-analytics",
+    measures: ["rsaReports", "rsaReportsToday"],
+    dimensions: ["date range", "organization"],
+    slicers: ["from", "to", "facility"],
+    adapter: "summary totals selector in src/app/home/page.tsx",
+    component: "MetricCard",
+    exportFile: "sections/card-data.csv",
+    emptyState: "Show zero RSA without adding it to damage submission totals.",
   },
   {
     id: "facility-daily-trend",
@@ -36,6 +68,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Per-day facility clear and damaged breakdown.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ANALYTICS_DAILY_FACILITY_REQUIREMENTS,
+    dataSource: "dashboard-analytics",
+    measures: ["damageReports", "noDamageReports"],
+    dimensions: ["date", "facility label", "facility id"],
+    slicers: ["from", "to", "facility", "status", "inspection type"],
+    adapter: "buildDailyAnalyticsTrend and buildDashboardDailySplitCoverage",
+    component: "Recharts BarChart with DashboardTrendTooltip",
+    exportFile: "daily-damage-submission-analytics.csv",
+    emptyState: "Show coverage warning if daily rows do not include explicit split fields.",
   },
   {
     id: "inspector-daily-trend",
@@ -43,6 +83,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Per-day inspector clear and damaged breakdown.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ANALYTICS_DAILY_INSPECTOR_REQUIREMENTS,
+    dataSource: "dashboard-analytics",
+    measures: ["damageReports", "noDamageReports", "reportCount"],
+    dimensions: ["date", "inspector email", "inspector label"],
+    slicers: ["from", "to", "inspector", "facility", "status", "inspection type"],
+    adapter: "buildDailyInspectorTrend and buildAnalyticsInspectorSummaries",
+    component: "Recharts BarChart with DashboardTrendTooltip",
+    exportFile: "daily-inspector-damage-submissions.csv",
+    emptyState: "Show coverage warning if inspector rows do not include explicit split fields.",
   },
   {
     id: "severity",
@@ -50,6 +98,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Damage severity distribution.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["severity.level", "severity.count"],
+    dataSource: "dashboard-analytics",
+    measures: ["count"],
+    dimensions: ["severity level", "severity label"],
+    slicers: ["from", "to", "facility", "inspector", "status", "inspection type", "severity"],
+    adapter: "normalizeDashboardSeverityItems and buildSelectedSeverityPieData",
+    component: "Recharts PieChart plus ChartFooterTable",
+    exportFile: "severity-damage-submission-detail.csv",
+    emptyState: "Show empty severity state when no severity rows are returned.",
   },
   {
     id: "top-damage-areas",
@@ -57,6 +113,14 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Highest-volume damaged vehicle areas.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["topAreas.name", "topAreas.count"],
+    dataSource: "dashboard-analytics",
+    measures: ["count"],
+    dimensions: ["damage area"],
+    slicers: ["from", "to", "facility", "inspector", "status", "inspection type", "damage area"],
+    adapter: "normalizeAnalyticsTopBuckets and buildAreaPieData",
+    component: "Recharts PieChart plus ChartFooterTable",
+    exportFile: "damage-area-submission-detail.csv",
+    emptyState: "Show empty top-area state when backend sends no rows.",
   },
   {
     id: "top-damage-types",
@@ -64,9 +128,49 @@ export const HOME_DASHBOARD_VISUALS: HomeDashboardVisualConfig[] = [
     description: "Highest-volume damage type labels.",
     endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
     requiredFields: ["topTypes.name", "topTypes.count"],
+    dataSource: "dashboard-analytics",
+    measures: ["count"],
+    dimensions: ["damage type"],
+    slicers: ["from", "to", "facility", "inspector", "status", "inspection type"],
+    adapter: "normalizeAnalyticsTopBuckets",
+    component: "HorizontalBarList or chart card",
+    exportFile: "top-damage-types.csv",
+    emptyState: "Show empty top-type state when backend sends no rows.",
+  },
+];
+
+export const HOME_DASHBOARD_SECTIONS: HomeDashboardSectionConfig[] = [
+  {
+    id: "scoreboard",
+    title: "Scoreboard",
+    description: "Top-level measures that answer how many submissions exist and how they split.",
+    visualIds: [
+      "summary-total-damage-submissions",
+      "summary-damaged-today",
+      "summary-damage-vs-clear",
+      "summary-rsa-reports",
+    ],
+  },
+  {
+    id: "daily-trends",
+    title: "Daily Trends",
+    description: "Time-series visuals scoped by the same URL-driven slicers.",
+    visualIds: ["facility-daily-trend", "inspector-daily-trend"],
+  },
+  {
+    id: "damage-profile",
+    title: "Damage Profile",
+    description: "Severity, damage area, and damage type visuals that explain where the volume is coming from.",
+    visualIds: ["severity", "top-damage-areas", "top-damage-types"],
   },
 ];
 
 export function getHomeDashboardVisual(id: HomeDashboardVisualConfig["id"]): HomeDashboardVisualConfig {
   return HOME_DASHBOARD_VISUALS.find((visual) => visual.id === id) ?? HOME_DASHBOARD_VISUALS[0];
+}
+
+export function getHomeDashboardSectionVisuals(sectionId: string): HomeDashboardVisualConfig[] {
+  const section = HOME_DASHBOARD_SECTIONS.find((item) => item.id === sectionId);
+  if (!section) return [];
+  return section.visualIds.map(getHomeDashboardVisual);
 }

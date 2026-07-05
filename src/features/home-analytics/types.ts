@@ -88,6 +88,21 @@ export type HomeDashboardVisualConfig = {
   description: string;
   endpoint: string;
   requiredFields: string[];
+  dataSource: "dashboard-analytics" | "report-list-preview";
+  measures: string[];
+  dimensions: string[];
+  slicers: string[];
+  adapter: string;
+  component: string;
+  exportFile: string;
+  emptyState: string;
+};
+
+export type HomeDashboardSectionConfig = {
+  id: string;
+  title: string;
+  description: string;
+  visualIds: HomeDashboardVisualId[];
 };
 
 export type MetricCardProps = {
