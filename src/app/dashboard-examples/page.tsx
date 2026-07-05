@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import {
+  DASHBOARD_BUILDER_CHECKLIST,
   DASHBOARD_EXAMPLE_FLOW,
   DASHBOARD_EXAMPLE_RECIPES,
   DASHBOARD_LANGUAGE_PRIMITIVES,
@@ -151,6 +152,28 @@ export default function DashboardExamplesPage() {
           This page shows the small dashboard language behind `/home`: measures, dimensions, slicers, adapters, visual
           declarations, rendered visuals, and exports. It uses mock examples only and does not change production data.
         </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Builder checklist</p>
+            <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">To add a dashboard visual</h2>
+          </div>
+          <p className="max-w-xl text-sm leading-6 text-slate-700">
+            Follow this recipe every time so new visuals stay explainable, exportable, and honest about missing backend
+            fields.
+          </p>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {DASHBOARD_BUILDER_CHECKLIST.map((item, index) => (
+            <div key={item.title} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Step {index + 1}</p>
+              <p className="mt-2 text-xs font-black text-slate-950">{item.title}</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-600">{item.detail}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

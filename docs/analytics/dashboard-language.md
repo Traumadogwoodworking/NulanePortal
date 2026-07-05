@@ -71,6 +71,21 @@ Read it like this:
 - `exportFile` is the downloadable output.
 - `emptyState` is what the user sees when the data is missing.
 
+## Builder Checklist
+
+Every new dashboard visual should follow the same recipe:
+
+1. Write the business question.
+2. List backend fields.
+3. Add visual config.
+4. Add adapter.
+5. Render component.
+6. Add export.
+7. Add empty state.
+8. Run build.
+
+That keeps the dashboard from becoming a pile of one-off chart code.
+
 ## Integrity Rule
 
 Damaged counts must come from explicit damaged fields.

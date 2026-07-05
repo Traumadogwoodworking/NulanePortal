@@ -2,6 +2,21 @@
 
 These examples show how to add to the `/home` dashboard framework without rewriting the page.
 
+## Builder Checklist
+
+To add a dashboard visual:
+
+1. Write the business question.
+2. List backend fields.
+3. Add visual config.
+4. Add adapter.
+5. Render component.
+6. Add export.
+7. Add empty state.
+8. Run build.
+
+Use the same checklist on `/dashboard-examples` when walking someone through the framework.
+
 ## Recipe 1: Add A Metric
 
 Example: `Clear Rate`

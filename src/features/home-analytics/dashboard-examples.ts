@@ -39,6 +39,41 @@ export type DashboardRecipe = {
   code: string;
 };
 
+export const DASHBOARD_BUILDER_CHECKLIST = [
+  {
+    title: "Write the business question",
+    detail: "Name what the user needs to know before naming the chart.",
+  },
+  {
+    title: "List backend fields",
+    detail: "Write the exact endpoint fields the visual needs, including explicit damaged and clear split fields.",
+  },
+  {
+    title: "Add visual config",
+    detail: "Declare the visual in HOME_DASHBOARD_VISUALS with measures, dimensions, slicers, required fields, and export file.",
+  },
+  {
+    title: "Add adapter",
+    detail: "Normalize raw backend rows into chart-ready rows in a pure TypeScript helper.",
+  },
+  {
+    title: "Render component",
+    detail: "Pass prepared rows into a card or chart component; keep parsing out of the component.",
+  },
+  {
+    title: "Add export",
+    detail: "Build CSV rows from the same prepared rows the visual uses.",
+  },
+  {
+    title: "Add empty state",
+    detail: "Show a clear empty or coverage state when required fields are missing.",
+  },
+  {
+    title: "Run build",
+    detail: "Run lint, TypeScript, build, and export validation before publishing.",
+  },
+] as const;
+
 export const DASHBOARD_LANGUAGE_PRIMITIVES: DashboardLanguagePrimitive[] = [
   {
     name: "Measure",
