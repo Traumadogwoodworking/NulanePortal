@@ -25,9 +25,19 @@ URL query params
 | `filter-state.ts` | Turns URL params into `HomeAnalyticsFilters`, turns filters into URL params, and turns filters into backend query params. | `src/app/home/page.tsx` uses this for URL state and API request params. |
 | `analytics-adapters.ts` | Reads numbers/strings safely, reads explicit damaged/clear splits, builds coverage issues, and builds tooltip breakdown rows. | Page selectors and warning components use these pure helpers. |
 | `dashboard-config.ts` | Declares each visual: source, measures, dimensions, slicers, adapter, component, export file, and empty state. | The route and docs use this as the dashboard registry. |
+| `dashboard-examples.ts` | Declares business-friendly language primitives and copyable dashboard recipes. | `src/app/dashboard-examples/page.tsx` renders these examples for handoff/demo. |
 | `export-adapters.ts` | Builds consistent CSV/export rows from visual/filter state. | ZIP/export code in `/home` uses these helpers. |
 | `components/` | Small presentation pieces: metric card, damage-vs-clear metric, coverage alert. | `src/app/home/page.tsx` renders these components. |
 | `src/app/home/page.tsx` | Orchestrates the page: owns local UI state, calls hooks, selects data, renders charts. | Uses this feature folder; should not duplicate its constants or rules. |
+| `src/app/dashboard-examples/page.tsx` | Demonstrates the framework with mock visuals and copyable recipes. | Uses `dashboard-examples.ts` and the real visual section config. |
+
+## Demo And Handoff Pages
+
+- `/home`: the real production dashboard surface.
+- `/dashboard-examples`: a lightweight demo page for a JavaScript-literate business partner.
+- `docs/analytics/dashboard-language.md`: the dashboard vocabulary.
+- `docs/analytics/dashboard-recipes.md`: examples for adding a metric, chart, filter, export, and backend field.
+- `docs/analytics/home-dashboard-explainer-for-powerbi-js.md`: Power BI-to-JavaScript mapping.
 
 ## Visual Declaration Model
 

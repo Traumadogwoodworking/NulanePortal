@@ -145,6 +145,19 @@ Sections are grouped in `HOME_DASHBOARD_SECTIONS`:
 
 This gives the dashboard a lightweight Power BI-style model without installing a BI product.
 
+## Examples Package
+
+The dashboard examples package is meant for handoff and demos:
+
+| File or route | Purpose |
+|---|---|
+| `docs/analytics/dashboard-language.md` | Defines the dashboard vocabulary: measure, dimension, slicer, adapter, visual declaration, coverage warning. |
+| `docs/analytics/dashboard-recipes.md` | Shows copyable examples for adding a metric, chart, filter, export, and backend field. |
+| `src/features/home-analytics/dashboard-examples.ts` | Keeps the examples in typed JavaScript data so docs and UI can stay aligned. |
+| `/dashboard-examples` | Renders mock visuals and declarations without changing `/home` behavior. |
+
+Use `/dashboard-examples` when explaining how the pieces talk to each other. Use `/home` when validating the real dashboard.
+
 ## File Map
 
 | File | Role | What to show a JavaScript developer |
