@@ -13,6 +13,8 @@ This document covers the current `/home` portal analytics implementation, the da
   - Fetches a small report-list preview with `useReportListSnapshot`.
   - Renders damage submission cards, daily facility bars, daily inspector bars, severity detail, and top damage areas.
   - Keeps RSA counts separate from damage submission totals.
+- `src/features/home-analytics/`
+  - Owns reusable dashboard types, constants, adapters, URL filter helpers, visual config, export helpers, and small presentation components.
 - `src/lib/services/reportService.ts`
   - Defines `DashboardAnalyticsResponse`.
   - Calls `GET /dashboard/analytics`.
@@ -30,6 +32,14 @@ This document covers the current `/home` portal analytics implementation, the da
 - Facility and inspector charts only show clear/damaged tooltip breakdowns when the backend sends explicit split fields.
 - The frontend no longer treats `totalReports`, `reports`, `count`, or `totalReports - rsaReports` as damaged submissions.
 - If a row only sends totals without `noDamageReports` or `clearReports`, the UI can show totals but cannot honestly show clear/damaged split.
+- URL query parameters are the shared slicer state for date, facility, inspector, status, report id, VIN, inspection type, make, model, yard, severity, and damage area.
+
+## Dashboard Explainer Docs
+
+- `docs/analytics/home-dashboard-explainer-for-powerbi-js.md`
+- `docs/analytics/frontend-dashboard-architecture.md`
+- `docs/analytics/dashboard-builder-quickstart.md`
+- `docs/analytics/frontend-analytics-roadmap.md`
 
 ## Backend Adapters Still Needed
 

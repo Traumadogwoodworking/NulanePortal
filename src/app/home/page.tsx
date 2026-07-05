@@ -1,8 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect, react-hooks/preserve-manual-memoization */
 
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import {
   Download,
@@ -58,6 +57,33 @@ import type { FacilityDamageStats } from "@/lib/facilityDamageStats";
 import type { ReportDamageApiRow, RsaReportApiRow } from "@/lib/types";
 import { severityPillClass } from "@/lib/severityTheme";
 import { normalizeReportListRow, normalizeReportListRows, type NormalizedReportListRow } from "@/lib/reportNormalizer";
+import {
+  DASHBOARD_ANALYTICS_ENDPOINT,
+  HOME_ANALYTICS_FILTER_KEYS,
+  HOME_DEFAULT_TREND_DAYS,
+  HOME_VISIBLE_FACILITIES,
+} from "@/features/home-analytics/constants";
+import {
+  buildDashboardDailySplitCoverage,
+  buildTrendBreakdownForPair,
+  readAnalyticsNumber,
+  readAnalyticsSplitPair,
+  readAnalyticsString,
+} from "@/features/home-analytics/analytics-adapters";
+import {
+  buildDashboardAnalyticsParams,
+  getActiveHomeFilterChips,
+  getDefaultHomeAnalyticsFilters,
+  getHomeFilterKeysWithValues,
+  parseHomeAnalyticsFilters,
+  serializeHomeAnalyticsFilters,
+} from "@/features/home-analytics/filter-state";
+import { AnalyticsCoverageAlert } from "@/features/home-analytics/components/AnalyticsCoverageAlert";
+import { DamageClearMetricValue } from "@/features/home-analytics/components/DamageClearMetricValue";
+import { MetricCard } from "@/features/home-analytics/components/MetricCard";
+import { HOME_DASHBOARD_VISUALS } from "@/features/home-analytics/dashboard-config";
+import { buildFilterExportRows } from "@/features/home-analytics/export-adapters";
+import type { HomeAnalyticsFilters, HomeCountMode, HomeFilterKey } from "@/features/home-analytics/types";
 
 type DashboardSeverityItem = {
   level: string;
@@ -161,6 +187,7 @@ type DashboardSummary = {
   };
   currentPeriod: {
     damageToday: number;
+    clearToday: number;
     rsaToday: number;
     reportsToday: number;
     damageLast7Days: number;
@@ -220,8 +247,6 @@ type ReportTrendView = {
   data: Array<Record<string, string | number>>;
 };
 
-type HomeCountMode = "reports" | "damages";
-type HomeFilterKey = "report_id" | "vin" | "inspection_type" | "make" | "model" | "yard" | "inspector_email" | "status";
 type InspectionOutcome = "damage" | "clear" | "unknown";
 type ExportCardContext = {
   filenamePrefix: string;
@@ -250,10 +275,6 @@ const SEVERITY_LABELS: Record<number, string> = {
   6: "Missing / Major Damage",
 };
 
-const HOME_VISIBLE_FACILITIES = ["JNAP", "SHAP"] as const;
-const HOME_DEFAULT_TREND_DAYS = 30;
-const HOME_FILTER_KEYS: HomeFilterKey[] = ["report_id", "vin", "inspection_type", "make", "model", "yard", "inspector_email", "status"];
-const DASHBOARD_ANALYTICS_ENDPOINT = "/api/dashboard/analytics";
 const REQUIRED_STATS_TOTAL_KEYS = [
   "totalReports",
   "damageReports",
@@ -1226,243 +1247,6 @@ function facilityDisplayKey(label: string): string {
 
 function normalizeOrganizationName(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
-}
-
-function readAnalyticsNumber(item: Record<string, unknown>, keys: string[]): number {
-  for (const key of keys) {
-    const value = item[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
-    }
-  }
-  return 0;
-}
-
-function readAnalyticsString(item: Record<string, unknown>, keys: string[], fallback = ""): string {
-  for (const key of keys) {
-    const value = item[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return fallback;
-}
-
-type TrendSplitPair = {
-  damageCount: number;
-  clearCount: number;
-  hasSplitData: boolean;
-};
-
-const ANALYTICS_SPLIT_DAMAGE_KEYS_REPORTS = [
-  "damageReports",
-  "damage_reports",
-  "reportsDamage",
-  "damages",
-  "damage_count",
-];
-const ANALYTICS_SPLIT_CLEAR_KEYS_REPORTS = [
-  "noDamageReports",
-  "noDamageCount",
-  "noDamageScans",
-  "clearReports",
-  "clearCount",
-  "clearScans",
-  "clear_count",
-  "clear_reports",
-];
-const ANALYTICS_SPLIT_DAMAGE_KEYS_ENTRIES = [
-  "damageEntries",
-  "totalDamages",
-  "damage_count",
-  "damageEntriesCount",
-];
-const ANALYTICS_SPLIT_CLEAR_KEYS_ENTRIES = [
-  "clearEntries",
-  "clearCount",
-  "noDamageCount",
-  "noDamageScans",
-  "clearScans",
-  "clear_count",
-  "clear_entries",
-];
-const ANALYTICS_TOTAL_KEYS_REPORTS = [
-  "totalReports",
-  "reportCount",
-  "reports",
-  "submissions",
-  "totalSubmissions",
-  "count",
-];
-const ANALYTICS_TOTAL_KEYS_ENTRIES = [
-  "entries",
-  "totalEntries",
-  "damageEntries",
-  "totalDamages",
-  "count",
-];
-
-const ANALYTICS_DAILY_FACILITY_REQUIREMENTS = [
-  "date (or day / created_date)",
-  "facility label (label, facility, name, navigation, location_label, or location_name)",
-  "damageReports (or damage_count)",
-  "noDamageReports (or clearReports)",
-];
-
-const ANALYTICS_DAILY_INSPECTOR_REQUIREMENTS = [
-  "date (or day / created_date)",
-  "label / email (label, email)",
-  "damageReports (or damage_count)",
-  "noDamageReports (or clearReports)",
-];
-
-type AnalyticsClearDamageCoverage = {
-  hasRows: boolean;
-  splitRows: number;
-  splitRowsMissingDamage: number;
-  splitRowsMissingClear: number;
-  hasClearDamageSplit: boolean;
-  missingSourceFields: string[];
-};
-
-type AnalyticsDailySplitCoverage = {
-  facility: AnalyticsClearDamageCoverage;
-  inspector: AnalyticsClearDamageCoverage;
-  endpoint: string;
-  countMode: HomeCountMode;
-};
-
-function hasAnalyticsFieldValue(record: Record<string, unknown>, keys: string[]): boolean {
-  return keys.some((key) => {
-    const value = record[key];
-    return typeof value === "number" && Number.isFinite(value) || (typeof value === "string" && value.trim() !== "");
-  });
-}
-
-function readAnalyticsSplitPair(record: Record<string, unknown>, countMode: HomeCountMode): TrendSplitPair {
-  const damageKeys = countMode === "damages" ? ANALYTICS_SPLIT_DAMAGE_KEYS_ENTRIES : ANALYTICS_SPLIT_DAMAGE_KEYS_REPORTS;
-  const clearKeys = countMode === "damages" ? ANALYTICS_SPLIT_CLEAR_KEYS_ENTRIES : ANALYTICS_SPLIT_CLEAR_KEYS_REPORTS;
-  const totalKeys = countMode === "damages" ? ANALYTICS_TOTAL_KEYS_ENTRIES : ANALYTICS_TOTAL_KEYS_REPORTS;
-  const hasDamage = hasAnalyticsFieldValue(record, damageKeys);
-  const hasClear = hasAnalyticsFieldValue(record, clearKeys);
-  const hasTotal = hasAnalyticsFieldValue(record, totalKeys);
-  const explicitDamageCount = hasDamage ? readAnalyticsNumber(record, damageKeys) : 0;
-  const explicitClearCount = hasClear ? readAnalyticsNumber(record, clearKeys) : 0;
-  const totalCount = hasTotal ? readAnalyticsNumber(record, totalKeys) : 0;
-  const damageCount = hasDamage
-    ? explicitDamageCount
-    : hasClear && hasTotal
-      ? Math.max(totalCount - explicitClearCount, 0)
-      : 0;
-  const clearCount = hasClear ? explicitClearCount : 0;
-  const hasSplitData = hasDamage && hasClear;
-  return {
-    damageCount,
-    clearCount,
-    hasSplitData: hasSplitData || (hasClear && hasTotal),
-  };
-}
-
-function collectAnalyticsDailySplitCoverage(
-  rows: Array<Record<string, unknown>> | undefined,
-  countMode: HomeCountMode,
-  scopeLabel: string
-): AnalyticsClearDamageCoverage {
-  const resolvedRows = rows ?? [];
-  const damageKeys = countMode === "damages" ? ANALYTICS_SPLIT_DAMAGE_KEYS_ENTRIES : ANALYTICS_SPLIT_DAMAGE_KEYS_REPORTS;
-  const clearKeys = countMode === "damages" ? ANALYTICS_SPLIT_CLEAR_KEYS_ENTRIES : ANALYTICS_SPLIT_CLEAR_KEYS_REPORTS;
-
-  let splitRows = 0;
-  let splitRowsMissingDamage = 0;
-  let splitRowsMissingClear = 0;
-  for (const row of resolvedRows) {
-    const hasDamage = hasAnalyticsFieldValue(row, damageKeys);
-    const hasClear = hasAnalyticsFieldValue(row, clearKeys);
-    if (hasDamage && hasClear) {
-      splitRows += 1;
-    }
-    if (!hasDamage) {
-      splitRowsMissingDamage += 1;
-    }
-    if (!hasClear) {
-      splitRowsMissingClear += 1;
-    }
-  }
-
-  const hasRows = resolvedRows.length > 0;
-  const hasClearDamageSplit = splitRows > 0;
-  const missingSourceFields = (() => {
-    if (scopeLabel === "facility") {
-      return [
-        ...(!hasRows || splitRowsMissingDamage > 0
-          ? countMode === "damages"
-            ? ["damageEntries (for damaged count)"]
-            : ["damageReports (or damage_count)"]
-          : []),
-        ...(!hasRows || splitRowsMissingClear > 0
-          ? countMode === "damages"
-            ? ["clearEntries (for clear count)"]
-            : ["noDamageReports (or clearReports)"]
-          : []),
-      ];
-    }
-    return [
-      ...(!hasRows || splitRowsMissingDamage > 0
-        ? countMode === "damages"
-          ? ["damageEntries (for damaged count)"]
-          : ["damageReports (for damaged count)"]
-        : []),
-      ...(!hasRows || splitRowsMissingClear > 0
-        ? countMode === "damages"
-          ? ["clearEntries (for clear count)"]
-          : ["noDamageReports (for clear count)"]
-        : []),
-    ];
-  })();
-
-  return {
-    hasRows,
-    splitRows,
-    splitRowsMissingDamage,
-    splitRowsMissingClear,
-    hasClearDamageSplit,
-    missingSourceFields,
-  };
-}
-
-function buildDashboardDailySplitCoverage(
-  analytics: DashboardAnalyticsPayload | undefined,
-  countMode: HomeCountMode
-): AnalyticsDailySplitCoverage {
-  const facilityDailyRows = [
-    ...(((analytics as { byFacilityDaily?: Array<Record<string, unknown>> } | undefined)?.byFacilityDaily ?? [])),
-    ...(((analytics as { facilityDaily?: Array<Record<string, unknown>> } | undefined)?.facilityDaily ?? [])),
-  ];
-  const inspectorDailyRows = ((analytics as { byInspectorDaily?: Array<Record<string, unknown>> } | undefined)?.byInspectorDaily ?? []);
-
-  return {
-    facility: collectAnalyticsDailySplitCoverage(facilityDailyRows, countMode, "facility"),
-    inspector: collectAnalyticsDailySplitCoverage(inspectorDailyRows, countMode, "inspector"),
-    endpoint: DASHBOARD_ANALYTICS_ENDPOINT,
-    countMode,
-  };
-}
-
-function buildTrendBreakdownForPair(damageCount: number, clearCount: number): PieBreakdownItem[] {
-  const entries: PieBreakdownItem[] = [];
-  if (damageCount > 0 || (damageCount === 0 && clearCount === 0)) {
-    entries.push({ label: "Damage", count: Number.isFinite(damageCount) ? Number(damageCount) : 0 });
-  }
-  if (clearCount > 0 || (damageCount === 0 && clearCount === 0)) {
-    entries.push({ label: "Clear", count: Number.isFinite(clearCount) ? Number(clearCount) : 0 });
-  }
-  return entries;
 }
 
 function isClearDamageBreakdown(entries: PieBreakdownItem[] | undefined): boolean {
@@ -3131,6 +2915,7 @@ function buildDashboardSummary(
     },
     currentPeriod: {
       damageToday: countMode === "damages" ? damageEntriesTodayTotal : damageTodayTotal,
+      clearToday: 0,
       rsaToday: rsaTodayTotal,
       reportsToday: damageTodayTotal + rsaTodayTotal,
       damageLast7Days: damageLast7DaysTotal,
@@ -3153,55 +2938,6 @@ function buildDashboardSummary(
     topAreas: buildTopBuckets(areaCounts),
     topTypes: buildTopBuckets(typeCounts),
   };
-}
-
-function ClearDamageMetricValue({
-  damageCount,
-  clearCount,
-}: {
-  damageCount: number;
-  clearCount: number;
-}) {
-  return (
-    <div className="flex items-center justify-center gap-4">
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-rose-700">Damage</p>
-        <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">{formatNumber(damageCount)}</p>
-      </div>
-      <span className="h-10 w-px bg-slate-200" />
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Clear</p>
-        <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">{formatNumber(clearCount)}</p>
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-  icon,
-  accent = false,
-}: {
-  label: string;
-  value: ReactNode;
-  detail?: string;
-  icon?: React.ReactNode;
-  accent?: boolean;
-}) {
-  return (
-    <Card className={`p-4 ${accent ? "border-slate-300 shadow-[0_24px_60px_-26px_rgba(15,23,42,0.35)] ring-1 ring-slate-200" : ""}`}>
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-        {icon ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-500">{icon}</div> : null}
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</p>
-          <div className="mt-2 text-3xl font-black tracking-tight text-slate-950">{value}</div>
-          {detail ? <p className="mt-1 text-xs text-slate-600">{detail}</p> : null}
-        </div>
-      </div>
-    </Card>
-  );
 }
 
 function SkeletonBlock({ className = "" }: { className?: string }) {
@@ -3273,62 +3009,6 @@ function AnalyticsStatusBanner({
       {errorMessage
         ? `Showing cached analytics. Refresh failed: ${errorMessage}`
         : "Refreshing analytics in the background."}
-    </div>
-  );
-}
-
-function AnalyticsSplitCoverageAlert({ coverage }: { coverage: AnalyticsDailySplitCoverage }) {
-  if (coverage.facility.hasClearDamageSplit && coverage.inspector.hasClearDamageSplit) {
-    return null;
-  }
-
-  const missingFacilityFields = coverage.facility.missingSourceFields;
-  const missingInspectorFields = coverage.inspector.missingSourceFields;
-  const hasFacilityRows = coverage.facility.hasRows;
-  const hasInspectorRows = coverage.inspector.hasRows;
-  const facilityStatus = !hasFacilityRows
-    ? "No byFacilityDaily data returned"
-    : coverage.facility.hasClearDamageSplit
-      ? `Facility rows with clear/damaged split: ${coverage.facility.splitRows}`
-      : "Facility rows are not returning both clear and damaged split fields";
-  const inspectorStatus = !hasInspectorRows
-    ? "No byInspectorDaily data returned"
-    : coverage.inspector.hasClearDamageSplit
-      ? `Inspector rows with clear/damaged split: ${coverage.inspector.splitRows}`
-      : "Inspector rows are not returning both clear and damaged split fields";
-
-  return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      <p className="font-semibold">Analytics split data is incomplete</p>
-      <p className="mt-1">
-        Home analytics is loading from <span className="font-mono">{coverage.endpoint}</span> and can show clear/damaged breakdowns only if each
-        daily row includes both values.
-      </p>
-      <p className="mt-1 text-[12px]">{facilityStatus}.</p>
-      <p className="mt-0.5 text-[12px]">{inspectorStatus}.</p>
-      <p className="mt-2 text-[12px]">
-        Backend daily payload should include these row shapes:
-      </p>
-      <p className="mt-1 text-[12px]">
-        <span className="font-semibold">byFacilityDaily</span> rows:
-        <span className="font-mono"> {ANALYTICS_DAILY_FACILITY_REQUIREMENTS.join(" | ")} </span>
-      </p>
-      <p className="mt-0.5 text-[12px]">
-        <span className="font-semibold">byInspectorDaily</span> rows:
-        <span className="font-mono"> {ANALYTICS_DAILY_INSPECTOR_REQUIREMENTS.join(" | ")} </span>
-      </p>
-      {!coverage.facility.hasClearDamageSplit ? (
-        <p className="mt-2">
-          Expected facility fields:
-          <span className="font-mono"> {missingFacilityFields.join(", ") || "damageReports and noDamageReports (or aliases)"} </span>
-        </p>
-      ) : null}
-      {!coverage.inspector.hasClearDamageSplit ? (
-        <p className="mt-1">
-          Expected inspector fields:
-          <span className="font-mono"> {missingInspectorFields.join(", ") || "damageReports and noDamageReports (or aliases)"} </span>
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -3450,28 +3130,36 @@ function FacilitySummaryCard({ facility }: { facility: DashboardFacilityItem }) 
 export default function HomePage() {
   const { organizationId, session } = usePortalSession();
   const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
+  const [initialHomeAnalyticsFilters] = useState<HomeAnalyticsFilters>(() =>
+    typeof window === "undefined"
+      ? getDefaultHomeAnalyticsFilters()
+      : parseHomeAnalyticsFilters(new URLSearchParams(window.location.search))
+  );
   const [devStatsCopyStatus, setDevStatsCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [showDevStatsCopyButton, setShowDevStatsCopyButton] = useState(process.env.NODE_ENV !== "production");
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(organizationId ?? "");
-  const [selectedFacilityKey, setSelectedFacilityKey] = useState("all");
-  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState("all");
-  const [selectedDamageAreaFilter, setSelectedDamageAreaFilter] = useState("");
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
-  const [reportIdFilter, setReportIdFilter] = useState("");
-  const [vinFilter, setVinFilter] = useState("");
-  const [inspectionTypeFilter, setInspectionTypeFilter] = useState("");
-  const [inspectionTypeSearch, setInspectionTypeSearch] = useState("");
+  const [selectedFacilityKey, setSelectedFacilityKey] = useState(initialHomeAnalyticsFilters.facilityKey);
+  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState(initialHomeAnalyticsFilters.severity ?? "all");
+  const [selectedDamageAreaFilter, setSelectedDamageAreaFilter] = useState(initialHomeAnalyticsFilters.damageArea ?? "");
+  const [createdFrom, setCreatedFrom] = useState(initialHomeAnalyticsFilters.from ?? "");
+  const [createdTo, setCreatedTo] = useState(initialHomeAnalyticsFilters.to ?? "");
+  const [reportIdFilter, setReportIdFilter] = useState(initialHomeAnalyticsFilters.reportId ?? "");
+  const [vinFilter, setVinFilter] = useState(initialHomeAnalyticsFilters.vin ?? "");
+  const [inspectionTypeFilter, setInspectionTypeFilter] = useState(initialHomeAnalyticsFilters.inspectionType ?? "");
+  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(initialHomeAnalyticsFilters.inspectionType ?? "");
   const [inspectionTypeSuggestionsOpen, setInspectionTypeSuggestionsOpen] = useState(false);
-  const [makeFilter, setMakeFilter] = useState("");
-  const [modelFilter, setModelFilter] = useState("");
-  const [yardFilter, setYardFilter] = useState("");
-  const [inspectorEmailFilter, setInspectorEmailFilter] = useState("");
-	  const [statusFilter, setStatusFilter] = useState("");
+  const [makeFilter, setMakeFilter] = useState(initialHomeAnalyticsFilters.make ?? "");
+  const [modelFilter, setModelFilter] = useState(initialHomeAnalyticsFilters.model ?? "");
+  const [yardFilter, setYardFilter] = useState(initialHomeAnalyticsFilters.yard ?? "");
+  const [inspectorEmailFilter, setInspectorEmailFilter] = useState(initialHomeAnalyticsFilters.inspectorKey);
+  const [statusFilter, setStatusFilter] = useState(initialHomeAnalyticsFilters.status ?? "");
   const [vinSheetExporting, setVinSheetExporting] = useState(false);
-	  const homeCountMode: HomeCountMode = "reports";
+  const homeCountMode: HomeCountMode = initialHomeAnalyticsFilters.countMode;
   const [homeFilterMenuOpen, setHomeFilterMenuOpen] = useState(false);
-  const [activeHomeFilterKeys, setActiveHomeFilterKeys] = useState<HomeFilterKey[]>([]);
+  const [activeHomeFilterKeys, setActiveHomeFilterKeys] = useState<HomeFilterKey[]>(() =>
+    getHomeFilterKeysWithValues(initialHomeAnalyticsFilters)
+  );
+  const didMountOrganizationResetRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3480,26 +3168,28 @@ export default function HomePage() {
     }
   }, []);
 
-  const analyticsParams = useMemo(
+  const currentHomeAnalyticsFilters = useMemo<HomeAnalyticsFilters>(
     () => ({
-      facility_id:
-        selectedFacilityKey !== "all" && selectedFacilityKey !== "other" && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(selectedFacilityKey)
-          ? selectedFacilityKey
-          : undefined,
       from: createdFrom || undefined,
       to: createdTo || undefined,
-      inspection_type: inspectionTypeFilter || undefined,
+      facilityKey: selectedFacilityKey,
+      inspectorKey: inspectorEmailFilter,
       status: statusFilter || undefined,
-      inspector_email: inspectorEmailFilter || undefined,
-      report_id: reportIdFilter || undefined,
+      countMode: homeCountMode,
+      reportId: reportIdFilter || undefined,
       vin: vinFilter || undefined,
+      inspectionType: inspectionTypeFilter || undefined,
       make: makeFilter || undefined,
       model: modelFilter || undefined,
       yard: yardFilter || undefined,
       severity: selectedSeverityLevel !== "all" ? selectedSeverityLevel : undefined,
-      damage_area: selectedDamageAreaFilter || undefined,
+      damageArea: selectedDamageAreaFilter || undefined,
     }),
-    [createdFrom, createdTo, inspectionTypeFilter, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedDamageAreaFilter, selectedFacilityKey, selectedSeverityLevel, statusFilter, vinFilter, yardFilter]
+    [createdFrom, createdTo, homeCountMode, inspectionTypeFilter, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedDamageAreaFilter, selectedFacilityKey, selectedSeverityLevel, statusFilter, vinFilter, yardFilter]
+  );
+  const analyticsParams = useMemo(
+    () => buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
+    [currentHomeAnalyticsFilters]
   );
   const {
     data: baseAnalyticsSnapshot,
@@ -3579,24 +3269,9 @@ export default function HomePage() {
       pageSize: 50,
       limit: 50,
       sort: "created_at_desc",
-      facility_id:
-        selectedFacilityKey !== "all" && selectedFacilityKey !== "other" && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(selectedFacilityKey)
-          ? selectedFacilityKey
-          : undefined,
-      from: createdFrom || undefined,
-      to: createdTo || undefined,
-      inspection_type: inspectionTypeFilter || undefined,
-      status: statusFilter || undefined,
-      inspector_email: inspectorEmailFilter || undefined,
-      report_id: reportIdFilter || undefined,
-      vin: vinFilter || undefined,
-      make: makeFilter || undefined,
-      model: modelFilter || undefined,
-      yard: yardFilter || undefined,
-      severity: selectedSeverityLevel !== "all" ? selectedSeverityLevel : undefined,
-      damage_area: selectedDamageAreaFilter || undefined,
+      ...buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
     }),
-    [createdFrom, createdTo, inspectionTypeFilter, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedDamageAreaFilter, selectedFacilityKey, selectedSeverityLevel, statusFilter, vinFilter, yardFilter]
+    [currentHomeAnalyticsFilters]
   );
   const {
     data: reportListSnapshot,
@@ -3664,7 +3339,11 @@ export default function HomePage() {
   const sanitizeDisplay = (value: string): string => stripFacilitySuffix(value);
   const availableHomeFilterOptions = DAMAGE_FILTER_OPTIONS.filter(
     (option): option is (typeof DAMAGE_FILTER_OPTIONS)[number] & { key: HomeFilterKey } =>
-      HOME_FILTER_KEYS.includes(option.key as HomeFilterKey)
+      HOME_ANALYTICS_FILTER_KEYS.includes(option.key as HomeFilterKey)
+  );
+  const activeHomeFilterChips = useMemo(
+    () => getActiveHomeFilterChips(currentHomeAnalyticsFilters),
+    [currentHomeAnalyticsFilters]
   );
   const clearHomeFilters = () => {
     setHomeFilterMenuOpen(false);
@@ -3786,6 +3465,10 @@ export default function HomePage() {
   }, [organizationId]);
 
   useEffect(() => {
+    if (!didMountOrganizationResetRef.current) {
+      didMountOrganizationResetRef.current = true;
+      return;
+    }
     setSelectedFacilityKey("all");
     setSelectedSeverityLevel("all");
     setSelectedDamageAreaFilter("");
@@ -3800,6 +3483,17 @@ export default function HomePage() {
     setInspectorEmailFilter("");
     setStatusFilter("");
   }, [selectedOrganizationId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = serializeHomeAnalyticsFilters(currentHomeAnalyticsFilters);
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(window.history.state, "", nextUrl);
+    }
+  }, [currentHomeAnalyticsFilters]);
 
 	  const inspectorChoices = useMemo(
 	    () => buildAnalyticsInspectorSummaries(dashboardAnalytics, homeCountMode),
@@ -3983,6 +3677,7 @@ export default function HomePage() {
         },
         currentPeriod: {
           damageToday,
+          clearToday,
           rsaToday,
           reportsToday,
           damageLast7Days,
@@ -4609,6 +4304,10 @@ export default function HomePage() {
   };
   const buildAllClaimsSectionFiles = (): NonNullable<ExportCardContext["cardFiles"]> => [
     {
+      filename: "active-dashboard-filters.csv",
+      rows: buildFilterExportRows(currentHomeAnalyticsFilters as Record<string, unknown>),
+    },
+    {
       filename: "daily-damage-submission-analytics.csv",
       rows: [
         ["Date", ...facilityTrend.facilities],
@@ -4775,7 +4474,12 @@ export default function HomePage() {
             refreshing={analyticsRefreshInProgress}
             errorMessage={analyticsHasUsableData ? analyticsErrorMessage : null}
           />
-          <AnalyticsSplitCoverageAlert coverage={analyticsSplitCoverage} />
+          <AnalyticsCoverageAlert coverage={analyticsSplitCoverage} />
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            <span className="font-semibold text-slate-950">Dashboard model:</span>{" "}
+            {HOME_DASHBOARD_VISUALS.length} configured visuals use shared filters, typed adapters, backend field coverage checks, and export rows.
+            Power BI and JavaScript notes live in <span className="font-mono">docs/analytics/home-dashboard-explainer-for-powerbi-js.md</span>.
+          </div>
           <Card className="sticky top-0 z-30 overflow-visible border-slate-200/80 bg-white/95 shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)] backdrop-blur">
             <CardHeader
               title="Filters"
@@ -4919,6 +4623,16 @@ export default function HomePage() {
                   </div>
                 </>
               ) : null}
+              {activeHomeFilterChips.length ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Applied</span>
+                  {activeHomeFilterChips.map((chip) => (
+                    <span key={`${chip.key}-${chip.value}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                      {chip.label}: {chip.value}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -4926,10 +4640,10 @@ export default function HomePage() {
 	            <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
                 <MetricCard label="Total Damage Submissions" value={totalDamageSubmissionCount} detail={totalReportsDetail} icon={<FileText className="h-4 w-4" />} />
-                <MetricCard accent label="Damaged Submissions Today" value={primaryDamageToday} detail={`Clear submissions today ${formatNumber(Math.max(summary.currentPeriod.reportsToday - primaryDamageToday, 0))}`} icon={<TriangleAlert className="h-4 w-4" />} />
+                <MetricCard accent label="Damaged Submissions Today" value={primaryDamageToday} detail={`Clear submissions today ${formatNumber(summary.currentPeriod.clearToday)}`} icon={<TriangleAlert className="h-4 w-4" />} />
                 <MetricCard
                   label="Damage vs Clear"
-                  value={<ClearDamageMetricValue damageCount={primaryDamageTotal} clearCount={clearInspectionCount} />}
+                  value={<DamageClearMetricValue damageCount={primaryDamageTotal} clearCount={clearInspectionCount} />}
                   detail={
                     hasBackendClearReports
                       ? "From /api/dashboard/analytics totals"
