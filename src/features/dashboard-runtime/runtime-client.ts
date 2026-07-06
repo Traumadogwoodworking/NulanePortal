@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/apiClient";
-import type { RuntimeApiResult, RuntimeDashboardDefinition, RuntimeRenderPayload } from "./types";
+import type { RuntimeApiResult, RuntimeCatalog, RuntimeDashboardDefinition, RuntimeDocs, RuntimeRenderPayload } from "./types";
 
 const defaultBase = "/api/analytics";
 
@@ -43,6 +43,40 @@ export async function getRuntimeStatus(): Promise<RuntimeApiResult<Record<string
     throw new Error(payload?.error?.message || `Runtime status request failed with ${response.status}`);
   }
   return payload as RuntimeApiResult<Record<string, unknown>>;
+}
+
+export async function getRuntimeCatalog(): Promise<RuntimeApiResult<{ catalog: RuntimeCatalog }>> {
+  const base = getRuntimeBaseUrl();
+  if (base.startsWith("/api/analytics")) {
+    return apiFetch<RuntimeApiResult<{ catalog: RuntimeCatalog }>>("/analytics/catalog");
+  }
+  const runtimeRoot = base.replace(/\/api\/analytics$/, "");
+  const response = await fetch(`${runtimeRoot}/api/runtime/catalog`, {
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `Runtime catalog request failed with ${response.status}`);
+  }
+  return payload as RuntimeApiResult<{ catalog: RuntimeCatalog }>;
+}
+
+export async function getRuntimeDocs(): Promise<RuntimeApiResult<{ docs: RuntimeDocs }>> {
+  const base = getRuntimeBaseUrl();
+  if (base.startsWith("/api/analytics")) {
+    return apiFetch<RuntimeApiResult<{ docs: RuntimeDocs }>>("/analytics/docs");
+  }
+  const runtimeRoot = base.replace(/\/api\/analytics$/, "");
+  const response = await fetch(`${runtimeRoot}/api/runtime/docs`, {
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `Runtime docs request failed with ${response.status}`);
+  }
+  return payload as RuntimeApiResult<{ docs: RuntimeDocs }>;
 }
 
 async function runtimeRequest<T>(path: string, options: RequestInit = {}): Promise<T> {

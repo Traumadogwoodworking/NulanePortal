@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { BarChart3, Boxes, Clock3, Hammer } from "lucide-react";
+import { BarChart3, Boxes, Clock3, Database, Hammer } from "lucide-react";
 
 const navItems = [
   { href: "/analytics", label: "Dashboards", icon: BarChart3 },
   { href: "/analytics/home-inspection-overview", label: "Reference", icon: Boxes },
+  { href: "/analytics/data", label: "Data", icon: Database },
   { href: "/analytics/builder", label: "Builder", icon: Hammer },
   { href: "/analytics/runs", label: "Runs", icon: Clock3 },
 ];

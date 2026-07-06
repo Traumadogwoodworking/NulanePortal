@@ -102,6 +102,61 @@ export type RuntimeApiResult<T> = T & {
   };
 };
 
+export type RuntimeCatalogDataset = {
+  id: string;
+  title: string;
+  description?: string;
+  sourceType?: string;
+  source?: string;
+  sourceConfig?: Record<string, unknown>;
+  fieldCount?: number;
+  fields?: RuntimeFieldDefinition[];
+  previewEndpoint?: string;
+};
+
+export type RuntimeCatalogWidget = {
+  id: string;
+  title: string;
+  kind?: string;
+  datasetId?: string;
+  measures?: string[];
+  dimensions?: string[];
+  requiredFields?: string[];
+  exportFile?: string;
+};
+
+export type RuntimeCatalogDashboard = {
+  slug: string;
+  title: string;
+  description?: string;
+  filters?: Array<Record<string, unknown>>;
+  datasets?: string[];
+  widgets?: RuntimeCatalogWidget[];
+  coverageRequirements?: RuntimeCoverageWarning[];
+  integrityRules?: string[];
+};
+
+export type RuntimeCatalog = {
+  generatedAt?: string;
+  service?: string;
+  adapterMode?: string;
+  nodeApiBaseUrl?: string;
+  dashboardCount?: number;
+  datasetCount?: number;
+  dashboards?: RuntimeCatalogDashboard[];
+  datasets?: RuntimeCatalogDataset[];
+  supportedExistingEndpoints?: Array<Record<string, unknown>>;
+  safeRules?: string[];
+};
+
+export type RuntimeDocs = {
+  generatedAt?: string;
+  title?: string;
+  format?: string;
+  markdown?: string;
+  endpoints?: Array<Record<string, unknown>>;
+};
+
 export type RuntimeValidationIssue = {
   path: string;
   message: string;
