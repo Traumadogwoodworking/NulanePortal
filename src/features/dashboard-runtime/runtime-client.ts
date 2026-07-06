@@ -29,6 +29,22 @@ export async function listRuntimeRuns(): Promise<RuntimeApiResult<{ runs: unknow
   return runtimeRequest("/runs");
 }
 
+export async function getRuntimeStatus(): Promise<RuntimeApiResult<Record<string, unknown>>> {
+  const base = getRuntimeBaseUrl();
+  if (base.startsWith("/api/analytics")) {
+    return apiFetch<Record<string, unknown>>("/runtime/status");
+  }
+  const runtimeRoot = base.replace(/\/api\/analytics$/, "");
+  const response = await fetch(`${runtimeRoot}/api/runtime/status`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `Runtime status request failed with ${response.status}`);
+  }
+  return payload as RuntimeApiResult<Record<string, unknown>>;
+}
+
 async function runtimeRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const base = getRuntimeBaseUrl();
   if (base.startsWith("/api/analytics")) {

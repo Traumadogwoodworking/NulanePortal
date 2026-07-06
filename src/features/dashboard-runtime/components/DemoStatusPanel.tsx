@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getRuntimeDataSourceSummaries } from "../render-adapters";
-import { getRuntimeBaseUrl, renderRuntimeDashboard } from "../runtime-client";
+import { getRuntimeBaseUrl, getRuntimeStatus, renderRuntimeDashboard } from "../runtime-client";
 
 type Check = {
   label: string;
@@ -21,6 +21,7 @@ export function DemoStatusPanel() {
   const [checks, setChecks] = useState<Check[]>([
     { label: "Node API health", status: "loading", detail: nodeHealthUrl },
     { label: "Spring health", status: "loading", detail: springHealthUrl },
+    { label: "Runtime status", status: "loading", detail: `${runtimeBaseUrl.replace(/\/api\/analytics$/, "")}/api/runtime/status` },
     { label: "Dashboard render", status: "loading", detail: `${runtimeBaseUrl}/dashboards/${dashboardSlug}/render` },
   ]);
 
@@ -28,9 +29,20 @@ export function DemoStatusPanel() {
     let cancelled = false;
 
     async function runChecks() {
-      const [node, spring, render] = await Promise.all([
+      const [node, spring, runtime, render] = await Promise.all([
         fetchHealth("Node API health", nodeHealthUrl),
         fetchHealth("Spring health", springHealthUrl),
+        getRuntimeStatus()
+          .then((status) => ({
+            label: "Runtime status",
+            status: status.ok === false ? "error" : "ok",
+            detail: runtimeStatusText(status),
+          }) satisfies Check)
+          .catch((error: unknown) => ({
+            label: "Runtime status",
+            status: "error",
+            detail: error instanceof Error ? error.message : "Runtime status failed.",
+          }) satisfies Check),
         renderRuntimeDashboard(dashboardSlug)
           .then((payload) => {
             const sources = getRuntimeDataSourceSummaries(payload);
@@ -48,7 +60,7 @@ export function DemoStatusPanel() {
             detail: error instanceof Error ? error.message : "Render failed.",
           }) satisfies Check),
       ]);
-      if (!cancelled) setChecks([node, spring, render]);
+      if (!cancelled) setChecks([node, spring, runtime, render]);
     }
 
     runChecks();
@@ -69,7 +81,7 @@ export function DemoStatusPanel() {
         </p>
       </section>
 
-      <section className="grid gap-3 lg:grid-cols-3">
+      <section className="grid gap-3 lg:grid-cols-4">
         {checks.map((check) => (
           <div key={check.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{check.label}</p>
@@ -92,6 +104,7 @@ export function DemoStatusPanel() {
           </a>
           <span className="rounded-md border border-slate-200 px-3 py-2">{springHealthUrl}</span>
           <span className="rounded-md border border-slate-200 px-3 py-2">{nodeHealthUrl}</span>
+          <span className="rounded-md border border-slate-200 px-3 py-2">{runtimeBaseUrl.replace(/\/api\/analytics$/, "")}/api/runtime/status</span>
         </div>
       </section>
 
@@ -104,6 +117,15 @@ export function DemoStatusPanel() {
       </section>
     </div>
   );
+}
+
+function runtimeStatusText(status: Record<string, unknown>): string {
+  const adapterMode = String(status.adapterMode ?? "unknown");
+  const audit = status.audit && typeof status.audit === "object" ? status.audit as Record<string, unknown> : {};
+  const runner = status.runner && typeof status.runner === "object" ? status.runner as Record<string, unknown> : {};
+  const nodeApi = status.nodeApi && typeof status.nodeApi === "object" ? status.nodeApi as Record<string, unknown> : {};
+  const nodeHealth = nodeApi.health && typeof nodeApi.health === "object" ? nodeApi.health as Record<string, unknown> : {};
+  return `adapter:${adapterMode}, node:${nodeHealth.ok === true ? "ok" : "check"}, audit:${audit.mode ?? "unknown"}, runner:${runner.mode ?? "unknown"}`;
 }
 
 async function fetchHealth(label: string, url: string): Promise<Check> {

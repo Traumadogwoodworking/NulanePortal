@@ -4,8 +4,11 @@ export function RuntimeTableWidget({ widget, rows }: { widget: RuntimeWidgetDefi
   const headers = widget.dimensions.length ? widget.dimensions : Object.keys(rows[0] ?? {});
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{widget.title}</p>
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{widget.title}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{rows.length ? `${rows.length} runtime rows returned` : "No rows returned"}</p>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
@@ -23,8 +26,8 @@ export function RuntimeTableWidget({ widget, rows }: { widget: RuntimeWidgetDefi
               rows.slice(0, 10).map((row, index) => (
                 <tr key={`${widget.id}-${index}`}>
                   {headers.map((header) => (
-                    <td key={header} className="px-3 py-2">
-                      {String(row[header] ?? "")}
+                  <td key={header} className="px-3 py-2">
+                      {formatCell(row[header])}
                     </td>
                   ))}
                 </tr>
@@ -41,4 +44,12 @@ export function RuntimeTableWidget({ widget, rows }: { widget: RuntimeWidgetDefi
       </div>
     </div>
   );
+}
+
+function formatCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return new Date(value).toLocaleString();
+  }
+  return String(value);
 }

@@ -2,7 +2,7 @@ import { DashboardRuntimeShell } from "@/features/dashboard-runtime/components/D
 import { DashboardViewer } from "@/features/dashboard-runtime/components/DashboardViewer";
 
 export function generateStaticParams() {
-  return [{ dashboardSlug: "home-inspection-overview" }];
+  return [{ dashboardSlug: "home-inspection-overview" }, { dashboardSlug: "facility-damage-profile" }];
 }
 
 export default async function AnalyticsDashboardPage({ params }: { params: Promise<{ dashboardSlug: string }> }) {
