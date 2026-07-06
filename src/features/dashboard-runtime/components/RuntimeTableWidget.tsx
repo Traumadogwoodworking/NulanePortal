@@ -19,15 +19,23 @@ export function RuntimeTableWidget({ widget, rows }: { widget: RuntimeWidgetDefi
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-            {rows.slice(0, 10).map((row, index) => (
-              <tr key={`${widget.id}-${index}`}>
-                {headers.map((header) => (
-                  <td key={header} className="px-3 py-2">
-                    {String(row[header] ?? "")}
-                  </td>
-                ))}
+            {rows.length ? (
+              rows.slice(0, 10).map((row, index) => (
+                <tr key={`${widget.id}-${index}`}>
+                  {headers.map((header) => (
+                    <td key={header} className="px-3 py-2">
+                      {String(row[header] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="px-3 py-4 text-slate-500" colSpan={Math.max(headers.length, 1)}>
+                  {widget.emptyState || "The runtime executed this dataset, but no preview rows are available for the current filters."}
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

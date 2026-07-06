@@ -7,6 +7,7 @@ import type { RuntimeRenderPayload } from "../types";
 import { DashboardFilterBar } from "./DashboardFilterBar";
 import { DashboardLayoutGrid } from "./DashboardLayoutGrid";
 import { RuntimeCoverageAlert } from "./RuntimeCoverageAlert";
+import { RuntimeDemoPanel } from "./RuntimeDemoPanel";
 import { RuntimeFreshnessBadge } from "./RuntimeFreshnessBadge";
 
 export function DashboardViewer({ dashboardSlug }: { dashboardSlug: string }) {
@@ -58,6 +59,7 @@ export function DashboardViewer({ dashboardSlug }: { dashboardSlug: string }) {
           renderedAt={payload.freshness?.rendered_at ?? payload.freshness?.renderedAt}
         />
       </div>
+      <RuntimeDemoPanel payload={payload} status={status} />
       <DashboardFilterBar onApply={loadDashboard} />
       <RuntimeCoverageAlert warnings={payload.coverageWarnings} />
       <DashboardLayoutGrid payload={payload} />
