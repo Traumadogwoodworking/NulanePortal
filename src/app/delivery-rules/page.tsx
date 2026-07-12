@@ -198,6 +198,7 @@ export default function DeliveryRulesPage() {
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [ccEntry, setCcEntry] = useState("");
 
   useEffect(() => {
     if (!organizationId) return;
@@ -246,7 +247,7 @@ export default function DeliveryRulesPage() {
 
   const selectedRule = useMemo(() => rules.find((rule) => rule.id === selectedId) ?? null, [rules, selectedId]);
   const selectedRuleLocked = isLockedRule(selectedRule);
-  const draftDirty = isDraftDirty(draft, selectedRule);
+  const draftDirty = isDraftDirty(draft, selectedRule) || Boolean(ccEntry.trim());
   useEffect(() => {
     if (draft || !selectedRule) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -301,20 +302,24 @@ export default function DeliveryRulesPage() {
     };
     setSelectedId(null);
     setDraft(next);
+    setCcEntry("");
     setEditorError(null);
     setSaveMessage(null);
   };
 
-  const commitCcInput = (value: string) => {
-    if (!draft) return;
-    const nextEmails = normalizeEmailList(value);
-    setDraft({ ...draft, ccInput: nextEmails.join(", ") });
-  };
-
   const addCcValue = (value: string) => {
-    if (!draft) return;
-    const nextEmails = normalizeEmailList([draft.ccInput, value].join("\n"));
+    if (!draft) return false;
+    const addedEmails = normalizeEmailList(value);
+    if (!addedEmails.length) return false;
+    if (addedEmails.some((email) => !emailIsValid(email))) {
+      setEditorError("Enter a valid email address before adding it.");
+      return false;
+    }
+    const nextEmails = normalizeEmailList([draft.ccInput, ...addedEmails].join("\n"));
     setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+    setCcEntry("");
+    setEditorError(null);
+    return true;
   };
 
   const removeCcEmail = (email: string) => {
@@ -327,6 +332,10 @@ export default function DeliveryRulesPage() {
     if (!draft) return;
     if (selectedRuleLocked) {
       setEditorError("Locked rules are managed by platform support and cannot be modified here.");
+      return;
+    }
+    if (ccEntry.trim()) {
+      setEditorError("Press Enter or Add to include the email you are typing before saving.");
       return;
     }
     setEditorError(null);
@@ -351,6 +360,7 @@ export default function DeliveryRulesPage() {
       });
       setSelectedId(result.id);
       setDraft(makeDraft(result));
+      setCcEntry("");
       setSaveMessage(mode === "create" ? "Rule created." : "Rule updated.");
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save delivery rule.";
@@ -374,6 +384,7 @@ export default function DeliveryRulesPage() {
       setRules((current) => current.filter((rule) => rule.id !== selectedRule.id));
       setSelectedId(null);
       setDraft(null);
+      setCcEntry("");
       setSaveMessage("Rule deleted.");
     } catch (deleteError) {
       setEditorError(deleteError instanceof Error ? deleteError.message : "Unable to delete delivery rule.");
@@ -438,6 +449,7 @@ export default function DeliveryRulesPage() {
 	                    }
                     setSelectedId(rule.id);
                     setDraft(makeDraft(rule));
+                    setCcEntry("");
                     setEditorError(null);
                   }}
 	                  aria-disabled={locked}
@@ -742,35 +754,43 @@ export default function DeliveryRulesPage() {
                           </button>
                         </span>
                       ))}
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <input
                         id="cc-emails"
-                        value={draft.ccInput}
-                        onChange={(event) => setDraft({ ...draft, ccInput: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === "," || event.key === ";") {
-                            event.preventDefault();
-                            addCcValue(event.currentTarget.value.replace(/[\n,;]+/g, " ").trim());
-                            commitCcInput("");
-                          }
+                        type="email"
+                        value={ccEntry}
+                        onChange={(event) => {
+                          setCcEntry(event.target.value);
+                          if (editorError?.startsWith("Enter a valid email")) setEditorError(null);
                         }}
-                        onBlur={(event) => {
-                          const value = event.currentTarget.value.trim();
-                          if (!value) return;
-                          addCcValue(value);
-                          commitCcInput("");
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addCcValue(ccEntry);
+                          }
                         }}
                         onPaste={(event) => {
                           const paste = event.clipboardData.getData("text");
-                          if (!paste) return;
+                          if (!/[\n,;]/.test(paste)) return;
                           event.preventDefault();
-                          const nextEmails = normalizeEmailList([draft?.ccInput || "", paste].join("\n"));
-                          setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+                          addCcValue(paste);
                         }}
+                        disabled={selectedRuleLocked}
                         placeholder="claims@example.com"
-                        className="min-w-[14rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-slate-400"
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
                       />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addCcValue(ccEntry)}
+                        disabled={selectedRuleLocked || !ccEntry.trim()}
+                        className="h-10 shrink-0"
+                      >
+                        Add email
+                      </Button>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">Press Enter, comma, or semicolon to add each email. Use x to remove one.</p>
+                    <p className="mt-2 text-xs text-slate-500">Type one email and press Enter or Add email. Added recipients appear above; use x to remove one.</p>
                   </div>
                 </div>
               </>
