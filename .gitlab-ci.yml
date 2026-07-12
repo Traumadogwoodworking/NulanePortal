@@ -1,0 +1,135 @@
+stages:
+  - validate
+  - test
+  - build
+  - deploy_preview
+  - deploy_production
+
+default:
+  image: node:22-bookworm
+  tags:
+    - mac-mini
+    - docker
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+
+variables:
+  NEXT_TELEMETRY_DISABLED: "1"
+  NO_COLOR: "1"
+  VERCEL_CLI_VERSION: "55.0.0"
+
+lint:
+  stage: validate
+  script:
+    - npm run lint
+
+typecheck:
+  stage: validate
+  script:
+    - npx tsc --noEmit
+
+unit_tests:
+  stage: test
+  variables:
+    NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
+  script:
+    - npm test
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - coverage/
+      - test-results/
+
+static_export:
+  stage: build
+  variables:
+    NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
+  script:
+    - npm run build
+    - npm run export:validate
+    - tar -czf portal-static-${CI_COMMIT_SHA}.tar.gz out
+    - sha256sum portal-static-${CI_COMMIT_SHA}.tar.gz > portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
+    - sha256sum -c portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - portal-static-${CI_COMMIT_SHA}.tar.gz
+      - portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
+
+e2e_smoke:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_BRANCH == "staging" || $CI_COMMIT_BRANCH == "main"'
+      when: manual
+      allow_failure: true
+    - when: never
+  variables:
+    NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
+  script:
+    - npx playwright install --with-deps chromium
+    - npx playwright test
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - playwright-report/
+      - test-results/
+
+.vercel_deploy:
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+    - test -n "$VERCEL_TOKEN"
+    - test -n "$VERCEL_ORG_ID"
+    - test -n "$VERCEL_PROJECT_ID"
+
+deploy_vercel_preview:
+  extends: .vercel_deploy
+  stage: deploy_preview
+  resource_group: vercel-preview
+  environment:
+    name: preview
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      when: manual
+    - when: never
+  script:
+    - npx --yes vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
+    - npx --yes vercel@${VERCEL_CLI_VERSION} build --token="$VERCEL_TOKEN"
+    - npx --yes vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" > vercel-preview-url.txt
+    - test -s vercel-preview-url.txt
+    - printf 'Preview deployment created at %s\n' "$(cat vercel-preview-url.txt)"
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - vercel-preview-url.txt
+
+deploy_vercel_production:
+  extends: .vercel_deploy
+  stage: deploy_production
+  resource_group: vercel-production
+  environment:
+    name: production
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+    - when: never
+  script:
+    - npx --yes vercel@${VERCEL_CLI_VERSION} pull --yes --environment=production --token="$VERCEL_TOKEN"
+    - npx --yes vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
+    - npx --yes vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --prod --archive=tgz --token="$VERCEL_TOKEN" > vercel-production-url.txt
+    - test -s vercel-production-url.txt
+    - printf 'Production deployment created at %s\n' "$(cat vercel-production-url.txt)"
+  artifacts:
+    expire_in: 90 days
+    paths:
+      - vercel-production-url.txt
