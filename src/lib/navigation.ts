@@ -72,7 +72,6 @@ const portalRoutes: PortalRoute[] = [
     icon: "clock",
     moduleKey: "reports",
     requiresShap: true,
-    hideFromNav: true,
   },
 
   // Apps
