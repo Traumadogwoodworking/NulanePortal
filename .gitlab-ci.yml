@@ -2,8 +2,7 @@ stages:
   - validate
   - test
   - build
-  - deploy_preview
-  - deploy_production
+  - deploy_pages
 
 default:
   image: node:22-bookworm
@@ -22,7 +21,8 @@ default:
 variables:
   NEXT_TELEMETRY_DISABLED: "1"
   NO_COLOR: "1"
-  VERCEL_CLI_VERSION: "55.0.0"
+  GITHUB_PAGES_REPOSITORY: "Traumadogwoodworking/inspection-trac.git"
+  GITHUB_PAGES_BRANCH: "gh-pages"
 
 lint:
   stage: validate
@@ -47,22 +47,6 @@ unit_tests:
       - coverage/
       - test-results/
 
-static_export:
-  stage: build
-  variables:
-    NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
-  script:
-    - npm run build
-    - npm run export:validate
-    - tar -czf portal-static-${CI_COMMIT_SHA}.tar.gz out
-    - sha256sum portal-static-${CI_COMMIT_SHA}.tar.gz > portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
-    - sha256sum -c portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
-  artifacts:
-    expire_in: 30 days
-    paths:
-      - portal-static-${CI_COMMIT_SHA}.tar.gz
-      - portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
-
 e2e_smoke:
   stage: test
   rules:
@@ -85,51 +69,62 @@ e2e_smoke:
       - playwright-report/
       - test-results/
 
-.vercel_deploy:
-  before_script:
-    - npm ci --cache .npm --prefer-offline
-    - test -n "$VERCEL_TOKEN"
-    - test -n "$VERCEL_ORG_ID"
-    - test -n "$VERCEL_PROJECT_ID"
-
-deploy_vercel_preview:
-  extends: .vercel_deploy
-  stage: deploy_preview
-  resource_group: vercel-preview
-  environment:
-    name: preview
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "staging"'
-      when: manual
-    - when: never
+static_export:
+  stage: build
+  variables:
+    NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
   script:
-    - npx --yes vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
-    - npx --yes vercel@${VERCEL_CLI_VERSION} build --token="$VERCEL_TOKEN"
-    - npx --yes vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" > vercel-preview-url.txt
-    - test -s vercel-preview-url.txt
-    - printf 'Preview deployment created at %s\n' "$(cat vercel-preview-url.txt)"
+    - npm run build
+    - npm run export:validate
+    - tar -czf portal-static-${CI_COMMIT_SHA}.tar.gz out
+    - sha256sum portal-static-${CI_COMMIT_SHA}.tar.gz > portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
+    - sha256sum -c portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
   artifacts:
     expire_in: 30 days
     paths:
-      - vercel-preview-url.txt
+      - out/
+      - portal-static-${CI_COMMIT_SHA}.tar.gz
+      - portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
 
-deploy_vercel_production:
-  extends: .vercel_deploy
-  stage: deploy_production
-  resource_group: vercel-production
+deploy_github_pages:
+  image: alpine:3.20
+  stage: deploy_pages
+  needs:
+    - static_export
+  before_script:
+    - apk add --no-cache git openssh-client rsync
+    - test -n "$GITHUB_PAGES_SSH_KEY_B64"
+    - test -n "$GITHUB_PAGES_KNOWN_HOSTS"
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - printf '%s' "$GITHUB_PAGES_SSH_KEY_B64" | base64 -d > ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - printf '%s\n' "$GITHUB_PAGES_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - chmod 600 ~/.ssh/known_hosts
+    - export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+  resource_group: inspection-trac-gh-pages
   environment:
-    name: production
+    name: github-pages-production
+    url: https://inspection-trac.com
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
     - when: never
   script:
-    - npx --yes vercel@${VERCEL_CLI_VERSION} pull --yes --environment=production --token="$VERCEL_TOKEN"
-    - npx --yes vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
-    - npx --yes vercel@${VERCEL_CLI_VERSION} deploy --prebuilt --prod --archive=tgz --token="$VERCEL_TOKEN" > vercel-production-url.txt
-    - test -s vercel-production-url.txt
-    - printf 'Production deployment created at %s\n' "$(cat vercel-production-url.txt)"
-  artifacts:
-    expire_in: 90 days
-    paths:
-      - vercel-production-url.txt
+    - test -f out/index.html
+    - test -d out/_next
+    - test "$(cat out/CNAME)" = "inspection-trac.com"
+    - test -f out/.nojekyll
+    - publish_dir="$(mktemp -d)"
+    - git clone --branch "$GITHUB_PAGES_BRANCH" --single-branch "git@github.com:${GITHUB_PAGES_REPOSITORY}" "$publish_dir"
+    - rsync -a --delete --exclude=.git out/ "$publish_dir/"
+    - cd "$publish_dir"
+    - test "$(cat CNAME)" = "inspection-trac.com"
+    - test -f .nojekyll
+    - test -f index.html
+    - test -d _next
+    - git config user.name "Nulane GitLab Pages Publisher"
+    - git config user.email "gitlab-pages@nulanesystems.local"
+    - git add --all
+    - git diff --cached --quiet || git commit -m "Publish portal ${CI_COMMIT_SHA}"
+    - git push origin "$GITHUB_PAGES_BRANCH"
