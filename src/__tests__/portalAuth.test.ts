@@ -173,6 +173,17 @@ describe("buildAuthRedirectUri", () => {
   });
 });
 
+describe("portal API audience", () => {
+  it("defaults to the audience accepted by the Inspection-Trac API", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH0_AUDIENCE", "");
+    const { getPortalAuthDebugConfig } = await importPortalAuth();
+
+    expect(getPortalAuthDebugConfig()).toEqual(
+      expect.objectContaining({ audience: "https://api.nulanesystems.com" })
+    );
+  });
+});
+
 describe("portalAuth redirect-loop regression checks", () => {
   it("keeps getPortalAccessToken free of Auth0 redirect calls", () => {
     const source = readFileSync(join(process.cwd(), "src/lib/portalAuth.ts"), "utf8");
