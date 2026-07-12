@@ -32,7 +32,6 @@ function isPublicBrandedPath(pathname: string | null) {
     "/privacy-policy",
     "/terms",
     "/terms-of-service",
-    "/support",
     "/contact",
     "/contact-us",
     "/workflow",

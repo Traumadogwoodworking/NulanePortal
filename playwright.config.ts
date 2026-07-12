@@ -20,6 +20,7 @@ export default defineConfig({
     env: {
       PORTAL_DEV_SESSION_BYPASS: "true",
       NEXT_PUBLIC_PORTAL_DEV_AUTH_BYPASS: "1",
+      NEXT_PUBLIC_DEV_AUTH_BYPASS: "true",
       NEXT_PUBLIC_API_BASE_URL: "https://api.nulanesystems.com/api",
     },
   },

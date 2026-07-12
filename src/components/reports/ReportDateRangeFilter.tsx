@@ -28,16 +28,10 @@ function addDays(date: Date, amount: number): Date {
   return next;
 }
 
-function startOfWeek(date: Date): Date {
+function addMonths(date: Date, amount: number): Date {
   const next = new Date(date);
-  const day = next.getDay();
-  next.setDate(next.getDate() - day);
-  next.setHours(0, 0, 0, 0);
+  next.setMonth(next.getMonth() + amount);
   return next;
-}
-
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function clampDate(date: Date, min: Date, max: Date): Date {
@@ -77,11 +71,12 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
   }, [maxDate, minDate]);
 
   const presetRanges = useMemo(() => {
-    const end = dateBounds.max;
+    const end = new Date();
     return [
       {
         key: "today",
         label: "Today",
+        mode: "single" as const,
         range: {
           createdFrom: todayInputValue,
           createdTo: todayInputValue,
@@ -90,6 +85,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       {
         key: "yesterday",
         label: "Yesterday",
+        mode: "single" as const,
         range: {
           createdFrom: yesterdayInputValue,
           createdTo: yesterdayInputValue,
@@ -98,21 +94,23 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       {
         key: "week_to_date",
         label: "Week to date",
+        mode: "range" as const,
         range: {
-          createdFrom: toDateInputValue(clampDate(startOfWeek(end), dateBounds.min, end)),
-          createdTo: toDateInputValue(end),
+          createdFrom: toDateInputValue(clampDate(addDays(end, -7), dateBounds.min, end)),
+          createdTo: todayInputValue,
         },
       },
       {
         key: "month_to_date",
         label: "Month to date",
+        mode: "range" as const,
         range: {
-          createdFrom: toDateInputValue(clampDate(startOfMonth(end), dateBounds.min, end)),
-          createdTo: toDateInputValue(end),
+          createdFrom: toDateInputValue(clampDate(addMonths(end, -1), dateBounds.min, end)),
+          createdTo: todayInputValue,
         },
       },
     ];
-  }, [dateBounds.max, dateBounds.min, todayInputValue, yesterdayInputValue]);
+  }, [dateBounds.min, todayInputValue, yesterdayInputValue]);
 
   const dateRangeMax = useMemo(() => daysBetween(dateBounds.min, dateBounds.max), [dateBounds]);
   const createdFromOffset = value.createdFrom ? daysBetween(dateBounds.min, parseDateInputValue(value.createdFrom)) : 0;
@@ -190,7 +188,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
                 key={preset.key}
                 type="button"
                 onClick={() => {
-                  setDateFilterMode("single");
+                  setDateFilterMode(preset.mode);
                   onChange(preset.range);
                   setIsOpen(false);
                 }}

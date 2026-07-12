@@ -146,6 +146,14 @@ function ShowcaseEmblaCarousel({
   const dragging = useRef(false);
   const isDark = variant === "dark";
   const defaultSlideClass = "flex-[0_0_86%] sm:flex-[0_0_48%] lg:flex-[0_0_31%]";
+  const groupedShots =
+    phoneFrame
+      ? null
+      : settleGroupSize > 1
+      ? Array.from({ length: Math.ceil(shots.length / settleGroupSize) }, (_, groupIndex) =>
+          shots.slice(groupIndex * settleGroupSize, groupIndex * settleGroupSize + settleGroupSize)
+        )
+      : null;
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -204,15 +212,31 @@ function ShowcaseEmblaCarousel({
 
         <div className="overflow-hidden" ref={emblaRef}>
           <div className="flex gap-4 sm:gap-5">
-            {shots.map((shot) => (
-              <div key={shot.path} className={`min-w-0 ${slideClassName ?? defaultSlideClass}`}>
-                {phoneFrame ? (
-                  <AppScreenshotCard path={shot.path} exists={shot.exists} showIsland />
-                ) : (
-                  <ScreenshotCard {...shot} />
-                )}
-              </div>
-            ))}
+            {groupedShots
+              ? groupedShots.map((group, groupIndex) => (
+                  <div key={group[0]?.path ?? groupIndex} className={`min-w-0 ${slideClassName ?? defaultSlideClass}`}>
+                    <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                      {group.map((shot) => (
+                        <div key={shot.path} className="min-w-0">
+                          {phoneFrame ? (
+                            <AppScreenshotCard path={shot.path} exists={shot.exists} showIsland compact />
+                          ) : (
+                            <ScreenshotCard {...shot} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              : shots.map((shot) => (
+                  <div key={shot.path} className={`min-w-0 ${slideClassName ?? defaultSlideClass}`}>
+                    {phoneFrame ? (
+                      <AppScreenshotCard path={shot.path} exists={shot.exists} showIsland />
+                    ) : (
+                      <ScreenshotCard {...shot} />
+                    )}
+                  </div>
+                ))}
           </div>
         </div>
       </div>
@@ -229,7 +253,7 @@ export function PublicShowcaseSections() {
 
   return (
     <>
-      <section id="experience" className="mx-auto flex min-h-screen w-full max-w-[92rem] items-center px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <section id="experience" className="mx-auto flex min-h-screen w-full max-w-[92rem] items-center bg-[#e9ebf2] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <ShowcaseEmblaCarousel
           eyebrow="Mobile app"
           title="Inspection experience"
@@ -248,15 +272,15 @@ export function PublicShowcaseSections() {
           shots={appShowcaseShots}
           variant="light"
           phoneFrame
-          settleGroupSize={3}
+          settleGroupSize={1}
+          slideClassName="flex-[0_0_88%] sm:flex-[0_0_48%] lg:flex-[0_0_31%]"
         />
       </section>
 
-      <section className="mx-auto flex min-h-screen w-full max-w-[92rem] items-center px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <section className="mx-auto flex min-h-screen w-full max-w-[92rem] items-center bg-[#e9ebf2] px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         <ShowcaseEmblaCarousel
           eyebrow="Portal"
           title="Review experience"
-          description="Oversized framed slides keep reports, dashboards, and routing details readable."
           shots={portalShowcaseShots}
           variant="dark"
           slideClassName="flex-[0_0_92%] sm:flex-[0_0_80%] lg:flex-[0_0_70%]"
@@ -266,31 +290,67 @@ export function PublicShowcaseSections() {
   );
 }
 
-function AppScreenshotCard({ path, exists, showIsland }: { path: string; exists: boolean; showIsland: boolean }) {
+function AppScreenshotCard({
+  path,
+  exists,
+  showIsland,
+  compact = false,
+}: {
+  path: string;
+  exists: boolean;
+  showIsland: boolean;
+  compact?: boolean;
+}) {
+  const frameClass = compact
+    ? "flex h-[64svh] min-h-[430px] max-h-[600px] items-center justify-center bg-white"
+    : "flex h-[78svh] max-h-[900px] min-h-[420px] items-center justify-center bg-white";
+  const shellClass = compact
+    ? "relative aspect-[430/932] h-full rounded-[2.1rem] bg-black p-[10px] shadow-[0_24px_54px_rgba(15,23,42,0.18)]"
+    : "relative aspect-[430/932] h-full rounded-[2.6rem] bg-black p-[12px] shadow-[0_34px_76px_rgba(15,23,42,0.22)]";
+  const bezelClass = compact
+    ? "relative h-full w-full overflow-hidden rounded-[1.7rem] bg-white"
+    : "relative h-full w-full overflow-hidden rounded-[2.1rem] bg-white";
+  const islandClass = compact
+    ? "pointer-events-none absolute left-1/2 top-[10px] z-20 h-[24px] w-[88px] -translate-x-1/2 rounded-full bg-black"
+    : "pointer-events-none absolute left-1/2 top-[12px] z-20 h-[28px] w-[102px] -translate-x-1/2 rounded-full bg-black";
+  const sideRailLeftClass = compact
+    ? "pointer-events-none absolute left-[-4px] top-[18%] h-16 w-[4px] rounded-l bg-black"
+    : "pointer-events-none absolute left-[-4px] top-[18%] h-20 w-[4px] rounded-l bg-black";
+  const sideRailRightClass = compact
+    ? "pointer-events-none absolute right-[-4px] top-[24%] h-24 w-[4px] rounded-r bg-black"
+    : "pointer-events-none absolute right-[-4px] top-[24%] h-28 w-[4px] rounded-r bg-black";
+  const screenClass = compact
+    ? "absolute inset-0 overflow-hidden rounded-[1.7rem] bg-white"
+    : "absolute inset-0 overflow-hidden rounded-[2.1rem] bg-white";
+  const imageWrapClass = "absolute inset-0 overflow-hidden bg-white";
   return (
-    <div className="flex h-[78svh] max-h-[900px] min-h-[420px] items-center justify-center rounded-[1.9rem] border border-slate-800 bg-slate-950 p-1.25 shadow-[0_22px_54px_rgba(15,23,42,0.2)] sm:p-1.5">
-      <div className="relative h-full overflow-hidden rounded-[2rem] border border-slate-700 bg-black p-1.5">
-        {showIsland ? (
-          <div className="absolute left-1/2 top-2 z-10 h-4 w-16 -translate-x-1/2 rounded-full bg-black shadow-[0_0_0_1px_rgba(255,255,255,0.08)] sm:h-5 sm:w-20" />
-        ) : null}
-        <div className="aspect-[1206/2622] h-full">
-          {exists ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={path}
-              alt=""
-              aria-hidden
-              draggable={false}
-              className="h-full w-full rounded-[1.35rem] bg-white object-contain"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center rounded-[1.35rem] border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">App shot pending</p>
-                <p className="mt-2 text-[11px] text-slate-500">{path.replace("/images/", "")}</p>
-              </div>
+    <div className={frameClass}>
+      <div className={shellClass}>
+        <div className={bezelClass}>
+          <div className={sideRailLeftClass} />
+          <div className={sideRailRightClass} />
+          <div className={screenClass}>
+            <div className={imageWrapClass}>
+              {exists ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={path}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  className="h-full w-full bg-transparent object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-400">App shot pending</p>
+                    <p className="mt-2 text-[11px] text-slate-500">{path.replace("/images/", "")}</p>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+          {showIsland ? <div className={islandClass} /> : null}
         </div>
       </div>
       <span className="sr-only">App screenshot</span>

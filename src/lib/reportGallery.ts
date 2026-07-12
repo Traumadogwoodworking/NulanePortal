@@ -1,4 +1,5 @@
 import { buildReportMapMetadata } from "./reportMap";
+import { resolveReportMedia } from "./reportMedia";
 import type { ReportDamageApiRow, RsaReportApiRow } from "./types";
 
 export type ReportGallery = {
@@ -6,40 +7,6 @@ export type ReportGallery = {
   galleryUrls: string[];
   photoUrls: string[];
 };
-
-type ReportGalleryPayload = {
-  photoUrls?: unknown;
-  photo_urls?: unknown;
-  photo_urls_original?: unknown;
-  splat_urls?: unknown;
-  splat_urls_original?: unknown;
-  photos?: Array<{
-    url?: unknown;
-    uri?: unknown;
-    path?: unknown;
-  }>;
-};
-
-function normalizeUrlList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) => {
-      if (typeof entry === "string") {
-        return entry.trim();
-      }
-      if (entry && typeof entry === "object") {
-        const candidate = entry as { url?: unknown; uri?: unknown; path?: unknown };
-        const firstCandidate = [candidate.url, candidate.uri, candidate.path].find(
-          (item): item is string => typeof item === "string" && item.trim().length > 0
-        );
-        return firstCandidate?.trim() ?? "";
-      }
-      return "";
-    })
-    .filter(Boolean);
-}
 
 function normalizeRenderableUrl(url: string): string {
   const trimmed = url.trim();
@@ -73,94 +40,19 @@ export function buildReportGallery(
     return { mapMetadata, galleryUrls, photoUrls };
   }
 
-  const topLevelPhotoUrls = normalizeUrlList((report as ReportGalleryPayload).photoUrls);
-  if (topLevelPhotoUrls.length) {
-    topLevelPhotoUrls.forEach((url) => {
-      const normalized = normalizeRenderableUrl(url);
-      if (normalized) {
-        photoUrls.push(normalized);
-        galleryUrls.push(normalized);
-      }
-    });
-  }
-
-  const legacyPhotoUrls = normalizeUrlList((report as ReportGalleryPayload).photo_urls);
-  if (!galleryUrls.length && legacyPhotoUrls.length) {
-    legacyPhotoUrls.forEach((url) => {
-      const normalized = normalizeRenderableUrl(url);
-      if (normalized) {
-        photoUrls.push(normalized);
-        galleryUrls.push(normalized);
-      }
-    });
-  }
-
-  const originalPhotoUrls = normalizeUrlList((report as ReportGalleryPayload).photo_urls_original);
-  if (!galleryUrls.length && originalPhotoUrls.length) {
-    originalPhotoUrls.forEach((url) => {
-      const normalized = normalizeRenderableUrl(url);
-      if (normalized) {
-        photoUrls.push(normalized);
-        galleryUrls.push(normalized);
-      }
-    });
-  }
-
-  const splatPhotoUrls = normalizeUrlList((report as ReportGalleryPayload).splat_urls);
-  if (!galleryUrls.length && splatPhotoUrls.length) {
-    splatPhotoUrls.forEach((url) => {
-      const normalized = normalizeRenderableUrl(url);
-      if (normalized) {
-        galleryUrls.push(normalized);
-      }
-    });
-  }
-
-  const originalSplatPhotoUrls = normalizeUrlList((report as ReportGalleryPayload).splat_urls_original);
-  if (!galleryUrls.length && originalSplatPhotoUrls.length) {
-    originalSplatPhotoUrls.forEach((url) => {
-      const normalized = normalizeRenderableUrl(url);
-      if (normalized) {
-        galleryUrls.push(normalized);
-      }
-    });
-  }
-
-  // Handle damage reports
-  if (!galleryUrls.length && "damage_entries" in report && Array.isArray(report.damage_entries)) {
-    report.damage_entries.forEach((entry) => {
-      if (Array.isArray(entry.photos)) {
-        entry.photos.forEach((photo) => {
-          const url = photo.url || photo.uri || photo.path;
-          if (typeof url === "string" && url) {
-            const normalized = normalizeRenderableUrl(url);
-            if (normalized) {
-              photoUrls.push(normalized);
-              galleryUrls.push(normalized);
-            }
-          }
-        });
-      }
-    });
-  }
-
-  // Handle RSA reports (if they have photos in payload or elsewhere)
-  // Currently checking payload.photos for RSA
-  const payload = (report as { payload?: ReportGalleryPayload }).payload;
-  if (payload && Array.isArray(payload.photos)) {
-    payload.photos.forEach((photo) => {
-      const url = [photo.url, photo.uri, photo.path].find(
-        (value): value is string => typeof value === "string" && value.length > 0
-      );
-      if (typeof url === "string" && url) {
-        const normalized = normalizeRenderableUrl(url);
-        if (normalized) {
-          photoUrls.push(normalized);
-          galleryUrls.push(normalized);
-        }
-      }
-    });
-  }
+  const media = resolveReportMedia(report as unknown as Record<string, unknown>, null);
+  media.photoUrls.forEach((url) => {
+    const normalized = normalizeRenderableUrl(url);
+    if (normalized) {
+      photoUrls.push(normalized);
+      galleryUrls.push(normalized);
+    }
+  });
+  media.splatUrls.forEach((url) => {
+    if (url && !galleryUrls.includes(url)) {
+      galleryUrls.push(url);
+    }
+  });
 
   return {
     mapMetadata,

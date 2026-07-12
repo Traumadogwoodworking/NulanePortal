@@ -2,12 +2,27 @@
 
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent } from "@/components/ui/Card";
-import { normalizeMediaUrl } from "@/lib/config";
+import { resolveReportMedia } from "@/lib/reportMedia";
 import type { ReportDamageApiRow } from "@/lib/types";
 import { MapPin } from "lucide-react";
 
 export function DamageMapCard({ report }: { report?: ReportDamageApiRow | null }) {
-  const splatUrl = report?.splat_urls?.[0] ? normalizeMediaUrl(report.splat_urls[0]) : null;
+  const firstDamageEntry =
+    Array.isArray(report?.damage_entries) && report.damage_entries.length > 0
+      ? (report.damage_entries[0] as Record<string, unknown>)
+      : null;
+  const media = resolveReportMedia(report as unknown as Record<string, unknown>, firstDamageEntry);
+  const splatUrl = media.splatImageUrl || null;
+  if (process.env.NODE_ENV === "development" && !splatUrl && (report?.splatImageUrl || report?.splat_urls?.length)) {
+    console.warn("[DamageMapCard] splat present but unusable", {
+      reportId: report?.report_id ?? null,
+      damageEntryId:
+        firstDamageEntry?.damage_entry_id ?? null,
+      availableSplatKeys: report
+        ? Object.keys(report).filter((key) => key.toLowerCase().includes("splat") || key === "mapPhoto")
+        : [],
+    });
+  }
 
   return (
     <Card className="overflow-hidden border-slate-200/80 bg-white shadow-sm">

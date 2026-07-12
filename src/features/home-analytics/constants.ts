@@ -13,6 +13,8 @@ export const HOME_ANALYTICS_FILTER_KEYS: HomeFilterKey[] = [
   "make",
   "model",
   "yard",
+  "severity",
+  "damage_area",
   "inspector_email",
   "status",
 ];

@@ -42,7 +42,20 @@ function normalizeWhitespace(value: string): string {
 export function normalizeFacilityLabel(value: string | null | undefined): string {
   const stripped = stripFacilitySuffix((value ?? "").toString()).replace(/[_-]+/g, " ");
   const normalized = normalizeWhitespace(stripped.split(/[–-]/).pop() ?? stripped);
-  return normalized || "Unknown facility";
+  const lower = normalized.toLowerCase();
+  if (
+    !normalized ||
+    lower === "unknown" ||
+    lower === "unknown facility" ||
+    lower === "unavailable" ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower === "null" ||
+    lower === "undefined"
+  ) {
+    return "Other";
+  }
+  return normalized;
 }
 
 function canonicalValue(value: string | null | undefined): string {
@@ -126,7 +139,7 @@ function resolveReportFacilityCandidate(report: ReportDamageApiRow): string {
     extractSuffixAfterDash(resolveDamageReportLocationName(report)),
     resolveDamageReportLocationName(report),
   ];
-  return candidates.map((value) => normalizeFacilityLabel(String(value || ""))).find((value) => value !== "Unknown facility") || "Unknown facility";
+  return candidates.map((value) => normalizeFacilityLabel(String(value || ""))).find((value) => value !== "Other") || "Other";
 }
 
 function resolveReportSeverityValue(report: ReportDamageApiRow): string | null {

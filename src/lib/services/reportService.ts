@@ -1,4 +1,4 @@
-import { apiFetch, apiFetchResponse } from "@/lib/apiClient";
+import { apiFetch, apiFetchResponse, type PortalApiRequestInit } from "@/lib/apiClient";
 import { isDevMockEnabled } from "@/lib/devMockApi";
 import { buildApiUrl, normalizeMediaUrl } from "@/lib/config";
 import { getPortalAccessToken } from "@/lib/portalAuth";
@@ -29,6 +29,28 @@ export type DashboardAnalyticsParams = {
   search?: string;
 };
 
+export type DashboardAnalyticsFilterOption = {
+  value: string;
+  label: string;
+  count?: number;
+};
+
+export type DashboardAnalyticsSeriesRow = {
+  label?: string;
+  value?: string;
+  count?: number;
+  date?: string;
+  name?: string;
+  filterValue?: string;
+  damageReports?: number;
+  rsaReports?: number;
+  noDamageReports?: number;
+  clearReports?: number;
+  totalReports?: number;
+  reportCount?: number;
+  [key: string]: unknown;
+};
+
 export type DashboardAnalyticsResponse = {
   range?: {
     from?: string | null;
@@ -47,6 +69,7 @@ export type DashboardAnalyticsResponse = {
     inspection02Count?: number;
     rsaReports?: number;
     damageReportsToday?: number;
+    noDamageReportsToday?: number;
     rsaReportsToday?: number;
     reportsToday?: number;
     reportsLast7Days?: number;
@@ -82,6 +105,32 @@ export type DashboardAnalyticsResponse = {
   byInspectorDaily?: Array<Record<string, unknown>>;
   recentActivity?: Array<Record<string, unknown>>;
   byInspectionType?: Array<Record<string, unknown>>;
+  filters?: {
+    facilities?: DashboardAnalyticsFilterOption[];
+    yards?: DashboardAnalyticsFilterOption[];
+    severities?: DashboardAnalyticsFilterOption[];
+    damageAreas?: DashboardAnalyticsFilterOption[];
+    damageTypes?: DashboardAnalyticsFilterOption[];
+    inspectors?: DashboardAnalyticsFilterOption[];
+    inspectionTypes?: DashboardAnalyticsFilterOption[];
+    statuses?: DashboardAnalyticsFilterOption[];
+    makes?: DashboardAnalyticsFilterOption[];
+    models?: DashboardAnalyticsFilterOption[];
+  };
+  series?: {
+    dailyDamageTrend?: DashboardAnalyticsSeriesRow[];
+    severityBreakdown?: DashboardAnalyticsSeriesRow[];
+    topDamageAreas?: DashboardAnalyticsSeriesRow[];
+    topFacilities?: DashboardAnalyticsSeriesRow[];
+    topYards?: DashboardAnalyticsSeriesRow[];
+    topModels?: DashboardAnalyticsSeriesRow[];
+    inspectorVolume?: DashboardAnalyticsSeriesRow[];
+  };
+  meta?: {
+    generatedAt?: string;
+    filterHash?: string;
+    rowCount?: number;
+  };
 };
 
 export type ReportListParams = {
@@ -105,6 +154,7 @@ export type ReportListParams = {
   inspector_email?: string;
   severity?: string;
   damage_area?: string;
+  damage_type?: string;
 };
 
 export type ReportListRow = {
@@ -190,10 +240,13 @@ const REPORTS_ENDPOINT = "/report/pull";
 const REPORTS_LIST_ENDPOINT = "/reports/list";
 const REPORT_MUTATIONS_ENDPOINT = "/reports";
 const RSA_REPORTS_ENDPOINT = "/railcar-scans/report/pull";
-const RSA_REPORTS_PAGE_SIZE = 500;
-const RSA_REPORTS_MAX_PAGES = 200;
+const RSA_REPORTS_PAGE_SIZE = 200;
+const RSA_REPORTS_MAX_PAGES = 20;
+const RSA_REPORTS_LOOKBACK_DAYS = 5;
+const REPORT_LIST_TIMEOUT_MS = 15000;
+const REPORT_DETAIL_TIMEOUT_MS = 20000;
 const REPORTS_PAGINATION_BATCH_SIZE = 4;
-const DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES = 80;
+const DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES = 1;
 const MILESTONE_FETCH_ENDPOINT = "/reports/milestones";
 const MILESTONE_SUBMIT_ENDPOINT = "/milestones/reports";
 
@@ -255,6 +308,22 @@ function readBooleanResponseField(response: unknown, fieldName: string): boolean
   return typeof value === "boolean" ? value : null;
 }
 
+async function apiFetchReport<T = unknown>(
+  path: string,
+  options: PortalApiRequestInit = {},
+  timeoutMs = REPORT_LIST_TIMEOUT_MS,
+  callerLabel = "reports.request"
+): Promise<T> {
+  return apiFetch<T>(path, {
+    ...options,
+    portal: {
+      ...options.portal,
+      callerLabel: options.portal?.callerLabel ?? callerLabel,
+      timeoutMs: options.portal?.timeoutMs ?? timeoutMs,
+    },
+  });
+}
+
 function mergeReportsById<T extends { report_id?: string }>(existing: T[], incoming: T[]): T[] {
   const mergedById = new Map<string, T>();
 
@@ -273,22 +342,47 @@ function getPaginatedFetchEndPage(total: number | null, pageSize: number, maxPag
   return maxPages;
 }
 
-async function fetchAllRsaReportPages(): Promise<RsaReportApiRow[]> {
-  const firstResponse = await apiFetch<unknown>(
-    `${RSA_REPORTS_ENDPOINT}${buildNamedQueryString({ page: 1, pageSize: RSA_REPORTS_PAGE_SIZE })}`
-  );
-  const firstPage = extractReportsArray<RsaReportApiRow>(firstResponse).map((report) => normalizeRsaReportRow(report));
-  const total = readNumericResponseField(firstResponse, "total");
-  const hasNextPage = readBooleanResponseField(firstResponse, "hasNextPage");
-  const effectiveTotal = hasNextPage === true && total !== null && total <= firstPage.length ? null : total;
+function toDateOnlyString(value: Date): string {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-  if (!firstPage.length || (hasNextPage !== true && (effectiveTotal === null || firstPage.length >= effectiveTotal || firstPage.length < RSA_REPORTS_PAGE_SIZE))) {
-    return firstPage;
+function getRsaLookbackRange(days = RSA_REPORTS_LOOKBACK_DAYS): { date_from: string; date_to: string } {
+  const to = new Date();
+  const from = new Date(to.getTime() - Math.max(1, days) * 24 * 60 * 60 * 1000);
+  return {
+    date_from: toDateOnlyString(from),
+    date_to: toDateOnlyString(to),
+  };
+}
+
+function getRsaReportTimestamp(report: RsaReportApiRow): number | null {
+  const record = report as unknown as Record<string, unknown>;
+  const value = report.created_at || report.updated_at || record.submitted_at;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+async function fetchAllRsaReportPages(params: RsaReportListParams = {}): Promise<RsaReportApiRow[]> {
+  const lookbackRange = getRsaLookbackRange();
+  const dateFrom = params.date_from || params.from || lookbackRange.date_from;
+  const dateTo = params.date_to || params.to || lookbackRange.date_to;
+  const firstPageResult = await fetchRsaReportPage({
+    ...params,
+    page: 1,
+    limit: params.limit ?? params.pageSize ?? RSA_REPORTS_PAGE_SIZE,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
+  let merged = firstPageResult.rows;
+  const fromTimestamp = new Date(`${dateFrom}T00:00:00`).getTime();
+  if (!firstPageResult.hasNextPage || !Number.isFinite(fromTimestamp)) {
+    return merged;
   }
-
-  let merged = firstPage;
-  const endPage = getPaginatedFetchEndPage(effectiveTotal, RSA_REPORTS_PAGE_SIZE, RSA_REPORTS_MAX_PAGES);
-
+  const endPage = getPaginatedFetchEndPage(firstPageResult.total, firstPageResult.pageSize, RSA_REPORTS_MAX_PAGES);
   for (let batchStart = 2; batchStart <= endPage; batchStart += REPORTS_PAGINATION_BATCH_SIZE) {
     const batchPages = Array.from(
       { length: Math.min(REPORTS_PAGINATION_BATCH_SIZE, endPage - batchStart + 1) },
@@ -297,9 +391,13 @@ async function fetchAllRsaReportPages(): Promise<RsaReportApiRow[]> {
     const pageResults = await Promise.allSettled(
       batchPages.map(async (page) => ({
         page,
-        response: await apiFetch<unknown>(
-          `${RSA_REPORTS_ENDPOINT}${buildNamedQueryString({ page, pageSize: RSA_REPORTS_PAGE_SIZE })}`
-        ),
+        response: await fetchRsaReportPage({
+          ...params,
+          page,
+          limit: firstPageResult.pageSize,
+          date_from: dateFrom,
+          date_to: dateTo,
+        }),
       }))
     );
     const rejectedResult = pageResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
@@ -310,35 +408,106 @@ async function fetchAllRsaReportPages(): Promise<RsaReportApiRow[]> {
     let shouldStop = false;
     for (const result of pageResults) {
       if (result.status !== "fulfilled") continue;
-      const { response } = result.value;
-      const pageRows = extractReportsArray<RsaReportApiRow>(response).map((report) => normalizeRsaReportRow(report));
-      if (!pageRows.length) {
+      const nextRows = result.value.response.rows;
+      if (!nextRows.length) {
         shouldStop = true;
         break;
       }
-
       const beforeCount = merged.length;
-      merged = mergeReportsById(merged, pageRows);
-      const responseHasNextPage = readBooleanResponseField(response, "hasNextPage");
-      const rawResponseTotal = readNumericResponseField(response, "total") ?? effectiveTotal;
-      const responseTotal =
-        responseHasNextPage === true && rawResponseTotal !== null && rawResponseTotal <= merged.length
-          ? null
-          : rawResponseTotal;
-
-      if (responseHasNextPage === false) shouldStop = true;
-      if (responseTotal !== null && merged.length >= responseTotal) shouldStop = true;
-      if (pageRows.length < RSA_REPORTS_PAGE_SIZE) shouldStop = true;
+      merged = mergeReportsById(merged, nextRows);
+      const hasRowsInsideWindow = nextRows.some((row) => {
+        const timestamp = getRsaReportTimestamp(row);
+        return timestamp === null || timestamp >= fromTimestamp;
+      });
+      if (!result.value.response.hasNextPage) shouldStop = true;
+      if (merged.length >= result.value.response.total) shouldStop = true;
+      if (nextRows.length < firstPageResult.pageSize) shouldStop = true;
+      if (!hasRowsInsideWindow) shouldStop = true;
       if (merged.length === beforeCount) shouldStop = true;
       if (shouldStop) break;
     }
-
-    if (shouldStop) {
-      break;
-    }
+    if (shouldStop) break;
   }
+  return merged.filter((row) => {
+    const timestamp = getRsaReportTimestamp(row);
+    return timestamp === null || timestamp >= fromTimestamp;
+  });
+}
 
-  return merged;
+export type RsaReportListParams = {
+  page?: number;
+  pageSize?: number;
+  limit?: number;
+  offset?: number;
+  date_from?: string;
+  date_to?: string;
+  from?: string;
+  to?: string;
+  location_id?: string;
+  rail_car_number?: string;
+  report_id?: string;
+  inspector_email?: string;
+};
+
+export type RsaReportListResponse = {
+  rows: RsaReportApiRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  hasNextPage: boolean;
+};
+
+export async function fetchRsaReportPage(params: RsaReportListParams = {}): Promise<RsaReportListResponse> {
+  const requestedPageSize = Number(params.pageSize ?? params.limit ?? RSA_REPORTS_PAGE_SIZE);
+  const pageSize = Number.isFinite(requestedPageSize)
+    ? Math.min(Math.max(Math.floor(requestedPageSize), 1), RSA_REPORTS_PAGE_SIZE)
+    : RSA_REPORTS_PAGE_SIZE;
+  const page = Number.isFinite(Number(params.page)) ? Math.max(1, Math.floor(Number(params.page))) : 1;
+  const requestedOffset = params.offset ?? (page - 1) * pageSize;
+  const offset = Number.isFinite(Number(requestedOffset)) ? Math.max(0, Math.floor(Number(requestedOffset))) : 0;
+  const firstResponse = await apiFetchReport<unknown>(
+    `${RSA_REPORTS_ENDPOINT}${buildNamedQueryString(
+      {
+        limit: pageSize,
+        offset,
+        date_from: params.date_from ?? params.from,
+        date_to: params.date_to ?? params.to,
+        location_id: params.location_id,
+        rail_car_number: params.rail_car_number,
+        report_id: params.report_id,
+        inspector_email: params.inspector_email,
+      },
+      { preserveDateOnly: true }
+    )}`,
+    {},
+    REPORT_LIST_TIMEOUT_MS,
+    "rsaReports.page"
+  );
+  const firstPage = extractReportsArray<RsaReportApiRow>(firstResponse).map((report) => normalizeRsaReportRow(report));
+  const responseRecord =
+    firstResponse && typeof firstResponse === "object" && !Array.isArray(firstResponse)
+      ? (firstResponse as Record<string, unknown>)
+      : {};
+  const paginationRecord =
+    responseRecord.pagination && typeof responseRecord.pagination === "object" && !Array.isArray(responseRecord.pagination)
+      ? (responseRecord.pagination as Record<string, unknown>)
+      : {};
+  const total = readNumericResponseField(firstResponse, "total") ?? readNumericResponseField(paginationRecord, "total");
+  const hasNextPage =
+    readBooleanResponseField(firstResponse, "hasNextPage") ??
+    readBooleanResponseField(paginationRecord, "hasNextPage") ??
+    readBooleanResponseField(paginationRecord, "has_more");
+  const resolvedTotal = total ?? firstPage.length;
+  return {
+    rows: firstPage,
+    page,
+    pageSize,
+    total: resolvedTotal,
+    hasNextPage:
+      hasNextPage === null
+        ? firstPage.length >= pageSize && page * pageSize < resolvedTotal
+        : hasNextPage,
+  };
 }
 
 function extractDamageReportsArray(response: unknown): ReportDamageApiRow[] {
@@ -467,10 +636,10 @@ function buildReportQueryString(filters: ReportFilters = {}) {
   return queryString ? `?${queryString}` : "";
 }
 
-function buildNamedQueryString(filters: Record<string, unknown> = {}) {
+function buildNamedQueryString(filters: Record<string, unknown> = {}, options?: { preserveDateOnly?: boolean }) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    const candidate = normalizeQueryParamValue(key, value);
+    const candidate = normalizeQueryParamValue(key, value, options);
     if (candidate) {
       params.set(key, candidate);
     }
@@ -479,9 +648,12 @@ function buildNamedQueryString(filters: Record<string, unknown> = {}) {
   return queryString ? `?${queryString}` : "";
 }
 
-function normalizeQueryParamValue(key: string, value: unknown): string {
+function normalizeQueryParamValue(key: string, value: unknown, options?: { preserveDateOnly?: boolean }): string {
   const candidate = value?.toString().trim() ?? "";
   if (!candidate) return "";
+  if (options?.preserveDateOnly && /^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+    return candidate;
+  }
   if ((key === "from" || key === "to") && /^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
     const [year, month, day] = candidate.split("-").map(Number);
     if (year && month && day) {
@@ -500,7 +672,12 @@ export function buildNormalizedReportQueryString(filters: ReportFilters = {}) {
 }
 
 export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams = {}): Promise<DashboardAnalyticsResponse> {
-  return apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`);
+  return apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`, {
+    portal: {
+      callerLabel: "dashboard.analytics",
+      timeoutMs: REPORT_LIST_TIMEOUT_MS,
+    },
+  });
 }
 
 export async function fetchReportList(params: ReportListParams = {}): Promise<ReportListResponse> {
@@ -526,8 +703,14 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
     inspector_email: params.inspector_email,
     severity: params.severity,
     damage_area: params.damage_area,
+    damage_type: params.damage_type,
   };
-  const response = await apiFetch<unknown>(`${REPORTS_LIST_ENDPOINT}${buildNamedQueryString(queryParams)}`);
+  const response = await apiFetchReport<unknown>(
+    `${REPORTS_LIST_ENDPOINT}${buildNamedQueryString(queryParams, { preserveDateOnly: true })}`,
+    {},
+    REPORT_LIST_TIMEOUT_MS,
+    "damageReports.list"
+  );
   if (Array.isArray(response)) {
     return {
       rows: response as ReportListRow[],
@@ -687,8 +870,11 @@ export async function fetchDamageReportListSnapshot(params: ReportListParams = {
 export async function fetchDamageReportDetail(reportId: string): Promise<ReportDamageApiRow | null> {
   const normalizedReportId = reportId.trim();
   if (!normalizedReportId) return null;
-  const response = await apiFetch<unknown>(
-    `${REPORTS_ENDPOINT}${buildReportQueryString({ report_id: normalizedReportId })}`
+  const response = await apiFetchReport<unknown>(
+    `${REPORTS_ENDPOINT}${buildReportQueryString({ report_id: normalizedReportId })}`,
+    {},
+    REPORT_DETAIL_TIMEOUT_MS,
+    "damageReports.detail"
   );
   const parsedReports = extractDamageReportsArray(response);
   const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
@@ -1050,7 +1236,12 @@ export async function fetchDamageReportsUncached(filters: ReportFilters = {}): P
   delete damageFilters.organization_id;
   delete damageFilters.org_id;
   const queryString = buildReportQueryString(damageFilters);
-  const response = await apiFetch<unknown>(`${REPORTS_ENDPOINT}${queryString}`);
+  const response = await apiFetchReport<unknown>(
+    `${REPORTS_ENDPOINT}${queryString}`,
+    {},
+    REPORT_DETAIL_TIMEOUT_MS,
+    "damageReports.legacyPull"
+  );
   const parsedReports = extractDamageReportsArray(response);
   const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
   const results = currentOrganizationId
@@ -1113,6 +1304,10 @@ export class ReportsAdapter {
     const result = await apiFetch<unknown>(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(normalizedReportId)}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+      portal: {
+        callerLabel: "damageReports.update",
+        timeoutMs: REPORT_DETAIL_TIMEOUT_MS,
+      },
     });
     this.clearCache();
     return result;
@@ -1139,7 +1334,12 @@ export class ReportsAdapter {
           authorizationPresent: Boolean(authToken),
         });
       }
-      const response = await apiFetch<unknown>(`${REPORTS_ENDPOINT}${queryString}`);
+      const response = await apiFetchReport<unknown>(
+        `${REPORTS_ENDPOINT}${queryString}`,
+        {},
+        REPORT_DETAIL_TIMEOUT_MS,
+        "damageReports.adapterPull"
+      );
       const parsedReports = extractDamageReportsArray(response);
       const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
       const results = currentOrganizationId
@@ -1214,7 +1414,12 @@ export class ReportsAdapter {
     if (isDevMockEnabled()) {
       return [];
     }
-    const response = await apiFetch<unknown>(MILESTONE_FETCH_ENDPOINT);
+    const response = await apiFetch<unknown>(MILESTONE_FETCH_ENDPOINT, {
+      portal: {
+        callerLabel: "milestones.fetch",
+        timeoutMs: REPORT_LIST_TIMEOUT_MS,
+      },
+    });
     const results = extractReportsArray<unknown>(response);
     return results;
   }
@@ -1226,6 +1431,10 @@ export class ReportsAdapter {
     const result = await apiFetch<unknown>(MILESTONE_SUBMIT_ENDPOINT, {
       method: "POST",
       body: JSON.stringify(payload),
+      portal: {
+        callerLabel: "milestones.submit",
+        timeoutMs: REPORT_DETAIL_TIMEOUT_MS,
+      },
     });
     return result;
   }
@@ -1236,6 +1445,10 @@ export class ReportsAdapter {
     }
     await apiFetch(`${REPORT_MUTATIONS_ENDPOINT}/${reportId}`, {
       method: "DELETE",
+      portal: {
+        callerLabel: "reports.delete",
+        timeoutMs: REPORT_DETAIL_TIMEOUT_MS,
+      },
     });
     // Clear cache to ensure the report vanishes from lists on next fetch
     this.clearCache();
@@ -1279,6 +1492,10 @@ export class ReportsAdapter {
     }
     const response = await apiFetchResponse(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(reportId)}/photos/archive`, {
       method: "GET",
+      portal: {
+        callerLabel: "damageReports.photosArchive",
+        timeoutMs: REPORT_DETAIL_TIMEOUT_MS,
+      },
     });
     if (!response.ok) {
       let message = `Unable to download report photos (${response.status}).`;

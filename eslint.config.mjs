@@ -27,7 +27,6 @@ if (process.env.ESLINT_PERF === "true") {
 
 baseConfig.push(
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",

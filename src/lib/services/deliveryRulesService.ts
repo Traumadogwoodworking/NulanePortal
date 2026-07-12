@@ -5,7 +5,7 @@ import type {
   DeliveryRulePreviewPayload,
 } from "@/lib/types";
 
-const DELIVERY_RULES_PATH = "/api/delivery-rules";
+const DELIVERY_RULES_PATH = "/delivery-rules";
 
 export function fetchDeliveryRules() {
   return apiFetch<{ delivery_rules: DeliveryRule[] }>(DELIVERY_RULES_PATH);

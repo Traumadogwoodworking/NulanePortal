@@ -23,6 +23,9 @@ export interface PortalSessionLocation {
   location_name?: string;
   location_label?: string;
   display_name?: string;
+  yards?: unknown[];
+  yard_options?: unknown[];
+  yardOptions?: unknown[];
   metadata?: Record<string, unknown>;
   is_active?: boolean;
   created_at?: string;
@@ -91,6 +94,11 @@ export interface PortalSessionResponse {
   organization_type?: string;
   requires_ads?: boolean;
   locations?: PortalSessionLocation[];
+  facilities?: PortalSessionLocation[];
+  available_locations?: PortalSessionLocation[];
+  availableLocations?: PortalSessionLocation[];
+  available_facilities?: PortalSessionLocation[];
+  availableFacilities?: PortalSessionLocation[];
   selected_location?: PortalSessionLocation | null;
   location_locked?: boolean;
   branding_snapshot?: Record<string, unknown>;
@@ -277,21 +285,38 @@ export interface ReportLocationInfo {
   location_label?: string;
   location_name?: string;
   facility?: string;
+  facility_id?: string;
+  navigation?: string;
 }
 
 export interface ReportDamageApiRow {
   report_id: string;
   organization_id?: string;
+  organization_name?: string;
+  organization_type?: string;
+  organization_suborg?: string;
   user_uuid?: string;
   vin?: string;
+  inspection_type_number?: string | number;
   make?: string;
   model?: string;
   year?: number;
   status?: ReportStatus;
   inspector_email?: string;
+  location_id?: string;
+  facility_id?: string;
+  location_label?: string;
+  location_name?: string;
+  facility?: string;
+  navigation?: string;
+  yard?: string;
+  yard_id?: string;
+  yard_name?: string;
+  yard_label?: string;
   comments?: string;
   photo_urls?: Array<string>;
   splat_urls?: Array<string>;
+  splatImageUrl?: string;
   pdf_url?: string;
   overview?: ReportOverview | null;
   damage_entries?: ReportDamageEntry[];
@@ -326,7 +351,13 @@ export interface RsaReportApiRow {
   payload?: Record<string, unknown>;
   track?: string | null;
   spot?: string | null;
+  location_id?: string;
+  facility_id?: string;
+  location_label?: string;
+  location_name?: string;
   facility?: string;
+  navigation?: string;
+  location?: ReportLocationInfo | null;
   created_at?: string;
   updated_at?: string;
   cars?: Array<Record<string, unknown>>;
@@ -364,6 +395,7 @@ export interface ReportSummary {
   locationName?: string;
   facilityName?: string;
   facilityId?: string;
+  facilityMatchKeys?: string[];
   severity?: ReportSeverity;
   createdAt?: string;
   updatedAt?: string;

@@ -68,9 +68,7 @@ export function buildDashboardAnalyticsParams(filters: HomeAnalyticsFilters): Re
   const result: Record<string, string> = {};
   params.forEach((value, key) => {
     if (key === "facility") {
-      if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) {
-        result.facility_id = value;
-      }
+      result.facility_id = value;
       return;
     }
     if (key === "inspector") {
@@ -110,8 +108,10 @@ export function getActiveHomeFilterChips(filters: HomeAnalyticsFilters): ActiveH
 export function getHomeFilterKeysWithValues(filters: HomeAnalyticsFilters): HomeFilterKey[] {
   return HOME_ANALYTICS_FILTER_KEYS.filter((key) => {
     if (key === "report_id") return Boolean(filters.reportId);
+    if (key === "facility") return Boolean(filters.facilityKey && filters.facilityKey !== "all");
     if (key === "inspection_type") return Boolean(filters.inspectionType);
     if (key === "inspector_email") return Boolean(filters.inspectorKey);
+    if (key === "damage_area") return Boolean(filters.damageArea);
     const value = filters[key === "vin" ? "vin" : key];
     return Boolean(value);
   });

@@ -3,18 +3,25 @@
 import type { ComponentType } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { isEmbeddedPortalContext, logAuthFlow } from "@/lib/portalAuth";
 import { usePortalSession } from "@/lib/portalSession";
 
 export function withSession<P extends object>(Component: ComponentType<P>) {
   function SessionGuard(props: P) {
     const router = useRouter();
     const { status, isPortalAccessAllowed } = usePortalSession();
+    const embedded = isEmbeddedPortalContext();
 
     useEffect(() => {
-      if (status === "unauthenticated") {
+      if (status === "unauthenticated" && !embedded) {
+        logAuthFlow("withSession.useEffect", {
+          reason: "unauthenticated_guard",
+          status,
+          redirectTarget: "/login",
+        });
         router.replace("/login");
       }
-    }, [router, status]);
+    }, [embedded, router, status]);
 
     if (status === "loading") {
       return (

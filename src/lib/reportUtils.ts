@@ -41,6 +41,24 @@ export function stripFacilitySuffix(value: string | null | undefined): string {
   return normalized.replace(/\.(?:inc|incs)\.?$/i, "").trim();
 }
 
+function normalizeFacilityDisplayValue(value: string | null | undefined): string {
+  const normalized = stripFacilitySuffix(value);
+  const lower = normalized.toLowerCase();
+  if (
+    !normalized ||
+    lower === "unknown" ||
+    lower === "unknown facility" ||
+    lower === "unavailable" ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower === "null" ||
+    lower === "undefined"
+  ) {
+    return "Other";
+  }
+  return normalized;
+}
+
 export function deriveReportSeverity(report: ReportDamageApiRow): ReportSeverity {
   const entries = Array.isArray(report.damage_entries)
     ? report.damage_entries
@@ -94,6 +112,66 @@ function extractLocationCandidate(
   return current && typeof current === "string" ? current : "";
 }
 
+function normalizedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = normalizedString(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function nestedRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function readNestedString(record: unknown, key: string): string {
+  const current = nestedRecord(record);
+  if (!current) return "";
+  const value = current[key];
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+function collectNestedLocationValues(report: unknown): string[] {
+  const record = nestedRecord(report);
+  if (!record) return [];
+  const payload = nestedRecord(record.payload);
+  const nestedReport = nestedRecord(record.report);
+  const raw = nestedRecord(record.raw);
+  const locations = [
+    nestedRecord(record.location),
+    nestedRecord(payload?.location),
+    nestedRecord(nestedReport?.location),
+    nestedRecord(raw?.location),
+  ];
+  const keys = [
+    "facilityId",
+    "facility_id",
+    "locationId",
+    "location_id",
+    "facilityName",
+    "facility_name",
+    "facility",
+    "locationLabel",
+    "location_label",
+    "locationName",
+    "location_name",
+    "navigation",
+  ];
+  return [
+    ...keys.map((key) => readNestedString(record, key)),
+    ...keys.map((key) => readNestedString(payload, key)),
+    ...keys.map((key) => readNestedString(nestedReport, key)),
+    ...keys.map((key) => readNestedString(raw, key)),
+    ...locations.flatMap((location) => keys.map((key) => readNestedString(location, key))),
+  ].filter(Boolean);
+}
+
 const damageLocationPaths = [
   ["overview", "navigation"],
   ["overview", "navigation_text"],
@@ -115,26 +193,52 @@ const damageLocationPaths = [
 
 export function resolveDamageReportLocationName(report: ReportDamageApiRow): string {
   if (!report) return "";
+  const topLevelLabel = firstString(
+    (report as unknown as Record<string, unknown>).facilityName,
+    (report as unknown as Record<string, unknown>).facility_name,
+    (report as unknown as Record<string, unknown>).locationLabel,
+    report.facility,
+    report.navigation,
+    report.location_label,
+    report.location_name,
+    report.location?.facility,
+    report.location?.navigation,
+    report.location?.location_label,
+    report.location?.location_name
+  );
+  if (topLevelLabel) {
+    return normalizeFacilityDisplayValue(topLevelLabel);
+  }
   for (const path of damageLocationPaths) {
     const candidate = extractLocationCandidate(report, path);
     if (candidate.trim()) {
-      return stripFacilitySuffix(candidate);
+      return normalizeFacilityDisplayValue(candidate);
     }
   }
   const locationLabel = report.location?.location_label || "";
   const locationName = report.location?.location_name || "";
   if (locationLabel.trim()) {
-    return stripFacilitySuffix(locationLabel);
+    return normalizeFacilityDisplayValue(locationLabel);
   }
   if (locationName.trim()) {
-    return stripFacilitySuffix(locationName);
+    return normalizeFacilityDisplayValue(locationName);
   }
-  return "Unknown facility";
+  return "Other";
 }
 
 export function resolveRsaFacilityLabel(report: RsaReportApiRow): string {
-  if (report?.facility) {
-    return stripFacilitySuffix(report.facility);
+  const topLevelLabel = firstString(
+    report?.facility,
+    report?.navigation,
+    report?.location_label,
+    report?.location_name,
+    report?.location?.facility,
+    report?.location?.navigation,
+    report?.location?.location_label,
+    report?.location?.location_name
+  );
+  if (topLevelLabel) {
+    return normalizeFacilityDisplayValue(topLevelLabel);
   }
   if (report?.track) {
     return `Track ${report.track}`;
@@ -151,6 +255,65 @@ export function slugForFacilityLabel(label: string): string {
     return "unknown";
   }
   return slugify(normalized);
+}
+
+export function getDamageReportFacilityMatchKeys(report: ReportDamageApiRow): string[] {
+  const values = [
+    report.facility_id,
+    report.location_id,
+    (report as unknown as Record<string, unknown>).facilityId,
+    (report as unknown as Record<string, unknown>).locationId,
+    (report as unknown as Record<string, unknown>).facilityName,
+    (report as unknown as Record<string, unknown>).facility_name,
+    (report as unknown as Record<string, unknown>).locationLabel,
+    (report as unknown as Record<string, unknown>).locationName,
+    report.location?.facility_id,
+    report.location?.location_id,
+    report.facility,
+    report.navigation,
+    report.location_label,
+    report.location_name,
+    report.location?.facility,
+    report.location?.navigation,
+    report.location?.location_label,
+    report.location?.location_name,
+    resolveDamageReportLocationName(report),
+    ...collectNestedLocationValues(report),
+  ];
+  const keys = values.flatMap((value) => {
+    const normalized = normalizedString(value);
+    if (!normalized) {
+      return [];
+    }
+    return [normalized, slugForFacilityLabel(normalized)];
+  });
+  return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean)));
+}
+
+export function getRsaReportFacilityMatchKeys(report: RsaReportApiRow): string[] {
+  const values = [
+    report.facility_id,
+    report.location_id,
+    report.location?.facility_id,
+    report.location?.location_id,
+    report.facility,
+    report.navigation,
+    report.location_label,
+    report.location_name,
+    report.location?.facility,
+    report.location?.navigation,
+    report.location?.location_label,
+    report.location?.location_name,
+    resolveRsaFacilityLabel(report),
+  ];
+  const keys = values.flatMap((value) => {
+    const normalized = normalizedString(value);
+    if (!normalized) {
+      return [];
+    }
+    return [normalized, slugForFacilityLabel(normalized)];
+  });
+  return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean)));
 }
 
 export function resolveCarDisplayInfo(car: unknown) {

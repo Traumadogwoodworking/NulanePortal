@@ -83,7 +83,7 @@ type DeletedUserDetailSnapshot = DeletedUserSummary & {
 };
 
 export default function UsersPage() {
-  const { organizationId, isOrgAdmin } = usePortalSession();
+  const { organizationId, isFacilityAdmin: isOrgAdmin } = usePortalSession();
   const searchParams = useSearchParams();
   const { data: bootstrap } = useControlPlaneBootstrap();
   const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();

@@ -118,8 +118,8 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     portalBrandColor: "#0d2c71",
     portalBrandAccentColor: "#2563eb",
     portalBrandLightColor: "rgba(37, 99, 235, 0.08)",
-    auth0ClientId: "ihhAweXL47d5FlKOL9UsS87Ld18wZKxD",
-    auth0OrganizationId: "org_cmCOV936fSunCIJB",
+    auth0ClientId: "EQFtRgJq2t0l3LNFodIIbbs3CnI99vxE",
+    auth0OrganizationId: "org_hgGvkUBSZuyEg9Mg",
     sidebarBgEnforced: "#ffffff",
     sidebarTextEnforced: "#020617",
     sidebarLinkEnforced: "#1e293b",
@@ -261,15 +261,15 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
 };
 
 export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
-  process.env.NEXT_PUBLIC_PORTAL_BRANDING === "definianInspection"
-    ? "definianInspection"
+  process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
+    ? "inspectionTrac"
+    : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "definianInspection"
+      ? "definianInspection"
     : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "docudent"
       ? "docudent"
-      : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
-        ? "nulaneSystems"
-        : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
-          ? "inspectionTrac"
-          : "definianInspection";
+    : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
+      ? "nulaneSystems"
+          : "inspectionTrac";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;

@@ -22,7 +22,7 @@ import type {
 const FACILITY_ALL = "all";
 
 export default function AccessPage() {
-  const { organizationId, isOrgAdmin } = usePortalSession();
+  const { organizationId, isFacilityAdmin: isOrgAdmin } = usePortalSession();
   const [roles, setRoles] = useState<RoleCatalog[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);

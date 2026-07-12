@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { fetchPortalSession } from "@/lib/services/sessionService";
@@ -10,21 +18,27 @@ import type {
   PortalUserRecord,
 } from "@/lib/types";
 import type { PermissionKey } from "@/lib/access";
-import { portalConfig } from "@/lib/config";
 import {
   AuthConfigError,
   AuthRedirectError,
+  clearFreshAuthCallbackMarker,
+  clearStalePortalSession,
   clearPortalAuthStorage,
+  hasPersistedPortalToken,
+  isFreshAuthCallback,
+  isEmbeddedPortalContext,
+  logAuthFlow,
   logoutPortal,
   persistPortalUser,
-  redirectToAuth0Login,
 } from "@/lib/portalAuth";
 import { publicBranding } from "@/lib/publicBranding";
 
 type PortalSessionStatus =
   | "loading"
+  | "authenticating"
   | "success"
   | "unauthenticated"
+  | "session_error"
   | "transient-error"
   | "forbidden"
   | "fatal";
@@ -65,11 +79,10 @@ function isDevSessionBypassEnabled() {
   );
 }
 
-const LOCAL_DEV_ERROR =
-  "Local portal builds must override NEXT_PUBLIC_API_BASE_URL (for example http://localhost:4000/api) before reaching the production API.";
 const DEV_SESSION_BYPASS_WARNING =
   "DEV SESSION BYPASS ACTIVE";
 let devSessionBypassWarningEmitted = false;
+const FRESH_CALLBACK_SESSION_RETRY_DELAY_MS = 750;
 
 type DevSessionWindow = Window & {
   __PORTAL_DEV_SESSION_BYPASS__?: boolean;
@@ -186,11 +199,14 @@ interface PortalSessionContextValue {
   hasPermission: (key: PermissionKey) => boolean;
   isAdmin: boolean;
   isOrgAdmin: boolean;
+  isFacilityAdmin: boolean;
   isSuperAdmin: boolean;
   organizationId: string | null;
   isPortalAccessAllowed: boolean;
   portalAccess: boolean;
   isAwct: boolean;
+  isShap: boolean;
+  isSvl: boolean;
   planTier: string | null;
   requiresAds: boolean;
   locations: PortalSessionLocation[];
@@ -205,10 +221,16 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<PortalSessionStatus>("loading");
   const [session, setSession] = useState<PortalSessionResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const freshCallbackRetryCountRef = useRef(0);
   const pathname = usePathname() ?? "/";
 
   const loadSession = useCallback(async () => {
     if (typeof window === "undefined") return;
+    logAuthFlow("PortalSessionProvider.loadSession", {
+      reason: "start",
+      status,
+      tokenExists: hasPersistedPortalToken(),
+    });
 
     const sessionMode = new URLSearchParams(window.location.search).get("portalDevSession");
     if (
@@ -247,16 +269,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (
-      portalConfig.environment !== "production" &&
-      portalConfig.usesDefaultApiBase &&
-      isLocalhostHost(window.location.hostname)
-    ) {
-      setError(new Error(LOCAL_DEV_ERROR));
-      setStatus("fatal");
-      return;
-    }
-
     setStatus("loading");
     setError(null);
 
@@ -265,10 +277,38 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       persistPortalUser(payload.user);
       localStorage.removeItem("portalMockOrgId");
       localStorage.removeItem("portalMockOrgName");
+      const organizationResolved = Boolean(
+        payload.organization?.organization_id || payload.user?.organization_id
+      );
+      if (!organizationResolved) {
+        setSession(payload);
+        setError(new Error("Signed in, but no portal organization was resolved for this account."));
+        setStatus("session_error");
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "missing_organization",
+          status: "session_error",
+          tokenExists: hasPersistedPortalToken(),
+          organizationResolved: false,
+        });
+        return;
+      }
       setSession(payload);
+      clearFreshAuthCallbackMarker();
+      freshCallbackRetryCountRef.current = 0;
       setStatus("success");
+      logAuthFlow("PortalSessionProvider.loadSession", {
+        reason: "success",
+        status: "success",
+        tokenExists: hasPersistedPortalToken(),
+        organizationResolved,
+      });
     } catch (err: unknown) {
       if (err instanceof AuthRedirectError) {
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "auth_redirect_error",
+          status: "unauthenticated",
+          tokenExists: hasPersistedPortalToken(),
+        });
         setStatus("unauthenticated");
         return;
       }
@@ -288,14 +328,56 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (statusCode === 401) {
-        clearPortalAuthStorage();
-        if (pathname === "/") {
-          setSession(null);
-          setError(null);
+        const tokenExists = hasPersistedPortalToken();
+        if (tokenExists && isFreshAuthCallback() && freshCallbackRetryCountRef.current < 2) {
+          freshCallbackRetryCountRef.current += 1;
+          logAuthFlow("PortalSessionProvider.loadSession", {
+            reason: "fresh_callback_session_401_retry",
+            httpStatus: 401,
+            status,
+            tokenExists,
+            redirectTarget: pathname,
+            retryCount: freshCallbackRetryCountRef.current,
+          });
+          setStatus("authenticating");
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, FRESH_CALLBACK_SESSION_RETRY_DELAY_MS);
+          });
+          return loadSession();
+        }
+        freshCallbackRetryCountRef.current = 0;
+        if (!tokenExists) {
+          clearStalePortalSession("session_401");
+        }
+        clearFreshAuthCallbackMarker();
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "session_401",
+          httpStatus: 401,
+          status,
+          tokenExists,
+          redirectTarget: pathname,
+        });
+        setSession(null);
+        setError(
+          new Error(
+            tokenExists
+              ? "Signed in, but the portal API rejected this account session."
+              : "No active portal session was found."
+          )
+        );
+        if (isEmbeddedPortalContext()) {
           setStatus("unauthenticated");
           return;
         }
-        await redirectToAuth0Login();
+        if (tokenExists) {
+          setStatus("session_error");
+          return;
+        }
+        if (pathname === "/") {
+          setStatus("unauthenticated");
+          return;
+        }
+        setStatus("unauthenticated");
         return;
       }
       const normalizedError =
@@ -317,10 +399,15 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   }, [loadSession]);
 
   const value = useMemo(() => {
-    const userRole = normalizeRoleKey(session?.user?.role);
-    const isSuperAdmin = userRole === "super_admin" || userRole === "superadmin";
-    const isAdmin = session?.is_admin === true || userRole === "admin" || isSuperAdmin;
-    const isOrgAdmin = userRole === "org_admin" || isSuperAdmin;
+    const sessionRoles = [
+      normalizeRoleKey(session?.user?.role),
+      normalizeRoleKey(session?.user?.organization_membership?.role),
+    ].filter(Boolean);
+    const hasSessionRole = (role: string) => sessionRoles.includes(role);
+    const isSuperAdmin = hasSessionRole("super_admin") || hasSessionRole("superadmin");
+    const isOrgAdmin = hasSessionRole("org_admin") || hasSessionRole("orgadmin") || isSuperAdmin;
+    const isFacilityAdmin = hasSessionRole("facility_admin") || hasSessionRole("facilityadmin") || isOrgAdmin;
+    const isAdmin = session?.is_admin === true || hasSessionRole("admin") || isSuperAdmin;
     const permissions: string[] = Array.isArray(session?.user?.permissions)
       ? session.user.permissions.map((permission) => permission.toString())
       : [];
@@ -329,6 +416,14 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       session?.user?.organization_id ||
       null;
     const sessionLocations = Array.isArray(session?.locations) ? session.locations : [];
+    const assignedLocations = [
+      session?.locations,
+      session?.facilities,
+      session?.available_locations,
+      session?.availableLocations,
+      session?.available_facilities,
+      session?.availableFacilities,
+    ].flatMap((locations) => (Array.isArray(locations) ? locations : []));
     const selectedLocation = session?.selected_location ?? null;
     const selectedLocationId = selectedLocation?.location_id
       ? selectedLocation.location_id.toString()
@@ -353,6 +448,29 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       normalizedOrganizationName === "inspection_trac" ||
       normalizedOrganizationName === "inspection-track" ||
       normalizedOrganizationName === "signature vehicle logistics";
+    const locationLabels = [
+      selectedLocationLabel,
+      ...assignedLocations.flatMap((location) => [
+        location.location_label,
+        location.display_name,
+        location.location_name,
+      ]),
+    ]
+      .filter(Boolean)
+      .map((value) => normalizeOrganizationKey(value?.toString() ?? ""));
+    const isShap =
+      normalizedOrganizationName === "shap" ||
+      normalizedOrganizationName.includes("shap") ||
+      locationLabels.some((label) => label === "shap" || label.includes("shap"));
+    const isSvl =
+      normalizedOrganizationName === "signature vehicle logistics" ||
+      normalizedOrganizationName === "svl" ||
+      locationLabels.some(
+        (label) =>
+          label === "svl" ||
+          label.includes("signature vehicle logistics") ||
+          /(^|\s)svl($|\s)/.test(label)
+      );
 
     const hasPermission = (key: PermissionKey) => {
       if (isAdmin || isOrgAdmin) {
@@ -371,11 +489,14 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       hasPermission,
       isAdmin,
       isOrgAdmin,
+      isFacilityAdmin,
       isSuperAdmin,
       organizationId,
       isPortalAccessAllowed: portalAccess,
       portalAccess,
       isAwct,
+      isShap,
+      isSvl,
       planTier,
       requiresAds,
       locations: sessionLocations,

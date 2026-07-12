@@ -33,7 +33,7 @@ export function GetAppSection() {
   return (
     <section
       id="get-app"
-      className="flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center lg:px-8 lg:py-24"
+      className="flex min-h-screen flex-col items-center justify-center bg-[#e9ebf2] px-6 py-16 text-center lg:px-8 lg:py-24"
     >
       <div className="relative z-10 w-full max-w-6xl">
         <div className="mx-auto flex max-w-2xl flex-col items-center">

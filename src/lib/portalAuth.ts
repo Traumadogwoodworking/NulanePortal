@@ -10,14 +10,17 @@ const STORAGE_KEYS = {
   authenticated: "portal_authenticated",
 };
 
-const DEFAULT_AUTH0_DOMAIN = "nulanesystems.us.auth0.com";
-const DEFAULT_AUTH0_CLIENT_ID = "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc";
-const DEFAULT_AUTH0_ORGANIZATION_ID = "org_cmCOV936fSunCIJB";
-const DEFAULT_AUTH0_AUDIENCE = "https://api.nulanesystems.com";
-const DEFAULT_AUTH0_REDIRECT_URI = "https://inspection-trac.com/auth/callback/";
+const DEFAULT_AUTH0_DOMAIN = "inspection-trac.us.auth0.com";
+const DEFAULT_AUTH0_CLIENT_ID = "EQFtRgJq2t0l3LNFodIIbbs3CnI99vxE";
+const DEFAULT_AUTH0_ORGANIZATION_ID = "org_hgGvkUBSZuyEg9Mg";
+const DEFAULT_AUTH0_AUDIENCE = "https://inspection-trac.us.auth0.com/api/v2/";
 const DEV_ACCESS_TOKEN = "dev-portal-token";
 const DEV_AUTH_BYPASS_FLAG = "true";
 const DEFAULT_PORTAL_RETURN_TO = "/home/";
+const DEFAULT_LOGOUT_RETURN_TO = "/";
+const DEFAULT_LOGIN_PATH = "/login";
+const FIXED_REDIRECT_MODE = "fixed";
+const FRESH_CALLBACK_STORAGE_KEY = "portal_auth_callback_completed_at";
 
 type Auth0Client = Auth0SpaClient;
 
@@ -31,6 +34,27 @@ type AuthConfig = {
 
 const DEBUG_AUTH0 = process.env.NODE_ENV !== "production";
 let cachedAuthConfig: AuthConfig | null = null;
+
+type AuthFlowLogFields = Record<string, string | number | boolean | null | undefined>;
+
+export function isAuthFlowDebugEnabled() {
+  return (process.env.NEXT_PUBLIC_DEBUG_AUTH_FLOW ?? "").toLowerCase() === "true";
+}
+
+function currentPathname() {
+  return isBrowser() ? window.location.pathname || "/" : "server";
+}
+
+export function logAuthFlow(functionName: string, fields: AuthFlowLogFields = {}) {
+  if (!isAuthFlowDebugEnabled()) {
+    return;
+  }
+  console.info("[auth-flow]", {
+    functionName,
+    pathname: currentPathname(),
+    ...fields,
+  });
+}
 
 function maskSecret(value: string, leading = 3, trailing = 3) {
   if (!value) {
@@ -83,6 +107,43 @@ class AuthRedirectError extends Error {
 
 const isBrowser = () => typeof window !== "undefined" && typeof window.document !== "undefined";
 
+export function isEmbeddedPortalContext(): boolean {
+  if (!isBrowser()) {
+    return false;
+  }
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+export function buildPortalLoginUrl(returnTo?: string): string {
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
+  return `${DEFAULT_LOGIN_PATH}?${new URLSearchParams({ returnTo: safeReturnTo }).toString()}`;
+}
+
+export function openPortalLogin(returnTo?: string): void {
+  if (!isBrowser()) {
+    return;
+  }
+  const loginUrl = buildPortalLoginUrl(returnTo);
+  logAuthFlow("openPortalLogin", {
+    reason: "embedded_login",
+    redirectTarget: resolveSafePortalReturnTo(returnTo),
+  });
+  if (isEmbeddedPortalContext()) {
+    try {
+      window.top?.location.assign(loginUrl);
+      return;
+    } catch {
+      window.open(loginUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+  }
+  window.location.assign(loginUrl);
+}
+
 function ensureBrowserEnv() {
   if (!isBrowser()) {
     throw new AuthConfigError("Auth0 requires a browser environment");
@@ -126,6 +187,16 @@ function buildDevAuth0Client(): Auth0Client {
   } as unknown as Auth0Client;
 }
 
+export function buildAuthRedirectUri(origin: string, redirectOverride = "", redirectMode = ""): string {
+  const normalizedOrigin = origin.includes("://127.0.0.1") || origin.includes("://::1")
+    ? origin.replace("://127.0.0.1", "://localhost").replace("://::1", "://localhost")
+    : origin;
+  const derivedRedirectUri = `${normalizedOrigin.replace(/\/+$/, "")}/auth/callback/`;
+  return redirectOverride.trim() && redirectMode.trim().toLowerCase() === FIXED_REDIRECT_MODE
+    ? redirectOverride.trim()
+    : derivedRedirectUri;
+}
+
 function buildAuthConfig(): AuthConfig {
   ensureBrowserEnv();
   const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
@@ -133,13 +204,9 @@ function buildAuthConfig(): AuthConfig {
   const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || preset.auth0ClientId || DEFAULT_AUTH0_CLIENT_ID).trim();
   const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || preset.auth0OrganizationId || DEFAULT_AUTH0_ORGANIZATION_ID).trim();
   const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || DEFAULT_AUTH0_AUDIENCE).trim();
-  const browserOrigin = window.location.origin || DEFAULT_AUTH0_REDIRECT_URI;
-  const localRedirectUri =
-    browserOrigin.includes("://127.0.0.1") || browserOrigin.includes("://::1")
-      ? browserOrigin.replace("://127.0.0.1", "://localhost").replace("://::1", "://localhost")
-      : browserOrigin;
   const redirectOverride = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI || "").trim();
-  const redirectUri = redirectOverride || `${localRedirectUri.replace(/\/+$/, "")}/auth/callback/` || DEFAULT_AUTH0_REDIRECT_URI;
+  const redirectMode = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_MODE || "").trim().toLowerCase();
+  const redirectUri = buildAuthRedirectUri(window.location.origin, redirectOverride, redirectMode);
 
   if (!domain || !clientId || !organizationId || !audience || !redirectUri) {
     console.error("[Auth0] configuration incomplete", { domain, clientId, organizationId, audience, redirectUri });
@@ -183,6 +250,9 @@ function getAuthConfig(): AuthConfig {
 
 let auth0ClientPromise: Promise<Auth0Client> | null = null;
 let redirectHandlingPromise: Promise<void> | null = null;
+let callbackCompletionPromise: Promise<string> | null = null;
+let callbackCompletionKey: string | null = null;
+let callbackCompletionResult: { key: string; destination: string } | null = null;
 
 async function getAuth0Client() {
   if (isDevAuthBypassEnabled()) {
@@ -210,6 +280,13 @@ async function getAuth0Client() {
 
 function getUrlSearchParams() {
   return isBrowser() ? new URLSearchParams(window.location.search) : new URLSearchParams();
+}
+
+function getCallbackCompletionKey() {
+  const params = getUrlSearchParams();
+  const code = params.get("code") || "";
+  const state = params.get("state") || "";
+  return code && state ? `${state}\n${code}` : "";
 }
 
 function listAuth0StorageKeys(): string[] {
@@ -254,12 +331,18 @@ async function handleRedirectCallbackIfNeeded() {
   if (params.has("code") && params.has("state")) {
     if (DEBUG_AUTH0) {
       console.debug("[Auth0] handling redirect callback", {
-        code: params.get("code")?.slice(0, 5) + "...",
-        state: params.get("state")?.slice(0, 5) + "...",
+        hasCode: params.has("code"),
+        hasState: params.has("state"),
         auth0StorageKeys: listAuth0StorageKeys(),
         redirectUri: getAuthConfig().redirectUri,
       });
     }
+    logAuthFlow("handleRedirectCallbackIfNeeded", {
+      reason: "callback_params_present",
+      hasCode: true,
+      hasState: true,
+      tokenExists: hasPersistedPortalToken(),
+    });
     redirectHandlingPromise = (async () => {
       try {
         const destination = await completeAuth0Callback();
@@ -282,10 +365,54 @@ async function handleRedirectCallbackIfNeeded() {
 }
 
 export async function completeAuth0Callback(): Promise<string> {
-  const callbackState = getUrlSearchParams().get("state") || "";
+  const key = getCallbackCompletionKey();
+  if (callbackCompletionPromise && callbackCompletionKey === key) {
+    logAuthFlow("completeAuth0Callback", {
+      reason: "reuse_inflight_callback",
+      tokenExists: hasPersistedPortalToken(),
+    });
+    return callbackCompletionPromise;
+  }
+  if (callbackCompletionResult?.key === key) {
+    logAuthFlow("completeAuth0Callback", {
+      reason: "reuse_completed_callback",
+      tokenExists: hasPersistedPortalToken(),
+      redirectTarget: callbackCompletionResult.destination,
+    });
+    return callbackCompletionResult.destination;
+  }
+  callbackCompletionKey = key;
+  const promise = completeAuth0CallbackOnce().then((destination) => {
+    callbackCompletionResult = { key, destination };
+    return destination;
+  });
+  callbackCompletionPromise = promise;
+  try {
+    return await promise;
+  } catch (error) {
+    callbackCompletionResult = null;
+    throw error;
+  } finally {
+    if (callbackCompletionKey === key && callbackCompletionPromise === promise) {
+      callbackCompletionKey = null;
+      callbackCompletionPromise = null;
+    }
+  }
+}
+
+async function completeAuth0CallbackOnce(): Promise<string> {
+  const params = getUrlSearchParams();
+  const hasCode = params.has("code");
+  const hasState = params.has("state");
+  logAuthFlow("completeAuth0Callback", {
+    reason: "start",
+    hasCode,
+    hasState,
+    tokenExists: hasPersistedPortalToken(),
+  });
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] callback state received", {
-      callbackStatePrefix: callbackState.slice(0, 5) + (callbackState ? "..." : ""),
+      hasState,
       auth0StorageKeys: listAuth0StorageKeys(),
     });
   }
@@ -321,20 +448,41 @@ export async function completeAuth0Callback(): Promise<string> {
       }),
     );
     persistPortalToken(token);
+    markFreshAuthCallbackCompleted();
   } catch (error) {
-    console.warn("[Auth0] token bootstrap after callback failed", error);
+    console.warn("[Auth0] token bootstrap after callback failed", {
+      errorName: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : "Unknown token bootstrap error",
+    });
     if (isInteractiveLoginError(error)) {
       clearLocalInvalidAuthState();
     }
+    logAuthFlow("completeAuth0Callback", {
+      reason: "token_bootstrap_failed",
+      tokenExists: hasPersistedPortalToken(),
+    });
+    throw new Error("Auth0 callback completed, but no portal access token could be retrieved.");
+  }
+  if (!hasPersistedPortalToken()) {
+    logAuthFlow("completeAuth0Callback", {
+      reason: "token_bootstrap_missing",
+      tokenExists: false,
+    });
+    throw new Error("Auth0 callback completed, but no portal access token was persisted.");
   }
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] callback completion summary", {
-      callbackStatePrefix: callbackState.slice(0, 5) + (callbackState ? "..." : ""),
+      hasState,
       returnTo,
       storedReturnTo,
       destination,
     });
   }
+  logAuthFlow("completeAuth0Callback", {
+    reason: "end",
+    redirectTarget: destination,
+    tokenExists: hasPersistedPortalToken(),
+  });
   return destination;
 }
 
@@ -382,6 +530,19 @@ function getLocalStorage(): Storage | null {
   }
 }
 
+function readPersistedPortalToken(): string | null {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return null;
+  }
+  const token = storage.getItem(STORAGE_KEYS.token)?.trim();
+  return token || null;
+}
+
+export function hasPersistedPortalToken(): boolean {
+  return Boolean(readPersistedPortalToken());
+}
+
 export function persistPortalToken(token?: string) {
   const storage = getLocalStorage();
   if (!storage) {
@@ -410,6 +571,27 @@ export function persistPortalUser(user?: unknown) {
   } catch (error) {
     console.warn("Unable to persist portal user", error);
   }
+}
+
+export function markFreshAuthCallbackCompleted() {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return;
+  }
+  storage.setItem(FRESH_CALLBACK_STORAGE_KEY, String(Date.now()));
+}
+
+export function isFreshAuthCallback(windowMs = 15000): boolean {
+  const storage = getLocalStorage();
+  if (!storage) {
+    return false;
+  }
+  const timestamp = Number(storage.getItem(FRESH_CALLBACK_STORAGE_KEY));
+  return Number.isFinite(timestamp) && Date.now() - timestamp >= 0 && Date.now() - timestamp <= windowMs;
+}
+
+export function clearFreshAuthCallbackMarker() {
+  getLocalStorage()?.removeItem(FRESH_CALLBACK_STORAGE_KEY);
 }
 
 function clearAuth0SdkStorage() {
@@ -445,6 +627,9 @@ export function clearPortalAuthStorage(options: { includeAuth0Sdk?: boolean } = 
     clearAuth0SdkStorage();
   }
   redirectHandlingPromise = null;
+  callbackCompletionPromise = null;
+  callbackCompletionKey = null;
+  callbackCompletionResult = null;
 }
 
 function clearLocalInvalidAuthState() {
@@ -455,7 +640,20 @@ function clearLocalInvalidAuthState() {
   clearPortalAuthStorage();
 }
 
+export function clearStalePortalSession(reason = "stale_session") {
+  logAuthFlow("clearStalePortalSession", {
+    reason,
+    tokenExists: hasPersistedPortalToken(),
+  });
+  clearLocalInvalidAuthState();
+}
+
 export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
+  logAuthFlow("redirectToAuth0Login", {
+    reason: "explicit_login_redirect",
+    redirectTarget: resolveSafePortalReturnTo(returnTo),
+    tokenExists: hasPersistedPortalToken(),
+  });
   if (isDevAuthBypassEnabled()) {
     if (isBrowser()) {
       window.location.replace(resolveSafePortalReturnTo(returnTo));
@@ -473,6 +671,13 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   clearPortalAuthStorage();
   const config = getAuthConfig();
   const safeReturnTo = resolveSafePortalReturnTo(returnTo);
+  if (isBrowser()) {
+    try {
+      window.sessionStorage.setItem("portal_login_return_to", safeReturnTo);
+    } catch (error) {
+      console.warn("[Auth0] unable to persist returnTo", error);
+    }
+  }
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] starting login redirect", describeConfig(config));
   }
@@ -497,44 +702,104 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   throw new AuthRedirectError();
 }
 
+export async function startAuth0Login(returnTo?: string): Promise<never> {
+  logAuthFlow("startAuth0Login", {
+    reason: isEmbeddedPortalContext() ? "embedded_login" : "explicit_login",
+    redirectTarget: resolveSafePortalReturnTo(returnTo),
+    tokenExists: hasPersistedPortalToken(),
+  });
+  if (isEmbeddedPortalContext()) {
+    openPortalLogin(returnTo);
+    throw new AuthRedirectError("Opening secure login in a top-level window");
+  }
+  return redirectToAuth0Login(returnTo);
+}
+
 export async function logoutPortal(): Promise<void> {
   if (isDevAuthBypassEnabled()) {
     clearPortalAuthStorage();
     if (isBrowser()) {
-      window.location.assign("/");
+      window.location.assign(window.location.origin || DEFAULT_LOGOUT_RETURN_TO);
     }
     return;
   }
   clearPortalAuthStorage();
-  if (DEBUG_AUTH0 && isBrowser()) {
-    console.debug("[Auth0] logout completed locally, returning to public landing", {
-      origin: window.location.origin,
+  if (!isBrowser()) {
+    return;
+  }
+  if (DEBUG_AUTH0) {
+    console.debug("[Auth0] starting logout", {
       path: window.location.pathname,
     });
   }
-  if (isBrowser()) {
-    window.location.assign("/");
+  try {
+    const client = await getAuth0Client();
+    const returnTo = window.location.origin || DEFAULT_LOGOUT_RETURN_TO;
+    await client.logout({
+      logoutParams: {
+        returnTo,
+      },
+    });
+  } catch (error) {
+    console.warn("[Auth0] logout failed, falling back to local redirect", error);
+    window.location.assign(window.location.origin || DEFAULT_LOGOUT_RETURN_TO);
   }
 }
 
 export async function getPortalAccessToken() {
+  logAuthFlow("getPortalAccessToken", {
+    reason: "start",
+    tokenExists: hasPersistedPortalToken(),
+  });
   if (isDevAuthBypassEnabled()) {
     persistPortalToken(DEV_ACCESS_TOKEN);
+    logAuthFlow("getPortalAccessToken", {
+      reason: "dev_bypass",
+      tokenExists: true,
+      auth0Authenticated: true,
+    });
     return DEV_ACCESS_TOKEN;
   }
+  const persistedToken = readPersistedPortalToken();
+  if (persistedToken) {
+    logAuthFlow("getPortalAccessToken", {
+      reason: "persisted_token",
+      tokenExists: true,
+    });
+    return persistedToken;
+  }
+
   const client = await getAuth0Client();
   await handleRedirectCallbackIfNeeded();
-  
+  const callbackToken = readPersistedPortalToken();
+  if (callbackToken) {
+    logAuthFlow("getPortalAccessToken", {
+      reason: "callback_token",
+      tokenExists: true,
+    });
+    return callbackToken;
+  }
+
   const isAuthenticated = await client.isAuthenticated();
+  logAuthFlow("getPortalAccessToken", {
+    reason: "auth0_status",
+    tokenExists: false,
+    auth0Authenticated: isAuthenticated,
+  });
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] isAuthenticated?", isAuthenticated);
   }
-  
+
   if (!isAuthenticated) {
     if (DEBUG_AUTH0) {
-      console.debug("[Auth0] not authenticated, redirecting to login");
+      console.debug("[Auth0] not authenticated; token unavailable");
     }
-    return redirectToAuth0Login();
+    logAuthFlow("getPortalAccessToken", {
+      reason: "no_auth0_session",
+      tokenExists: false,
+      auth0Authenticated: false,
+    });
+    return null;
   }
   
   const config = getAuthConfig();
@@ -548,6 +813,11 @@ export async function getPortalAccessToken() {
       },
     });
     persistPortalToken(token);
+    logAuthFlow("getPortalAccessToken", {
+      reason: "silent_token",
+      tokenExists: true,
+      auth0Authenticated: true,
+    });
     return token;
   } catch (error) {
     if (DEBUG_AUTH0) {
@@ -558,11 +828,21 @@ export async function getPortalAccessToken() {
     }
     if (isLocalDevOrigin()) {
       clearLocalInvalidAuthState();
-      return redirectToAuth0Login();
+      logAuthFlow("getPortalAccessToken", {
+        reason: "silent_token_failed_local",
+        tokenExists: false,
+        auth0Authenticated: true,
+      });
+      return null;
     }
     if (isInteractiveLoginError(error)) {
       clearLocalInvalidAuthState();
-      return redirectToAuth0Login();
+      logAuthFlow("getPortalAccessToken", {
+        reason: "interactive_login_required",
+        tokenExists: false,
+        auth0Authenticated: true,
+      });
+      return null;
     }
     throw error;
   }

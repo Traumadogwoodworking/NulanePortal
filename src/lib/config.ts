@@ -1,6 +1,7 @@
 // Monolith reference values (see `DEFAULT_API_BASE`, `DEFAULT_DOCUFIT_API_BASE`, and
 // `DEFAULT_DOCUDENT_EMBED_URL` in the inline script).
-const DEFAULT_API_BASE = "https://api.nulanesystems.com/api";
+const DEFAULT_API_BASE = "https://api.nulanesystems.com/inspection-trac/api";
+const API_PATH_PREFIX = "inspection-trac";
 const DEFAULT_DOCUFIT_API_BASE = "/docufit";
 const DEFAULT_DOCUDENT_EMBED_URL = "https://nulanesystems.com/portal/app/index.html";
 const DEFAULT_DOCUFIT_EMBED_URL = "https://nulanesystems.com/portal/app/docufit/index.html";
@@ -16,25 +17,26 @@ export function normalizeBaseUrl(value?: string | null): string | null {
   return trimmed.replace(/\/+$/, "");
 }
 
-const envApiBase = normalizeBaseUrl(process.env.EXT_PUBLIC_DOCUDENT_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL);
 const envPortalBasePath = normalizeBaseUrl(process.env.NEXT_PUBLIC_PORTAL_BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH);
 const defaultPortalBasePath = "";
 
-/**
- * When running in production (Static Export), we MUST use the absolute API URL.
- * When running in development, we use the relative proxy path to avoid CORS.
- */
 const selectApiBase = () => {
-    // 1. If we have an absolute URL override, honor it regardless of mode
-    if (envApiBase?.startsWith("http")) return envApiBase;
-    
-    // ALWAYS use the absolute production API domain
-    return DEFAULT_API_BASE;
+  const configured = normalizeBaseUrl(
+    process.env.NEXT_PUBLIC_API_BASE ||
+      process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_BASE ||
+      process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_URL
+  );
+  if (configured) return configured;
+  return DEFAULT_API_BASE;
 };
 
 export const portalConfig = {
   apiBase: selectApiBase(),
-  usesDefaultApiBase: envApiBase == null,
+  usesDefaultApiBase: !(
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_BASE ||
+    process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_URL
+  ),
   docuFitBase: normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUFIT_BASE) ?? DEFAULT_DOCUFIT_API_BASE,
   docuDentEmbedUrl:
     normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUDENT_EMBED_URL) ?? DEFAULT_DOCUDENT_EMBED_URL,
@@ -49,11 +51,16 @@ export const portalConfig = {
 
 export function buildApiUrl(path: string): string {
   const trimmed = path.replace(/^\/+/, "");
+  const apiPrefix = `/${API_PATH_PREFIX}/api`;
   const normalizedPath =
-    portalConfig.apiBase.endsWith("/api") && trimmed.startsWith("api/")
+    portalConfig.apiBase.endsWith(apiPrefix) && trimmed.startsWith("api/")
       ? trimmed.replace(/^api\//, "")
       : trimmed;
-  return `${portalConfig.apiBase}/${normalizedPath}`.replace(/\/+$/g, "");
+  const base =
+    portalConfig.apiBase.endsWith(apiPrefix) || portalConfig.apiBase.endsWith("/api")
+      ? portalConfig.apiBase
+      : portalConfig.apiBase;
+  return `${base}/${normalizedPath}`.replace(/\/+$/g, "");
 }
 
 export function buildDocuFitUrl(path: string): string {

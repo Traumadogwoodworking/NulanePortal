@@ -5,9 +5,9 @@ const require = createRequire(import.meta.url);
 
 const PLATFORM_PACKAGES = [
   { name: "lightningcss-linux-x64-gnu", spec: "lightningcss-linux-x64-gnu@1.32.0" },
-  { name: "@tailwindcss/oxide-linux-x64-gnu", spec: "@tailwindcss/oxide-linux-x64-gnu@4.2.4" },
+  { name: "@tailwindcss/oxide-linux-x64-gnu", spec: "@tailwindcss/oxide-linux-x64-gnu@4.3.2" },
   { name: "lightningcss-win32-x64-msvc", spec: "lightningcss-win32-x64-msvc@1.32.0" },
-  { name: "@tailwindcss/oxide-win32-x64-msvc", spec: "@tailwindcss/oxide-win32-x64-msvc@4.1.18" },
+  { name: "@tailwindcss/oxide-win32-x64-msvc", spec: "@tailwindcss/oxide-win32-x64-msvc@4.3.2" },
   { name: "@rollup/rollup-win32-x64-msvc", spec: "@rollup/rollup-win32-x64-msvc@4.34.8" },
 ];
 

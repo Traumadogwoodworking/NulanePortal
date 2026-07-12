@@ -9,16 +9,16 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-slate-900 text-white hover:bg-slate-800 [a]:hover:bg-slate-800",
+        default: "portal-button [a]:hover:bg-[var(--portal-button-bg-hover)]",
         outline:
-          "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 aria-expanded:bg-slate-50 aria-expanded:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800",
+          "portal-button bg-transparent text-[color:var(--portal-button-fg)] hover:bg-[color:var(--portal-button-bg-hover)] aria-expanded:bg-[color:var(--portal-button-bg-hover)] aria-expanded:text-[color:var(--portal-button-fg)]",
         secondary:
-          "bg-slate-100 text-slate-800 hover:bg-slate-200 aria-expanded:bg-slate-200 aria-expanded:text-slate-900",
+          "portal-button--soft hover:text-[color:var(--portal-button-soft-fg)] aria-expanded:bg-[color:var(--portal-button-soft-bg-hover)] aria-expanded:text-[color:var(--portal-button-soft-fg)]",
         ghost:
-          "text-slate-700 hover:bg-slate-100 hover:text-slate-900 aria-expanded:bg-slate-100 aria-expanded:text-slate-900 dark:hover:bg-slate-800",
+          "text-[color:var(--portal-button-fg)] hover:bg-[color:var(--portal-button-bg-hover)] hover:text-[color:var(--portal-button-fg)] aria-expanded:bg-[color:var(--portal-button-bg-hover)] aria-expanded:text-[color:var(--portal-button-fg)] dark:hover:bg-slate-800",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-slate-800 underline-offset-4 hover:underline",
+        link: "text-[color:var(--portal-button-fg)] underline-offset-4 hover:underline",
       },
       size: {
         default:

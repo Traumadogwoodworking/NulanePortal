@@ -71,6 +71,7 @@ import {
 } from "@/lib/docudent/damageTaxonomy";
 import { toneForReportStatus } from "@/lib/status";
 import { severityPillClass } from "@/lib/severityTheme";
+import { getSessionYardOptions } from "@/lib/sessionYards";
 import { normalizeReportListRow } from "@/lib/reportNormalizer";
 import type {
   FacilitySummary,
@@ -544,6 +545,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const [inspectionTypeSuggestionsOpen, setInspectionTypeSuggestionsOpen] = useState(false);
   const [makeFilter, setMakeFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.makeFilter);
   const [modelFilter, setModelFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.modelFilter);
+  const [yardFilter, setYardFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.yardFilter);
   const [inspectorEmailFilter, setInspectorEmailFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectorEmailFilter);
   const [createdFrom, setCreatedFrom] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.createdFrom);
   const [createdTo, setCreatedTo] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.createdTo);
@@ -585,8 +587,8 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const isMounted = useRef(true);
   const damageSortFieldRef = useRef(damageSortField);
   const hydratedDamageReportIdsRef = useRef(new Set<string>());
-  const autoExpandedFilterKeyRef = useRef<string | null>(null);
   const listPageRequestInFlightRef = useRef(false);
+  const listLoadSequenceRef = useRef(0);
   const listRowIdsRef = useRef(new Set<string>());
   useEffect(() => {
     damageSortFieldRef.current = damageSortField;
@@ -597,24 +599,16 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       facility_id: facilityFilter !== "all" && facilityFilter !== "other" ? facilityFilter : undefined,
       inspection_type: inspectionTypeFilter || undefined,
       status: statusFilter || undefined,
+      yard: yardFilter || undefined,
       from: createdFrom || undefined,
       to: createdTo || undefined,
       inspector_email: debouncedInspectorEmailFilter || undefined,
       sort: listSort,
       pageSize,
     }),
-    [createdFrom, createdTo, debouncedBackendSearch, debouncedInspectorEmailFilter, facilityFilter, inspectionTypeFilter, listSort, pageSize, statusFilter]
+    [createdFrom, createdTo, debouncedBackendSearch, debouncedInspectorEmailFilter, facilityFilter, inspectionTypeFilter, listSort, pageSize, statusFilter, yardFilter]
   );
   const listFilterRequestKey = useMemo(() => JSON.stringify(listFilters), [listFilters]);
-  const hasActiveBackendOrLocalFilter = Boolean(
-    debouncedBackendSearch ||
-      facilityFilter !== "all" ||
-      inspectionTypeFilter ||
-      statusFilter ||
-      createdFrom ||
-      createdTo ||
-      debouncedInspectorEmailFilter
-  );
   const activeInspectionTypeOptions = useMemo(() => getActiveInspectionTypeOptions(listRows as unknown as ReportDamageApiRow[]), [listRows]);
   const filteredInspectionTypeOptions = useMemo(() => {
     const query = inspectionTypeSearch.trim().toLowerCase();
@@ -668,6 +662,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         vinFilter,
         makeFilter,
         modelFilter,
+        yardFilter,
         inspectorEmailFilter,
         statusFilter,
         createdFrom,
@@ -680,6 +675,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       inspectorEmailFilter,
       makeFilter,
       modelFilter,
+      yardFilter,
       reportIdFilter,
       searchTerm,
       statusFilter,
@@ -800,6 +796,19 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       locationCount: 1,
     }));
   }, [damageSummaries, listRows]);
+  const yardChoices = useMemo(() => {
+    const choices = new Map<string, string>();
+    getSessionYardOptions(session).forEach((yard) => {
+      const label = yard.facilityLabel ? `${yard.facilityLabel} - ${yard.label}` : yard.label;
+      choices.set(yard.value, label);
+    });
+    listRows.forEach((row) => {
+      const record = row as Record<string, unknown>;
+      const value = String(record.yard ?? record.yard_id ?? record.yard_name ?? record.yard_label ?? "").trim();
+      if (value && !choices.has(value)) choices.set(value, value);
+    });
+    return Array.from(choices.entries()).map(([value, label]) => ({ value, label }));
+  }, [listRows, session]);
   const inspectorChoices = useMemo(() => {
     const usersByEmail = new Map<string, { email: string; label: string }>();
     damageSummaries.forEach((summary) => {
@@ -821,15 +830,15 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }, [damageSummaries]);
 
   useEffect(() => {
-    let cancelled = false;
+    const loadSequence = listLoadSequenceRef.current + 1;
+    listLoadSequenceRef.current = loadSequence;
     async function loadPage(nextPage: number, reset = false) {
-      if (listPageRequestInFlightRef.current) return;
       listPageRequestInFlightRef.current = true;
       setListLoading(true);
       setListError(null);
       try {
         const response = await fetchReportList({ ...listFilters, page: nextPage, pageSize });
-        if (cancelled) return;
+        if (listLoadSequenceRef.current !== loadSequence) return;
         const nextRows = normalizeReportListResponseRows(response.rows);
         const responsePage = Number(response.page ?? nextPage);
         const responseHasMore =
@@ -841,12 +850,12 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         setPage(responsePage);
         setListRows(reset ? nextRows : (current) => [...current, ...nextRows.filter((row) => !current.some((existing) => existing.report_id === row.report_id))]);
       } catch (err) {
-        if (!cancelled) {
+        if (listLoadSequenceRef.current === loadSequence) {
           setListError(err instanceof Error ? err.message : "Unable to load reports.");
         }
       } finally {
-        listPageRequestInFlightRef.current = false;
-        if (!cancelled) {
+        if (listLoadSequenceRef.current === loadSequence) {
+          listPageRequestInFlightRef.current = false;
           setListLoading(false);
         }
       }
@@ -856,7 +865,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     listRowIdsRef.current = new Set();
     void loadPage(1, true);
     return () => {
-      cancelled = true;
+      if (listLoadSequenceRef.current === loadSequence) {
+        listLoadSequenceRef.current += 1;
+        listPageRequestInFlightRef.current = false;
+        setListLoading(false);
+      }
     };
   }, [listFilters, pageSize, reloadToken]);
 
@@ -896,27 +909,6 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     })();
   }, [hasNextPage, listFilters, listLoading, page, pageSize]);
 
-  useEffect(() => {
-    if (!hasActiveBackendOrLocalFilter || listLoading || !hasNextPage || listRows.length === 0) {
-      return;
-    }
-    if (autoExpandedFilterKeyRef.current === listFilterRequestKey) {
-      return;
-    }
-    if (totalCount <= listRows.length) {
-      return;
-    }
-    autoExpandedFilterKeyRef.current = listFilterRequestKey;
-    loadNextPage();
-  }, [
-    hasActiveBackendOrLocalFilter,
-    hasNextPage,
-    listFilterRequestKey,
-    listLoading,
-    listRows.length,
-    loadNextPage,
-    totalCount,
-  ]);
   const clearDamageFilters = useCallback(() => {
     setActiveDamageFilterKeys([]);
     setFacilityFilter("all");
@@ -928,6 +920,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     setInspectionTypeSuggestionsOpen(false);
     setMakeFilter("");
     setModelFilter("");
+    setYardFilter("");
     setInspectorEmailFilter("");
     setStatusFilter("");
     setCreatedFrom("");
@@ -948,6 +941,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     if (key === "inspection_type") setInspectionTypeFilter("");
     if (key === "make") setMakeFilter("");
     if (key === "model") setModelFilter("");
+    if (key === "yard") setYardFilter("");
     if (key === "inspector_email") setInspectorEmailFilter("");
     if (key === "status") setStatusFilter("");
     if (key === "date_range") {
@@ -1297,6 +1291,18 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             onChange={(event) => setModelFilter(event.target.value)}
             className={damageFilterInputClass}
           />
+      );
+    }
+    if (key === "yard") {
+      return (
+        <select value={yardFilter} onChange={(event) => setYardFilter(event.target.value)} className={damageFilterInputClass}>
+          <option value="">All yards</option>
+          {yardChoices.map((yard) => (
+            <option key={yard.value} value={yard.value}>
+              {yard.label}
+            </option>
+          ))}
+        </select>
       );
     }
     if (key === "inspector_email") {

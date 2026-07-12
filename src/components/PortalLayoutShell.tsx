@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { PortalSidebar } from "@/components/PortalSidebar";
 import { PortalTopBar } from "@/components/PortalTopBar";
 import { AlertStack } from "@/components/AlertStack";
 import { PortalStatusScreen } from "@/components/PortalStatusScreen";
 import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
+import { AuthRedirectError, clearPortalAuthStorage, startAuth0Login } from "@/lib/portalAuth";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
@@ -17,6 +18,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const { status, error, refetch, session } = usePortalSession();
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
+  const autoLoginKeyRef = useRef<string | null>(null);
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
   const branding = useMemo(
     () => resolvePortalBranding({ session, pathname: safePathname, brandingSnapshot: brandingSnapshot ?? null }),
@@ -57,13 +59,42 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     } as React.CSSProperties;
   }, [branding, themeMode]);
 
-  if (status === "unauthenticated") {
-    return (
-      <PortalStatusScreen
-        title="Signing you in"
-        description="Redirecting to Auth0 so you can access the portal."
-      />
-    );
+  useEffect(() => {
+    const shouldRedirectToUniversalLogin =
+      status === "unauthenticated" ||
+      status === "session_error" ||
+      status === "forbidden" ||
+      (status === "success" && session?.portal_access === false);
+    if (!shouldRedirectToUniversalLogin) {
+      autoLoginKeyRef.current = null;
+      return;
+    }
+    if (autoLoginKeyRef.current === safePathname) {
+      return;
+    }
+    autoLoginKeyRef.current = safePathname;
+    if (status === "session_error" || status === "forbidden" || session?.portal_access === false) {
+      clearPortalAuthStorage({ includeAuth0Sdk: true });
+    }
+    void startAuth0Login(safePathname).catch((redirectError) => {
+      if (redirectError instanceof AuthRedirectError) {
+        return;
+      }
+      autoLoginKeyRef.current = null;
+      console.warn("[Auth0] protected portal auto-login failed", {
+        errorName: redirectError instanceof Error ? redirectError.name : typeof redirectError,
+        message: redirectError instanceof Error ? redirectError.message : "Unknown login redirect error",
+      });
+    });
+  }, [safePathname, session?.portal_access, status]);
+
+  if (
+    status === "unauthenticated" ||
+    status === "session_error" ||
+    status === "forbidden" ||
+    (status === "success" && session?.portal_access === false)
+  ) {
+    return null;
   }
   if (status === "transient-error") {
     return (
@@ -84,17 +115,6 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
       />
     );
   }
-  if (status === "forbidden") {
-    return (
-      <PortalStatusScreen
-        title="Access denied"
-        description={
-          error?.message ||
-          "Your account is not authorized to use the portal. Contact support for assistance."
-        }
-      />
-    );
-  }
   if (status === "fatal") {
     return (
       <PortalStatusScreen
@@ -108,14 +128,16 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div id="portal" data-theme={themeMode} className="flex h-screen overflow-hidden" style={brandingStyles}>
+    <div id="portal" data-theme={themeMode} className="flex h-screen overflow-hidden bg-[color:var(--bg)] p-4" style={brandingStyles}>
       <PortalSidebar />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <PortalTopBar pageTitle={pageMetadata.title} pageSubtitle={pageMetadata.subtitle} />
-        <AlertStack />
-        <main className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_120px,rgba(255,255,255,0)_240px)] p-4">
-          <AccessGuardClient>{children}</AccessGuardClient>
-        </main>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pl-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel)] shadow-[var(--shadow-panel)]">
+          <PortalTopBar pageTitle={pageMetadata.title} pageSubtitle={pageMetadata.subtitle} />
+          <AlertStack />
+          <main className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.04)_140px,rgba(255,255,255,0)_280px)] p-4">
+            <AccessGuardClient>{children}</AccessGuardClient>
+          </main>
+        </div>
       </div>
     </div>
   );

@@ -72,6 +72,7 @@ const handlers = [
             inspector_email: "ops@example.com",
             damage_entries: [],
             splat_urls: [],
+            splatImageUrl: "https://example.com/splat.png",
           },
         ],
       },
@@ -79,7 +80,7 @@ const handlers = [
     );
   }),
 
-  http.get(`${apiBase}/reports/rsa`, () => {
+  http.get(`${apiBase}/railcar-scans/report/pull`, () => {
     return HttpResponse.json(
       {
         reports: [],

@@ -14,6 +14,7 @@ describe("DamageMapCard", () => {
     damage_entries: entries,
     location: { location_label: "Bay 4", location_id: "bay-4" },
     splat_urls: ["https://example.com/splat.png"],
+    splatImageUrl: "https://example.com/canonical-splat.png",
     overview: { metadata: { navigationText: "Dock A" } },
     metadata: { inspector: "test" },
   };
@@ -21,6 +22,10 @@ describe("DamageMapCard", () => {
   it("renders highlighted regions and legend", async () => {
     const { container } = render(<DamageMapCard report={report} />);
     expect(screen.getByText(/Damage map/i)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Damage splat" })).toHaveAttribute(
+      "src",
+      "https://example.com/canonical-splat.png"
+    );
     expect(screen.getByText(/High/)).toBeInTheDocument();
     expect(screen.getByText(/Front/)).toBeInTheDocument();
     const results = await axe(container);

@@ -6,7 +6,7 @@ import { usePortalSession } from "@/lib/portalSession";
 import { PortalStatusScreen } from "./PortalStatusScreen";
 
 export function AccessGuardClient({ children }: { children: React.ReactNode }) {
-  const { hasPermission, isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct } = usePortalSession();
+  const { hasPermission, isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, isShap, isSvl } = usePortalSession();
   const pathname = usePathname();
   const activeRoute = getRouteByPath(pathname ?? "/");
   const isHydrated = typeof window !== "undefined";
@@ -16,7 +16,7 @@ export function AccessGuardClient({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const accessInfo = { isPortalAccessAllowed, isAdmin, isOrgAdmin, isSuperAdmin, isAwct, hasPermission };
+  const accessInfo = { isPortalAccessAllowed, isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isAwct, isShap, isSvl, hasPermission };
   const accessBarrier = isLocalDev ? null : getAccessBarrier(activeRoute, accessInfo);
 
   if (accessBarrier?.type === "org-admin") {

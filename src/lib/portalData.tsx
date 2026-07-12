@@ -2,7 +2,8 @@
 
 import { mutate as globalMutate } from "swr";
 import useSWR, { SWRConfig, useSWRConfig } from "swr";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { getPortalFetchDebugSnapshot, PortalSnapshotTimeoutError } from "@/lib/apiClient";
 import { usePortalSession } from "@/lib/portalSession";
 import { fetchBranding } from "@/lib/services/brandingService";
 import { fetchControlPlaneBootstrap, fetchOperationsStatus, fetchReadinessStatus } from "@/lib/services/controlPlaneService";
@@ -14,6 +15,12 @@ import {
   fetchReportList,
   ReportsAdapter,
 } from "@/lib/services/reportService";
+import {
+  fetchHomeAnalyticsSnapshot,
+  getHomeAnalyticsSnapshotFilterKey,
+  requestHomeAnalyticsSnapshot,
+  type HomeAnalyticsSnapshotResponse,
+} from "@/lib/services/homeAnalyticsSnapshotService";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { fetchEmailLists, fetchEmailListMembers } from "@/lib/services/notificationsService";
 import type { ControlPlaneBootstrapPayload } from "@/lib/services/controlPlaneService";
@@ -30,12 +37,13 @@ import type {
 
 const STALE_TIME_MS = 1000 * 60 * 5;
 const REVALIDATE_ON_FOCUS = false;
-const REVALIDATE_ON_RECONNECT = true;
+const REVALIDATE_ON_RECONNECT = false;
 const KEEP_PREVIOUS_DATA = true;
 const DIRECTORY_CACHE_KEY_PREFIX = "portalDirectoryCache";
 const BRANDING_CACHE_KEY_PREFIX = "portalBrandingCache";
 const REPORTS_CACHE_KEY_PREFIX = "portalReportsSnapshotCacheV4";
 const DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX = "portalDashboardAnalyticsCacheV2";
+const HOME_ANALYTICS_SNAPSHOT_CACHE_KEY_PREFIX = "portalHomeAnalyticsSnapshotCacheV1";
 const CACHE_TTL_MS = STALE_TIME_MS;
 
 type CachedPayload<T> = {
@@ -49,6 +57,10 @@ const brandingMemoryCache = new Map<string, CachedPayload<BrandingSnapshot | nul
 const controlMemoryCache = new Map<string, CachedPayload<ControlSnapshot>>();
 const emailMembersMemoryCache = new Map<string, CachedPayload<EmailListMemberSummary[]>>();
 const dashboardAnalyticsMemoryCache = new Map<string, CachedPayload<DashboardAnalyticsResponse>>();
+const homeAnalyticsSnapshotMemoryCache = new Map<string, CachedPayload<HomeAnalyticsSnapshotResponse>>();
+const homeAnalyticsSnapshotInFlight = new Map<string, Promise<HomeAnalyticsSnapshotResponse>>();
+const HOME_SNAPSHOT_MAX_ATTEMPTS = 20;
+const HOME_SNAPSHOT_MAX_ELAPSED_MS = 45000;
 
 interface DirectorySnapshot {
   users: UserSummary[];
@@ -101,7 +113,92 @@ export function PortalDataProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      <PortalFetchDebugPanel />
     </SWRConfig>
+  );
+}
+
+function PortalFetchDebugPanel() {
+  const [enabled, setEnabled] = useState(false);
+  const [snapshot, setSnapshot] = useState(() => getPortalFetchDebugSnapshot());
+
+  useEffect(() => {
+    function readEnabled() {
+      try {
+        return typeof window !== "undefined" && window.localStorage.getItem("portalApiTrace") === "1";
+      } catch {
+        return false;
+      }
+    }
+    setEnabled(readEnabled());
+    const interval = window.setInterval(() => {
+      setEnabled(readEnabled());
+      setSnapshot(getPortalFetchDebugSnapshot());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!enabled) return null;
+  const oldest = snapshot.active
+    .slice()
+    .sort((left, right) => right.durationMs - left.durationMs)[0];
+  return (
+    <pre
+      data-portal-fetch-debug-panel
+      style={{
+        position: "fixed",
+        right: 8,
+        bottom: 8,
+        zIndex: 2147483647,
+        maxWidth: 520,
+        maxHeight: 360,
+        overflow: "auto",
+        padding: 8,
+        border: "1px solid #999",
+        background: "#fff",
+        color: "#111",
+        fontSize: 11,
+        lineHeight: 1.35,
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      {JSON.stringify(
+        {
+          route: typeof window !== "undefined" ? window.location.pathname : null,
+          activeCount: snapshot.active.length,
+          oldestActive: oldest
+            ? {
+                requestId: oldest.requestId,
+                path: oldest.path,
+                callerLabel: oldest.callerLabel,
+                phase: oldest.phase,
+                durationMs: oldest.durationMs,
+                stalePending: oldest.stalePending,
+              }
+            : null,
+          last10: snapshot.history.slice(0, 10).map((entry) => ({
+            requestId: entry.requestId,
+            method: entry.method,
+            path: entry.path,
+            callerLabel: entry.callerLabel,
+            phase: entry.phase,
+            status: entry.status,
+            durationMs: entry.durationMs,
+            errorName: entry.errorName,
+          })),
+          last5Errors: snapshot.lastErrors.slice(0, 5).map((entry) => ({
+            requestId: entry.requestId,
+            path: entry.path,
+            phase: entry.phase,
+            durationMs: entry.durationMs,
+            errorName: entry.errorName,
+            errorMessage: entry.errorMessage,
+          })),
+        },
+        null,
+        2
+      )}
+    </pre>
   );
 }
 
@@ -754,7 +851,7 @@ export function useDashboardAnalyticsSnapshot(params: DashboardAnalyticsParams =
       revalidateIfStale: true,
       revalidateOnMount: true,
       revalidateOnFocus: false,
-      revalidateOnReconnect: true,
+      revalidateOnReconnect: false,
       dedupingInterval: STALE_TIME_MS,
       focusThrottleInterval: STALE_TIME_MS,
       keepPreviousData: true,
@@ -775,6 +872,98 @@ export function useDashboardAnalyticsSnapshot(params: DashboardAnalyticsParams =
     ...swr,
     hasCachedData: Boolean(cachedValue),
     normalizedParams,
+  };
+}
+
+export function useHomeAnalyticsSnapshot(params: DashboardAnalyticsParams = {}) {
+  const { organizationId, session } = usePortalSession();
+  const resolvedOrgId = ensureOrgId(organizationId);
+  const normalizedParams = normalizeDashboardAnalyticsParams(params);
+  const filterKey = getHomeAnalyticsSnapshotFilterKey(normalizedParams);
+  const userScope = session?.user?.user_id ?? "anonymous";
+  const cacheScope = resolvedOrgId ? `${userScope}:${resolvedOrgId}:${filterKey}` : null;
+  const cachedValue = cacheScope
+    ? readCachedPayload(homeAnalyticsSnapshotMemoryCache, HOME_ANALYTICS_SNAPSHOT_CACHE_KEY_PREFIX, cacheScope, {
+        allowStale: true,
+        storage: "session",
+      })
+    : null;
+  const key = resolvedOrgId
+    ? ["portal/home-analytics-snapshot", userScope, resolvedOrgId, "v1", filterKey]
+    : null;
+  const swr = useSWR<HomeAnalyticsSnapshotResponse>(
+    key,
+    async () => {
+      const inFlightKey = cacheScope ?? filterKey;
+      const existing = homeAnalyticsSnapshotInFlight.get(inFlightKey);
+      if (existing) return existing;
+      const promise = (async () => {
+        const startedAt = Date.now();
+        let snapshot = await requestHomeAnalyticsSnapshot(normalizedParams);
+        let attempts = 0;
+        while (
+          snapshot?.snapshot_id &&
+          (snapshot.status === "queued" || snapshot.status === "running") &&
+          attempts < HOME_SNAPSHOT_MAX_ATTEMPTS &&
+          Date.now() - startedAt < HOME_SNAPSHOT_MAX_ELAPSED_MS
+        ) {
+          const delayMs = Math.max(500, Math.min(Number(snapshot.poll_after_ms ?? 1500), 5000));
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          attempts += 1;
+          snapshot = await fetchHomeAnalyticsSnapshot(snapshot.snapshot_id, attempts);
+        }
+        if (snapshot?.snapshot_id && (snapshot.status === "queued" || snapshot.status === "running")) {
+          throw new PortalSnapshotTimeoutError({
+            snapshotId: snapshot.snapshot_id,
+            status: snapshot.status,
+            attempts,
+            elapsedMs: Date.now() - startedAt,
+          });
+        }
+        return snapshot;
+      })().finally(() => {
+        homeAnalyticsSnapshotInFlight.delete(inFlightKey);
+      });
+      homeAnalyticsSnapshotInFlight.set(inFlightKey, promise);
+      const snapshot = await promise;
+      if (cacheScope && snapshot?.status === "ready") {
+        writeCachedPayload(
+          homeAnalyticsSnapshotMemoryCache,
+          HOME_ANALYTICS_SNAPSHOT_CACHE_KEY_PREFIX,
+          cacheScope,
+          snapshot,
+          "session"
+        );
+      }
+      return snapshot;
+    },
+    {
+      fallbackData: cachedValue ?? undefined,
+      revalidateIfStale: true,
+      revalidateOnMount: true,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: STALE_TIME_MS,
+      focusThrottleInterval: STALE_TIME_MS,
+      keepPreviousData: true,
+      onSuccess: (data) => {
+        if (cacheScope && data?.status === "ready") {
+          writeCachedPayload(
+            homeAnalyticsSnapshotMemoryCache,
+            HOME_ANALYTICS_SNAPSHOT_CACHE_KEY_PREFIX,
+            cacheScope,
+            data,
+            "session"
+          );
+        }
+      },
+    }
+  );
+  return {
+    ...swr,
+    hasCachedData: Boolean(cachedValue),
+    normalizedParams,
+    filterKey,
   };
 }
 

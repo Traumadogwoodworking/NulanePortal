@@ -85,7 +85,7 @@ function getFacilityMatchKeys(facility: {
 }
 
 export default function FacilitiesPage() {
-  const { organizationId, isOrgAdmin } = usePortalSession();
+  const { organizationId, isFacilityAdmin: isOrgAdmin } = usePortalSession();
   const searchParams = useSearchParams();
   const { data: branding } = usePortalBrandingSnapshot();
   const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();

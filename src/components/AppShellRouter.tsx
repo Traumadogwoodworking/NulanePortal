@@ -3,8 +3,6 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PortalLayoutShell } from "@/components/PortalLayoutShell";
-import { ControlWorkspaceShell } from "@/components/control/ControlWorkspaceShell";
-import { isControlRoute } from "@/lib/controlRoutes";
 
 function isLoginRoute(pathname: string) {
   return pathname === "/login" || pathname === "/login/";
@@ -21,9 +19,6 @@ export function AppShellRouter({ children }: { children: ReactNode }) {
   }
   if (isAuthCallbackRoute(pathname)) {
     return <>{children}</>;
-  }
-  if (isControlRoute(pathname)) {
-    return <ControlWorkspaceShell>{children}</ControlWorkspaceShell>;
   }
   return <PortalLayoutShell>{children}</PortalLayoutShell>;
 }

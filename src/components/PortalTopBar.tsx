@@ -8,6 +8,8 @@ interface PortalTopBarProps {
   pageSubtitle?: string;
 }
 
+const PORTAL_VERSION_LABEL = process.env.NEXT_PUBLIC_PORTAL_VERSION_LABEL || "inspection-trac-t";
+
 export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
   const branding = useMemo(
     () => resolvePortalBranding({ session: null }),
@@ -31,20 +33,20 @@ export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
               className="truncate leading-none text-[40px] font-black uppercase tracking-[0.18em] text-slate-900"
               style={{
                 fontFamily: "Inter, var(--font-inter), var(--font-geist-sans), sans-serif",
-                WebkitTextStroke: "1.5px rgba(255,255,255,0.95)",
+                WebkitTextStroke: "1.9px rgba(255,255,255,0.98)",
                 paintOrder: "stroke fill",
-                textShadow: "0 0 1px rgba(255,255,255,0.75)",
+                textShadow: "0 0 1.5px rgba(255,255,255,0.85)",
               }}
             >
               {pageSubtitle || "Command Center"}
             </p>
             <h1
-              className="truncate leading-none text-[24px] font-extrabold uppercase tracking-[0.2em] text-slate-900"
+              className="truncate leading-none text-[24px] font-black uppercase tracking-[0.2em] text-slate-900"
               style={{
                 fontFamily: "Inter, var(--font-inter), var(--font-geist-sans), sans-serif",
-                WebkitTextStroke: "1.25px rgba(255,255,255,0.95)",
+                WebkitTextStroke: "1.75px rgba(255,255,255,0.98)",
                 paintOrder: "stroke fill",
-                textShadow: "0 0 1px rgba(255,255,255,0.65)",
+                textShadow: "0 0 1.5px rgba(255,255,255,0.78)",
               }}
             >
               {pageTitle}
@@ -52,7 +54,11 @@ export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-4 justify-self-end" />
+        <div className="flex items-center justify-end gap-4 justify-self-end">
+          <span className="max-w-[180px] truncate rounded-full border border-white/70 bg-white/35 px-3 py-1 text-[11px] font-black uppercase text-slate-900 shadow-sm">
+            {PORTAL_VERSION_LABEL}
+          </span>
+        </div>
       </div>
     </header>
   );

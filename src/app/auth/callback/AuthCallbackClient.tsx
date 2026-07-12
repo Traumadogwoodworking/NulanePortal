@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { completeAuth0Callback } from "@/lib/portalAuth";
+import { completeAuth0Callback, hasPersistedPortalToken, logAuthFlow } from "@/lib/portalAuth";
 
 type CallbackStatus = "starting" | "processing" | "redirecting" | "failed";
 
@@ -16,9 +16,11 @@ export function AuthCallbackClient() {
     const run = async () => {
       setStatus("processing");
       setErrorMessage(null);
-      console.debug("[Auth0] AuthCallbackClient starting callback exchange", {
-        href: window.location.href,
-        search: window.location.search,
+      logAuthFlow("AuthCallbackClient.run", {
+        reason: "start",
+        hasCode: new URLSearchParams(window.location.search).has("code"),
+        hasState: new URLSearchParams(window.location.search).has("state"),
+        tokenExists: hasPersistedPortalToken(),
       });
       try {
         const target = await completeAuth0Callback();
@@ -27,12 +29,21 @@ export function AuthCallbackClient() {
         }
         setDestination(target);
         setStatus("redirecting");
+        logAuthFlow("AuthCallbackClient.run", {
+          reason: "redirecting",
+          redirectTarget: target,
+          tokenExists: hasPersistedPortalToken(),
+        });
         window.location.replace(target);
       } catch (error) {
         if (cancelled) {
           return;
         }
         const message = error instanceof Error ? error.message : "Unknown callback error";
+        logAuthFlow("AuthCallbackClient.run", {
+          reason: "failed",
+          tokenExists: hasPersistedPortalToken(),
+        });
         setErrorMessage(message);
         setStatus("failed");
       }
@@ -68,9 +79,9 @@ export function AuthCallbackClient() {
             Destination: <span className="font-semibold text-slate-800" data-auth0-callback-destination>{destination}</span>
           </p>
           <p className="mt-1">
-            Location:{" "}
+            Path:{" "}
             <span className="font-semibold text-slate-800" suppressHydrationWarning>
-              {typeof window !== "undefined" ? window.location.href : "server"}
+              {typeof window !== "undefined" ? window.location.pathname : "server"}
             </span>
           </p>
           <button

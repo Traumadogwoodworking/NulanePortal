@@ -8,7 +8,7 @@ import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
-import { Home, LayoutGrid, Mail } from "lucide-react";
+import { Clock3, Home, LayoutGrid, Mail } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
   if (href === "/") {
@@ -134,16 +134,6 @@ const LogoutIcon = () => (
   </svg>
 );
 
-const RobotIcon = () => (
-  <svg viewBox="0 0 24 24" className={sharedSidebarIconSize + " flex-shrink-0"} xmlns="http://www.w3.org/2000/svg" fill="none">
-    <rect x="5" y="8" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
-    <circle cx="8.5" cy="12" r="1" fill="currentColor" />
-    <circle cx="15.5" cy="12" r="1" fill="currentColor" />
-    <path d="M12 8V6m0 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M9 18v2m6-2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
 const SettingsIcon = () => (
   <svg viewBox="0 0 24 24" className={sharedSidebarIconSize} xmlns="http://www.w3.org/2000/svg" fill="none">
     <path d="M12 6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 20.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -167,7 +157,7 @@ const PenIcon = () => (
 export function PortalSidebar() {
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
-  const { session, isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission, logout } = usePortalSession();
+  const { session, isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, isShap, isSvl, hasPermission, logout } = usePortalSession();
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
 
   const branding = useMemo(() => {
@@ -181,22 +171,13 @@ export function PortalSidebar() {
   const activeLogo = branding.logoUrl ?? branding.staticLogoUrl;
 
   const accessInfo = useMemo(
-    () => ({ isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission }),
-    [isAdmin, isOrgAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, hasPermission]
+    () => ({ isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, isShap, isSvl, hasPermission }),
+    [isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, isShap, isSvl, hasPermission]
   );
 
   const visibleSections = useMemo(
-    () => {
-      const sections = filterNavSectionsByAccess(navSections, accessInfo);
-      if (branding.powerBiEmbedUrl) {
-        return sections;
-      }
-      return sections.map((section) => ({
-        ...section,
-        items: section.items.filter((item) => item.href !== "/dashboard"),
-      }));
-    },
-    [accessInfo, branding.powerBiEmbedUrl]
+    () => filterNavSectionsByAccess(navSections, accessInfo),
+    [accessInfo]
   );
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -264,6 +245,12 @@ export function PortalSidebar() {
                 const isImageIcon = Boolean(item.icon && (item.icon.startsWith("/") || item.icon.startsWith("http")));
                 const isDocudentIcon = item.href === "/docudent";
                 const iconBoxClass = isDocudentIcon ? "nav-link-icon nav-link-icon--docudent" : "nav-link-icon nav-link-icon--large";
+                const imageShellClass =
+                  isDocudentIcon && branding.mode === "definianInspection"
+                    ? "nav-link-icon nav-link-icon--docudent -my-4 rounded-[0.9rem] bg-white p-1 shadow-[0_10px_24px_rgba(15,23,42,0.12)]"
+                    : isDocudentIcon
+                      ? "nav-link-icon nav-link-icon--docudent -my-4"
+                      : "nav-link-icon nav-link-icon--large -my-4";
                 return (
                   <Link
                     key={item.href}
@@ -276,7 +263,7 @@ export function PortalSidebar() {
                     textShadow: active ? `0 0 14px var(--brand-glow, rgba(37,99,235,0.16))` : "none",
                   }}
                 >
-                    <div className={`flex items-center justify-center ${isImageIcon ? (isDocudentIcon ? "nav-link-icon nav-link-icon--docudent -my-4" : "nav-link-icon nav-link-icon--large -my-4") : iconBoxClass}`}>
+                    <div className={`flex items-center justify-center ${isImageIcon ? imageShellClass : iconBoxClass}`}>
                       {item.icon === "home" && <HomeIcon />}
                       {item.icon === "dashboard" && <LayoutGrid className={sharedSidebarIconSize} />}
                       {item.icon === "reports" && <ReportsIcon />}
@@ -285,11 +272,11 @@ export function PortalSidebar() {
                       {item.icon === "facility" && <FacilityIcon />}
                       {item.icon === "notifications" && <NotificationsIcon />}
                       {item.icon === "email" && <EmailIcon />}
+                      {item.icon === "clock" && <Clock3 className={sharedSidebarIconSize} />}
                       {item.icon === "palette" && <PaletteIcon />}
                       {item.icon === "rsa" && <TrainIcon />}
                       {item.icon === "support" && <SupportIcon />}
                       {item.icon === "settings" && <SettingsIcon />}
-                      {item.icon === "robot" && <RobotIcon />}
                       {item.icon === "pen" && <PenIcon />}
                       {isImageIcon && typeof item.icon === "string" && (
                         <Image

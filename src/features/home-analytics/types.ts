@@ -3,12 +3,15 @@ import type { ReactNode } from "react";
 export type HomeCountMode = "reports" | "damages";
 
 export type HomeFilterKey =
+  | "facility"
   | "report_id"
   | "vin"
   | "inspection_type"
   | "make"
   | "model"
   | "yard"
+  | "severity"
+  | "damage_area"
   | "inspector_email"
   | "status";
 
