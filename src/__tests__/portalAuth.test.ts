@@ -174,12 +174,12 @@ describe("buildAuthRedirectUri", () => {
 });
 
 describe("portal API audience", () => {
-  it("defaults to the audience accepted by the Inspection-Trac API", async () => {
+  it("defaults to the Auth0 API audience registered for this portal", async () => {
     vi.stubEnv("NEXT_PUBLIC_AUTH0_AUDIENCE", "");
     const { getPortalAuthDebugConfig } = await importPortalAuth();
 
     expect(getPortalAuthDebugConfig()).toEqual(
-      expect.objectContaining({ audience: "https://api.nulanesystems.com" })
+      expect.objectContaining({ audience: "https://inspection-trac.us.auth0.com/api/v2/" })
     );
   });
 });

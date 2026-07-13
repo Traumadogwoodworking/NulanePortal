@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { completeAuth0Callback, hasPersistedPortalToken, logAuthFlow } from "@/lib/portalAuth";
+import {
+  buildPortalLoginUrl,
+  clearPortalAuthStorage,
+  completeAuth0Callback,
+  hasPersistedPortalToken,
+  logAuthFlow,
+} from "@/lib/portalAuth";
 
 type CallbackStatus = "starting" | "processing" | "redirecting" | "failed";
 
@@ -16,6 +22,20 @@ export function AuthCallbackClient() {
     const run = async () => {
       setStatus("processing");
       setErrorMessage(null);
+      const callbackParams = new URLSearchParams(window.location.search);
+      const authError = callbackParams.get("error");
+      const authErrorDescription = callbackParams.get("error_description");
+      if (authError) {
+        clearPortalAuthStorage({ includeAuth0Sdk: true });
+        logAuthFlow("AuthCallbackClient.run", {
+          reason: "provider_error",
+          error: authError,
+          tokenExists: false,
+          redirectTarget: "/login",
+        });
+        window.location.replace(buildPortalLoginUrl("/home/"));
+        return;
+      }
       logAuthFlow("AuthCallbackClient.run", {
         reason: "start",
         hasCode: new URLSearchParams(window.location.search).has("code"),
@@ -40,11 +60,12 @@ export function AuthCallbackClient() {
           return;
         }
         const message = error instanceof Error ? error.message : "Unknown callback error";
+        clearPortalAuthStorage({ includeAuth0Sdk: true });
         logAuthFlow("AuthCallbackClient.run", {
           reason: "failed",
           tokenExists: hasPersistedPortalToken(),
         });
-        setErrorMessage(message);
+        setErrorMessage(authErrorDescription || message);
         setStatus("failed");
       }
     };
@@ -86,10 +107,13 @@ export function AuthCallbackClient() {
           </p>
           <button
             type="button"
-            onClick={() => window.location.replace(destination)}
+            onClick={() => {
+              clearPortalAuthStorage({ includeAuth0Sdk: true });
+              window.location.replace(buildPortalLoginUrl("/home/"));
+            }}
             className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
           >
-            Try redirect again
+            Return to sign in
           </button>
         </div>
       </div>

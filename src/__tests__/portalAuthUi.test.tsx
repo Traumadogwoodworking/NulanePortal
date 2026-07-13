@@ -120,6 +120,22 @@ describe("PortalLayoutShell auth states", () => {
 });
 
 describe("AuthCallbackClient", () => {
+  it("clears stale auth state and returns provider errors to a clean sign-in", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/auth/callback/?error=access_denied&error_description=Service%20not%20found&state=stale-state"
+    );
+
+    render(<AuthCallbackClient />);
+
+    await waitFor(() => {
+      expect(portalAuthMocks.clearPortalAuthStorage).toHaveBeenCalledWith({ includeAuth0Sdk: true });
+      expect(portalAuthMocks.buildPortalLoginUrl).toHaveBeenCalledWith("/home/");
+    });
+    expect(portalAuthMocks.completeAuth0Callback).not.toHaveBeenCalled();
+  });
+
   it("does not render callback code or state in visible UI", async () => {
     window.history.replaceState({}, "", "/auth/callback/?code=secret-code&state=secret-state");
 
