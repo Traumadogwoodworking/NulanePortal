@@ -26,6 +26,7 @@ export type DashboardAnalyticsParams = {
   yard?: string;
   severity?: string;
   damage_area?: string;
+  damage_type?: string;
   search?: string;
 };
 
@@ -136,6 +137,7 @@ export type DashboardAnalyticsResponse = {
 export type ReportListParams = {
   page?: number;
   pageSize?: number;
+  page_size?: number;
   limit?: number;
   sort?: string;
   search?: string;
@@ -246,7 +248,9 @@ const RSA_REPORTS_LOOKBACK_DAYS = 5;
 const REPORT_LIST_TIMEOUT_MS = 15000;
 const REPORT_DETAIL_TIMEOUT_MS = 20000;
 const REPORTS_PAGINATION_BATCH_SIZE = 4;
-const DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES = 1;
+// Export snapshots may span the complete filtered result set, but must never
+// become an unbounded crawl when an older API response omits reliable totals.
+const DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES = 100;
 const MILESTONE_FETCH_ENDPOINT = "/reports/milestones";
 const MILESTONE_SUBMIT_ENDPOINT = "/milestones/reports";
 
@@ -638,7 +642,7 @@ function buildReportQueryString(filters: ReportFilters = {}) {
 
 function buildNamedQueryString(filters: Record<string, unknown> = {}, options?: { preserveDateOnly?: boolean }) {
   const params = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
+  Object.entries(filters).sort(([left], [right]) => left.localeCompare(right)).forEach(([key, value]) => {
     const candidate = normalizeQueryParamValue(key, value, options);
     if (candidate) {
       params.set(key, candidate);
@@ -672,7 +676,7 @@ export function buildNormalizedReportQueryString(filters: ReportFilters = {}) {
 }
 
 export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams = {}): Promise<DashboardAnalyticsResponse> {
-  return apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`, {
+  return apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params, { preserveDateOnly: true })}`, {
     portal: {
       callerLabel: "dashboard.analytics",
       timeoutMs: REPORT_LIST_TIMEOUT_MS,
@@ -681,11 +685,10 @@ export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams =
 }
 
 export async function fetchReportList(params: ReportListParams = {}): Promise<ReportListResponse> {
-  const resolvedPageSize = params.limit ?? params.pageSize ?? 50;
+  const resolvedPageSize = params.limit ?? params.page_size ?? params.pageSize ?? 50;
   const queryParams = {
     page: params.page ?? 1,
-    pageSize: resolvedPageSize,
-    limit: params.limit,
+    page_size: resolvedPageSize,
     sort: params.sort ?? "created_at_desc",
     search: params.search,
     report_id: params.report_id,
@@ -796,12 +799,13 @@ function reportListRowToDamageReport(row: ReportListRow): ReportDamageApiRow {
 
 export async function fetchDamageReportListSnapshot(params: ReportListParams = {}): Promise<ReportDamageApiRow[]> {
   const resolvedPage = params.page ?? 1;
-  const resolvedPageSize = params.pageSize ?? params.limit ?? 100;
+  const resolvedPageSize = params.limit ?? params.page_size ?? params.pageSize ?? 100;
   const response = await fetchReportList({
     ...params,
     page: resolvedPage,
+    page_size: resolvedPageSize,
     pageSize: resolvedPageSize,
-    limit: params.limit ?? params.pageSize ?? resolvedPageSize,
+    limit: resolvedPageSize,
     sort: params.sort ?? "created_at_desc",
   });
   let merged = response.rows.map(reportListRowToDamageReport);
@@ -817,51 +821,25 @@ export async function fetchDamageReportListSnapshot(params: ReportListParams = {
 
   const effectiveTotal = response.hasNextPage && response.total <= merged.length ? null : response.total;
   const endPage = getPaginatedFetchEndPage(effectiveTotal, response.pageSize, DAMAGE_REPORTS_SNAPSHOT_MAX_PAGES);
-  for (let batchStart = 2; batchStart <= endPage; batchStart += REPORTS_PAGINATION_BATCH_SIZE) {
-    const batchPages = Array.from(
-      { length: Math.min(REPORTS_PAGINATION_BATCH_SIZE, endPage - batchStart + 1) },
-      (_, index) => batchStart + index
-    );
-    const pageResults = await Promise.allSettled(
-      batchPages.map(async (page) => ({
-        page,
-        response: await fetchReportList({
-          ...params,
-          page,
-          pageSize: response.pageSize,
-          limit: response.pageSize,
-          sort: params.sort ?? "created_at_desc",
-        }),
-      }))
-    );
-    const rejectedResult = pageResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
-    if (rejectedResult) {
-      throw rejectedResult.reason;
-    }
+  for (let page = 2; page <= endPage; page += 1) {
+    const nextResponse = await fetchReportList({
+      ...params,
+      page,
+      page_size: response.pageSize,
+      pageSize: response.pageSize,
+      limit: response.pageSize,
+      sort: params.sort ?? "created_at_desc",
+    });
+    const nextRows = nextResponse.rows.map(reportListRowToDamageReport);
+    if (!nextRows.length) break;
 
-    let shouldStop = false;
-    for (const result of pageResults) {
-      if (result.status !== "fulfilled") continue;
-      const nextResponse = result.value.response;
-      const nextRows = nextResponse.rows.map(reportListRowToDamageReport);
-      if (!nextRows.length) {
-        shouldStop = true;
-        break;
-      }
-
-      const beforeCount = merged.length;
-      merged = mergeReportsById(merged, nextRows);
-      const hasReliableTotal = nextResponse.total > merged.length || !nextResponse.hasNextPage;
-      if (!nextResponse.hasNextPage) shouldStop = true;
-      if (hasReliableTotal && nextResponse.total > 0 && merged.length >= nextResponse.total) shouldStop = true;
-      if (nextResponse.rows.length < nextResponse.pageSize) shouldStop = true;
-      if (merged.length === beforeCount) shouldStop = true;
-      if (shouldStop) break;
-    }
-
-    if (shouldStop) {
-      break;
-    }
+    const beforeCount = merged.length;
+    merged = mergeReportsById(merged, nextRows);
+    const hasReliableTotal = nextResponse.total > merged.length || !nextResponse.hasNextPage;
+    if (!nextResponse.hasNextPage) break;
+    if (hasReliableTotal && nextResponse.total > 0 && merged.length >= nextResponse.total) break;
+    if (nextResponse.rows.length < nextResponse.pageSize) break;
+    if (merged.length === beforeCount) break;
   }
 
   return merged;

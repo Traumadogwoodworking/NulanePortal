@@ -34,6 +34,7 @@ export function parseHomeAnalyticsFilters(params: URLSearchParams): HomeAnalytic
     yard: clean(params.get("yard")),
     severity: clean(params.get("severity")),
     damageArea: clean(params.get("damage_area")),
+    damageType: clean(params.get("damage_type")),
   };
 }
 
@@ -55,6 +56,7 @@ export function serializeHomeAnalyticsFilters(filters: HomeAnalyticsFilters): UR
     ["yard", filters.yard],
     ["severity", filters.severity && filters.severity !== "all" ? filters.severity : undefined],
     ["damage_area", filters.damageArea],
+    ["damage_type", filters.damageType],
   ];
   for (const [key, value] of pairs) {
     const normalized = clean(value);
@@ -102,6 +104,7 @@ export function getActiveHomeFilterChips(filters: HomeAnalyticsFilters): ActiveH
   add("yard", "Yard", filters.yard);
   if (filters.severity !== "all") add("severity", "Severity", filters.severity);
   add("damage_area", "Damage area", filters.damageArea);
+  add("damage_type", "Damage type", filters.damageType);
   return chips;
 }
 
@@ -112,6 +115,7 @@ export function getHomeFilterKeysWithValues(filters: HomeAnalyticsFilters): Home
     if (key === "inspection_type") return Boolean(filters.inspectionType);
     if (key === "inspector_email") return Boolean(filters.inspectorKey);
     if (key === "damage_area") return Boolean(filters.damageArea);
+    if (key === "damage_type") return Boolean(filters.damageType);
     const value = filters[key === "vin" ? "vin" : key];
     return Boolean(value);
   });

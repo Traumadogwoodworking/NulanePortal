@@ -27,7 +27,7 @@ describe("reportService paginated snapshots", () => {
       const parsedUrl = new URL(url, "http://localhost");
       expect(parsedUrl.pathname).toBe("/reports/list");
       expect(parsedUrl.searchParams.get("page")).toBe("1");
-      expect(parsedUrl.searchParams.get("pageSize")).toBe("50");
+      expect(parsedUrl.searchParams.get("page_size")).toBe("50");
       expect(parsedUrl.searchParams.get("sort")).toBe("created_at_desc");
       expect(parsedUrl.searchParams.get("search")).toBe("toyota");
       expect(parsedUrl.searchParams.get("facility_id")).toBe("facility-1");
@@ -66,30 +66,53 @@ describe("reportService paginated snapshots", () => {
     expect(report?.report_id).toBe("damage-1");
   });
 
-  it("keeps damage report list snapshots bounded to the first page", async () => {
+  it("retrieves every filtered damage-report page and deduplicates report ids", async () => {
     const requestedPages: number[] = [];
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
       expect(parsedUrl.pathname).toBe("/reports/list");
+      expect(parsedUrl.searchParams.get("facility_id")).toBe("facility-1");
+      expect(parsedUrl.searchParams.get("yard")).toBe("yard-a");
+      expect(parsedUrl.searchParams.get("inspection_type")).toBe("04");
+      expect(parsedUrl.searchParams.get("severity")).toBe("high");
+      expect(parsedUrl.searchParams.get("from")).toBe("2026-07-01");
+      expect(parsedUrl.searchParams.get("to")).toBe("2026-07-09");
       const page = Number(parsedUrl.searchParams.get("page") ?? "1");
       requestedPages.push(page);
 
       return {
-        rows: [{ report_id: `damage-${page}`, created_at: `2026-07-0${page}T10:00:00.000Z` }],
+        rows:
+          page === 1
+            ? [
+                { report_id: "damage-1", created_at: "2026-07-01T10:00:00.000Z" },
+                { report_id: "damage-2", created_at: "2026-07-02T10:00:00.000Z" },
+              ]
+            : [
+                { report_id: "damage-2", created_at: "2026-07-02T10:00:00.000Z" },
+                { report_id: "damage-3", created_at: "2026-07-03T10:00:00.000Z" },
+              ],
         page,
-        pageSize: 1,
+        pageSize: 2,
         total: 3,
-        hasNextPage: page < 3,
+        hasNextPage: page < 2,
       };
     });
 
-    const reports = await fetchDamageReportListSnapshot({ pageSize: 1, limit: 1 });
+    const reports = await fetchDamageReportListSnapshot({
+      pageSize: 2,
+      facility_id: "facility-1",
+      yard: "yard-a",
+      inspection_type: "04",
+      severity: "high",
+      from: "2026-07-01",
+      to: "2026-07-09",
+    });
 
-    expect(reports.map((report) => report.report_id)).toEqual(["damage-1"]);
-    expect(requestedPages).toEqual([1]);
+    expect(reports.map((report) => report.report_id)).toEqual(["damage-1", "damage-2", "damage-3"]);
+    expect(requestedPages).toEqual([1, 2]);
   });
 
-  it("does not continue damage snapshots when hasNextPage is true without a total", async () => {
+  it("continues damage snapshots from hasNextPage when the API omits a reliable total", async () => {
     const requestedPages: number[] = [];
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
@@ -107,8 +130,29 @@ describe("reportService paginated snapshots", () => {
 
     const reports = await fetchDamageReportListSnapshot({ pageSize: 1, limit: 1 });
 
-    expect(reports.map((report) => report.report_id)).toEqual(["damage-1"]);
-    expect(requestedPages).toEqual([1]);
+    expect(reports.map((report) => report.report_id)).toEqual(["damage-1", "damage-2", "damage-3"]);
+    expect(requestedPages).toEqual([1, 2, 3]);
+  });
+
+  it("caps damage snapshot pagination when the API never reports a terminal page", async () => {
+    const requestedPages: number[] = [];
+    apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
+      const parsedUrl = new URL(url, "http://localhost");
+      const page = Number(parsedUrl.searchParams.get("page") ?? "1");
+      requestedPages.push(page);
+      return {
+        rows: [{ report_id: `damage-${page}` }],
+        page,
+        pageSize: 1,
+        hasNextPage: true,
+      };
+    });
+
+    const reports = await fetchDamageReportListSnapshot({ pageSize: 1 });
+
+    expect(reports).toHaveLength(100);
+    expect(requestedPages).toHaveLength(100);
+    expect(requestedPages.at(-1)).toBe(100);
   });
 
   it("fetches RSA report pages only inside the recent five day window", async () => {

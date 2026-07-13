@@ -20,6 +20,9 @@ export type DamageReportFilterKey =
   | "yard"
   | "inspector_email"
   | "status"
+  | "severity"
+  | "damage_area"
+  | "damage_type"
   | "date_range";
 
 export const DAMAGE_FILTER_OPTIONS: Array<{ key: DamageReportFilterKey; label: string }> = [
@@ -32,6 +35,9 @@ export const DAMAGE_FILTER_OPTIONS: Array<{ key: DamageReportFilterKey; label: s
   { key: "yard", label: "Yard" },
   { key: "inspector_email", label: "Inspector Email" },
   { key: "status", label: "Status" },
+  { key: "severity", label: "Severity" },
+  { key: "damage_area", label: "Damage Area" },
+  { key: "damage_type", label: "Damage Type" },
   { key: "date_range", label: "Date" },
 ];
 
@@ -84,6 +90,9 @@ export type DamageReportFilters = {
   yardFilter: string;
   inspectorEmailFilter: string;
   statusFilter: ReportStatus | "";
+  severityFilter: string;
+  damageAreaFilter: string;
+  damageTypeFilter: string;
   createdFrom: string;
   createdTo: string;
 };
@@ -99,6 +108,9 @@ export const DEFAULT_DAMAGE_REPORT_FILTERS: DamageReportFilters = {
   yardFilter: "",
   inspectorEmailFilter: "",
   statusFilter: "",
+  severityFilter: "",
+  damageAreaFilter: "",
+  damageTypeFilter: "",
   createdFrom: "",
   createdTo: "",
 };
@@ -154,9 +166,9 @@ function asRecord(value: unknown): SearchableReportRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as SearchableReportRecord) : null;
 }
 
-function readReportString(report: unknown, keys: string[]): string {
+function readReportStrings(report: unknown, keys: string[]): string[] {
   const record = asRecord(report);
-  if (!record) return "";
+  if (!record) return [];
   const nestedPayload = asRecord(record.payload);
   const nestedReport = asRecord(record.report);
   const nestedRaw = asRecord(record.raw);
@@ -165,6 +177,8 @@ function readReportString(report: unknown, keys: string[]): string {
   const payloadMetadata = asRecord(nestedPayload?.metadata);
   const reportMetadata = asRecord(nestedReport?.metadata);
   const rawMetadata = asRecord(nestedRaw?.metadata);
+  const values: string[] = [];
+  const seen = new Set<string>();
   for (const key of keys) {
     const candidates = [
       record[key],
@@ -178,12 +192,24 @@ function readReportString(report: unknown, keys: string[]): string {
       rawMetadata?.[key],
     ];
     for (const candidate of candidates) {
-      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-      if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
-      if (typeof candidate === "boolean") return String(candidate);
+      const value =
+        typeof candidate === "string" && candidate.trim()
+          ? candidate.trim()
+          : typeof candidate === "number" && Number.isFinite(candidate)
+            ? String(candidate)
+            : typeof candidate === "boolean"
+              ? String(candidate)
+              : "";
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      values.push(value);
     }
   }
-  return "";
+  return values;
+}
+
+function readReportString(report: unknown, keys: string[]): string {
+  return readReportStrings(report, keys)[0] ?? "";
 }
 
 function readReportDate(report: unknown): string {
@@ -232,6 +258,9 @@ export function normalizeDamageReportFilters(input: Partial<DamageReportFilters>
     yardFilter: normalizeText(input?.yardFilter),
     inspectorEmailFilter: normalizeText(input?.inspectorEmailFilter),
     statusFilter: normalizeText(input?.statusFilter) as ReportStatus | "",
+    severityFilter: normalizeText(input?.severityFilter),
+    damageAreaFilter: normalizeText(input?.damageAreaFilter),
+    damageTypeFilter: normalizeText(input?.damageTypeFilter),
     createdFrom: normalizeText(input?.createdFrom),
     createdTo: normalizeText(input?.createdTo),
   };
@@ -249,6 +278,9 @@ export function serializeDamageReportFilters(filters: DamageReportFilters): stri
     yardFilter: filters.yardFilter,
     inspectorEmailFilter: filters.inspectorEmailFilter,
     statusFilter: filters.statusFilter,
+    severityFilter: filters.severityFilter,
+    damageAreaFilter: filters.damageAreaFilter,
+    damageTypeFilter: filters.damageTypeFilter,
     createdFrom: filters.createdFrom,
     createdTo: filters.createdTo,
   });
@@ -406,6 +438,12 @@ function matchesAnyToken(haystack: string, query: string): boolean {
   return tokens.some((token) => normalizedHaystack.includes(token.toLowerCase()));
 }
 
+function matchesCanonicalCandidate(candidates: string[], selectedValue: string): boolean {
+  const expected = normalizeSearchText(selectedValue);
+  if (!expected) return true;
+  return candidates.some((candidate) => normalizeSearchText(candidate) === expected);
+}
+
 function matchesInspectionType(report: ReportDamageApiRow, query: string): boolean {
   if (!query) return true;
   const rawValue = readInspectionTypeValue(report);
@@ -430,6 +468,20 @@ function matchesInspectionType(report: ReportDamageApiRow, query: string): boole
   });
 }
 
+function getDamageEntryRecords(report: ReportDamageApiRow): SearchableReportRecord[] {
+  const record = report as unknown as SearchableReportRecord;
+  const raw = asRecord(record.raw);
+  const candidates = [record.damage_entries, record.damageEntries, record.damage_summary, raw?.damage_entries, raw?.damageEntries];
+  const entries = candidates.find(Array.isArray);
+  return Array.isArray(entries) ? entries.map(asRecord).filter((entry): entry is SearchableReportRecord => Boolean(entry)) : [];
+}
+
+function damageEntryMatches(entry: SearchableReportRecord, keys: string[], value: string): boolean {
+  const expected = normalizeSearchText(value);
+  if (!expected) return true;
+  return keys.some((key) => normalizeSearchText(String(entry[key] ?? "")) === expected);
+}
+
 export function matchesDamageReportFilters(report: ReportDamageApiRow, filters: DamageReportFilters): boolean {
   const locationName = resolveDamageReportLocationName(report);
   if (!matchesFacilityFilterKeys(getDamageReportFacilityMatchKeys(report), filters.facilityFilter)) {
@@ -442,7 +494,15 @@ export function matchesDamageReportFilters(report: ReportDamageApiRow, filters: 
   const vin = normalizeSearchText(readReportString(report, ["vin", "vehicleVin", "vehicle_vin"]));
   const make = normalizeSearchText(readReportString(report, ["make", "vehicleMake", "vehicle_make"]));
   const model = normalizeSearchText(readReportString(report, ["model", "vehicleModel", "vehicle_model"]));
-  const yard = normalizeSearchText(readReportString(report, ["yard", "yardName", "yard_name", "yardLabel", "yard_label", "yardId", "yard_id"]));
+  const yardCandidates = readReportStrings(report, [
+    "yard",
+    "yardName",
+    "yard_name",
+    "yardLabel",
+    "yard_label",
+    "yardId",
+    "yard_id",
+  ]);
   const inspectorEmail = normalizeSearchText(readReportString(report, ["inspector_email", "inspectorEmail", "user_email", "userEmail"]));
 
   if (filters.reportIdFilter && !matchesAnyToken(reportId, filters.reportIdFilter)) return false;
@@ -451,8 +511,27 @@ export function matchesDamageReportFilters(report: ReportDamageApiRow, filters: 
   if (filters.inspectionTypeFilter && !matchesInspectionType(report, filters.inspectionTypeFilter)) return false;
   if (filters.makeFilter && !matchesAnyToken(make, filters.makeFilter)) return false;
   if (filters.modelFilter && !matchesAnyToken(model, filters.modelFilter)) return false;
-  if (filters.yardFilter && !matchesAnyToken(yard, filters.yardFilter)) return false;
+  if (filters.yardFilter && !matchesCanonicalCandidate(yardCandidates, filters.yardFilter)) return false;
   if (filters.inspectorEmailFilter && !matchesAnyToken(inspectorEmail, filters.inspectorEmailFilter)) return false;
+  const damageEntries = getDamageEntryRecords(report);
+  if (
+    filters.severityFilter &&
+    !damageEntries.some((entry) =>
+      damageEntryMatches(entry, ["severity", "severity_level", "severityLevel", "severity_code"], filters.severityFilter)
+    )
+  ) return false;
+  if (
+    filters.damageAreaFilter &&
+    !damageEntries.some((entry) =>
+      damageEntryMatches(entry, ["damage_area", "damage_area_code", "damageArea", "area", "area_code"], filters.damageAreaFilter)
+    )
+  ) return false;
+  if (
+    filters.damageTypeFilter &&
+    !damageEntries.some((entry) =>
+      damageEntryMatches(entry, ["damage_type", "damage_type_code", "damageType", "type", "type_code"], filters.damageTypeFilter)
+    )
+  ) return false;
   if ((filters.createdFrom || filters.createdTo) && !reportWithinDateRange(readReportDate(report), filters.createdFrom, filters.createdTo)) {
     return false;
   }

@@ -84,4 +84,75 @@ describe("api client watchdog", () => {
     expect(authMocks.clearStalePortalSession).not.toHaveBeenCalled();
     expect(window.__portalFetchDebug?.lastErrors()[0]?.phase).toBe("auth_expired");
   });
+
+  it("retries GET network failures and selected 5xx responses only", async () => {
+    const { apiFetch } = await import("@/lib/apiClient");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("network down"))
+      .mockResolvedValueOnce(new Response("temporary", { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      apiFetch("/reports/list", {
+        portal: { callerLabel: "test.retry", timeoutMs: 1000, retryDelayMs: 0 },
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(window.__portalFetchDebug?.history()[0]?.retryCount).toBe(2);
+  });
+
+  it("does not retry validation failures or non-idempotent requests by default", async () => {
+    const { apiFetch, PortalApiHttpError } = await import("@/lib/apiClient");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    const validationFetch = vi.fn(async () => new Response("invalid", { status: 400 }));
+    vi.stubGlobal("fetch", validationFetch);
+
+    await expect(
+      apiFetch("/reports/list", {
+        portal: { callerLabel: "test.noValidationRetry", timeoutMs: 1000, retryDelayMs: 0 },
+      })
+    ).rejects.toBeInstanceOf(PortalApiHttpError);
+    expect(validationFetch).toHaveBeenCalledTimes(1);
+
+    const postFetch = vi.fn(async () => new Response("temporary", { status: 503 }));
+    vi.stubGlobal("fetch", postFetch);
+    await expect(
+      apiFetch("/dashboard/home-snapshot/request", {
+        method: "POST",
+        portal: { callerLabel: "test.noPostRetry", timeoutMs: 1000, retryDelayMs: 0 },
+      })
+    ).rejects.toBeInstanceOf(PortalApiHttpError);
+    expect(postFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces caller cancellation as an abort rather than a timeout", async () => {
+    const { apiFetch, PortalApiAbortError } = await import("@/lib/apiClient");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          if (init?.signal?.aborted) {
+            reject(new DOMException("aborted", "AbortError"));
+            return;
+          }
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+        })
+      )
+    );
+    const controller = new AbortController();
+    const request = apiFetch("/reports/list", {
+      signal: controller.signal,
+      portal: { callerLabel: "test.abort", timeoutMs: 1000 },
+    });
+    const assertion = expect(request).rejects.toBeInstanceOf(PortalApiAbortError);
+    controller.abort();
+
+    await assertion;
+    expect(window.__portalFetchDebug?.lastErrors()[0]?.phase).toBe("aborted");
+  });
 });

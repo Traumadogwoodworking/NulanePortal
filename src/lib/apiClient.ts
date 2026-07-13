@@ -23,6 +23,8 @@ type PortalApiRequestOptions = {
   retryCount?: number;
   pollAttempt?: number;
   skipAuthRedirect?: boolean;
+  maxRetries?: number;
+  retryDelayMs?: number;
 };
 
 export type PortalApiRequestInit = RequestInit & {
@@ -129,6 +131,18 @@ export class PortalApiNetworkError extends Error {
   constructor(details: { requestId: string; path: string; message: string }) {
     super(`Network error requestId=${details.requestId} path=${details.path}: ${details.message}`);
     this.name = "PortalApiNetworkError";
+    this.requestId = details.requestId;
+    this.path = details.path;
+  }
+}
+
+export class PortalApiAbortError extends Error {
+  requestId: string;
+  path: string;
+
+  constructor(details: { requestId: string; path: string }) {
+    super(`Portal API request was cancelled (requestId=${details.requestId}, path=${details.path})`);
+    this.name = "PortalApiAbortError";
     this.requestId = details.requestId;
     this.path = details.path;
   }
@@ -283,7 +297,8 @@ function finishRequest(entry: ActiveEntry, patch: Partial<RequestDebugEntry>) {
 }
 
 function stripPortalOptions(options: PortalApiRequestInit = {}): RequestInit {
-  const { portal: _portal, ...requestOptions } = options;
+  const requestOptions = { ...options };
+  delete requestOptions.portal;
   return requestOptions;
 }
 
@@ -345,6 +360,34 @@ async function withTimeout<T>(
   }
 }
 
+const RETRYABLE_HTTP_STATUSES = new Set([500, 502, 503, 504]);
+
+function defaultMaxRetries(method: string): number {
+  return method === "GET" || method === "HEAD" ? 2 : 0;
+}
+
+function retryDelay(attempt: number, configuredDelay?: number): Promise<void> {
+  const base = configuredDelay ?? 250;
+  const delayMs = Math.min(Math.max(base, 0) * Math.max(attempt, 1), 1000);
+  return delayMs > 0 ? new Promise((resolve) => setTimeout(resolve, delayMs)) : Promise.resolve();
+}
+
+function logRetry(entry: ActiveEntry, reason: string, nextAttempt: number) {
+  entry.update({ retryCount: nextAttempt });
+  if (isTraceEnabled()) {
+    console.info("[portal-api] retry", {
+      requestId: entry.requestId,
+      path: entry.path,
+      reason,
+      attempt: nextAttempt,
+    });
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
+
 async function runRequest<T>(
   path: string,
   options: PortalApiRequestInit,
@@ -367,7 +410,14 @@ async function runRequest<T>(
     pollAttempt: portalOptions.pollAttempt,
   });
   const timeoutMs = portalOptions.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const controller = typeof AbortController !== "undefined" && !requestOptions.signal ? new AbortController() : null;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  if (controller && requestOptions.signal) {
+    if (requestOptions.signal.aborted) {
+      controller.abort();
+    } else {
+      requestOptions.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+  }
 
   try {
     return await withTimeout(entry, timeoutMs, controller, async () => {
@@ -396,24 +446,47 @@ async function runRequest<T>(
       if (token) headers.Authorization = `Bearer ${token}`;
 
       const isFormDataBody = typeof FormData !== "undefined" && requestOptions.body instanceof FormData;
-      entry.update({ phase: "fetch_start" });
-      let response: Response;
-      try {
-        response = await fetch(url, {
-          ...requestOptions,
-          signal: controller?.signal ?? requestOptions.signal,
-          headers: isFormDataBody ? { ...(requestOptions.headers || {}), "X-Portal-Request-Id": requestId } : headers,
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          entry.update({ phase: "aborted" });
-          throw error;
+      const maxRetries = Math.max(0, Math.floor(portalOptions.maxRetries ?? defaultMaxRetries(method)));
+      let response: Response | null = null;
+      let attempt = 0;
+      while (!response) {
+        entry.update({ phase: "fetch_start", retryCount: attempt });
+        try {
+          response = await fetch(url, {
+            ...requestOptions,
+            signal: controller?.signal ?? requestOptions.signal,
+            headers: isFormDataBody ? { ...(requestOptions.headers || {}), "X-Portal-Request-Id": requestId } : headers,
+          });
+        } catch (error) {
+          if (isAbortError(error)) {
+            entry.update({ phase: "aborted" });
+            throw error;
+          }
+          if (attempt < maxRetries) {
+            attempt += 1;
+            logRetry(entry, "network", attempt);
+            await retryDelay(attempt, portalOptions.retryDelayMs);
+            continue;
+          }
+          throw new PortalApiNetworkError({
+            requestId,
+            path,
+            message: error instanceof Error ? error.message : String(error),
+          });
         }
-        throw new PortalApiNetworkError({
-          requestId,
-          path,
-          message: error instanceof Error ? error.message : String(error),
-        });
+
+        if (RETRYABLE_HTTP_STATUSES.has(response.status) && attempt < maxRetries) {
+          const status = response.status;
+          try {
+            await response.body?.cancel();
+          } catch {
+            // Response disposal is best effort before the next request.
+          }
+          response = null;
+          attempt += 1;
+          logRetry(entry, `http_${status}`, attempt);
+          await retryDelay(attempt, portalOptions.retryDelayMs);
+        }
       }
 
       entry.update({
@@ -459,19 +532,29 @@ async function runRequest<T>(
       error instanceof PortalApiAuthExpiredError ||
       error instanceof PortalApiHttpError ||
       error instanceof PortalApiNetworkError ||
+      error instanceof PortalApiAbortError ||
       error instanceof PortalApiParseError
         ? error
-        : error instanceof Error && error.name === "AbortError"
-          ? new PortalApiTimeoutError({
-              requestId,
-              path,
-              phase: entry.phase,
-              elapsedMs: Math.round(nowMs() - entry.startedAt),
-              timeoutMs,
-            })
+        : isAbortError(error)
+          ? entry.phase === "aborted"
+            ? new PortalApiAbortError({ requestId, path })
+            : new PortalApiTimeoutError({
+                requestId,
+                path,
+                phase: entry.phase,
+                elapsedMs: Math.round(nowMs() - entry.startedAt),
+                timeoutMs,
+              })
           : new PortalApiNetworkError({ requestId, path, message: error instanceof Error ? error.message : String(error) });
     finishRequest(entry, {
-      phase: normalizedError instanceof PortalApiTimeoutError ? "timeout" : entry.phase === "auth_expired" ? "auth_expired" : "error",
+      phase:
+        normalizedError instanceof PortalApiTimeoutError
+          ? "timeout"
+          : normalizedError instanceof PortalApiAbortError
+            ? "aborted"
+            : entry.phase === "auth_expired"
+              ? "auth_expired"
+              : "error",
       errorName: normalizedError.name,
       errorMessage: normalizedError.message,
     });

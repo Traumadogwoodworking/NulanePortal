@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { usePortalSession } from "@/lib/portalSession";
 import { fetchPortalFilterFacets } from "@/features/portal-filters/services/portalFilterFacetsService";
 import type { PortalFilterFacetsResponse } from "@/features/portal-filters/model/facets";
+import { finitePortalSWRRetryOptions } from "@/lib/swrRetry";
 
 const FILTER_FACETS_DEDUPING_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -38,6 +39,7 @@ export function usePortalFilterFacets() {
       response: await fetchPortalFilterFacets(),
     }),
     {
+      ...finitePortalSWRRetryOptions,
       keepPreviousData: true,
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
@@ -58,4 +60,3 @@ export function usePortalFilterFacets() {
     },
   };
 }
-

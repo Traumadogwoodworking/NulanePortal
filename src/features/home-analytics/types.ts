@@ -12,6 +12,7 @@ export type HomeFilterKey =
   | "yard"
   | "severity"
   | "damage_area"
+  | "damage_type"
   | "inspector_email"
   | "status";
 
@@ -31,6 +32,7 @@ export type HomeAnalyticsFilters = {
   yard?: string;
   severity?: string;
   damageArea?: string;
+  damageType?: string;
 };
 
 export type ActiveHomeFilterChip = {
