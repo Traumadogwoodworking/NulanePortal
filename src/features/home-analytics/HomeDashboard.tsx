@@ -48,8 +48,6 @@ import { fetchDamageReportListSnapshot, type ReportListParams } from "@/lib/serv
 import {
   normalizeLabel,
   normalizeSearchText,
-  matchesDamageReportFilters,
-  DEFAULT_DAMAGE_REPORT_FILTERS,
   DAMAGE_FILTER_OPTIONS,
   getActiveInspectionTypeOptions,
 } from "@/lib/reportFilters";
@@ -71,12 +69,9 @@ import {
   readAnalyticsString,
 } from "@/features/home-analytics/analytics-adapters";
 import {
-  buildDashboardAnalyticsParams,
   getActiveHomeFilterChips,
-  getDefaultHomeAnalyticsFilters,
   getHomeFilterKeysWithValues,
   parseHomeAnalyticsFilters,
-  serializeHomeAnalyticsFilters,
 } from "@/features/home-analytics/filter-state";
 import { AnalyticsCoverageAlert } from "@/features/home-analytics/components/AnalyticsCoverageAlert";
 import { DamageClearMetricValue } from "@/features/home-analytics/components/DamageClearMetricValue";
@@ -84,6 +79,41 @@ import { MetricCard } from "@/features/home-analytics/components/MetricCard";
 import { HOME_DASHBOARD_VISUALS } from "@/features/home-analytics/dashboard-config";
 import { buildFilterExportRows } from "@/features/home-analytics/export-adapters";
 import type { HomeAnalyticsFilters, HomeCountMode, HomeFilterKey } from "@/features/home-analytics/types";
+import { usePortalFilters } from "@/features/portal-filters/hooks/usePortalFilters";
+import { usePortalFilterFacets } from "@/features/portal-filters/hooks/usePortalFilterFacets";
+import { PortalDataInspector } from "@/features/portal-diagnostics/PortalDataInspector";
+import { getLatestPortalRequestDiagnostic } from "@/features/portal-diagnostics/portalRequestDiagnostics";
+import {
+  adaptPortalQueryForDashboardAnalytics,
+  adaptPortalQueryForReportList,
+  validatePortalQueryFacetValues,
+  type PortalDataQuery,
+  type PortalDataQueryField,
+} from "@/features/portal-filters/query";
+import type { PortalFilterOption } from "@/features/portal-filters/model/facets";
+
+const HOME_PORTAL_QUERY_FIELDS: readonly PortalDataQueryField[] = [
+  "dateFrom",
+  "dateTo",
+  "facilityId",
+  "yard",
+  "inspectionTypeNumber",
+  "inspector",
+  "status",
+  "make",
+  "model",
+  "severity",
+  "damageArea",
+  "damageType",
+  "search",
+  "reportId",
+  "vin",
+];
+
+function includeSelectedFacetOption(options: PortalFilterOption[], selectedValue: string): PortalFilterOption[] {
+  if (!selectedValue || options.some((option) => option.value === selectedValue)) return options;
+  return [{ value: selectedValue, label: selectedValue }, ...options];
+}
 
 type DashboardSeverityItem = {
   level: string;
@@ -1485,51 +1515,6 @@ function buildTopCarRowsByArea(reports: ReportDamageApiRow[], areas: { name: str
     .filter((row): row is ChartSectionGroup => Boolean(row));
 }
 
-function filterHomeInspectionReports(
-  reports: ReportDamageApiRow[],
-  filters: ReturnType<typeof normalizeHomeReportFiltersForExport>,
-  selectedSeverity: number | null,
-  selectedArea: string
-): ReportDamageApiRow[] {
-  return reports.filter(
-    (report) =>
-      matchesDamageReportFilters(report, filters.homeFilters) &&
-      reportMatchesSeverityFilter(report, selectedSeverity) &&
-      reportMatchesDamageAreaFilter(report, selectedArea)
-  );
-}
-
-function normalizeHomeReportFiltersForExport(filters: {
-  selectedFacilityKey: string;
-  reportIdFilter: string;
-  vinFilter: string;
-  inspectionTypeFilter: string;
-  makeFilter: string;
-  modelFilter: string;
-  yardFilter: string;
-  inspectorEmailFilter: string;
-  statusFilter: string;
-  createdFrom: string;
-  createdTo: string;
-}) {
-  return {
-    homeFilters: {
-      ...DEFAULT_DAMAGE_REPORT_FILTERS,
-      facilityFilter: filters.selectedFacilityKey,
-      reportIdFilter: filters.reportIdFilter,
-      vinFilter: filters.vinFilter,
-      inspectionTypeFilter: filters.inspectionTypeFilter,
-      makeFilter: filters.makeFilter,
-      modelFilter: filters.modelFilter,
-      yardFilter: filters.yardFilter,
-      inspectorEmailFilter: filters.inspectorEmailFilter,
-      statusFilter: filters.statusFilter as "" | import("@/lib/types").ReportStatus,
-      createdFrom: filters.createdFrom,
-      createdTo: filters.createdTo,
-    },
-  };
-}
-
 function ChartFooterTable({
   title,
   subtitle,
@@ -1602,7 +1587,10 @@ function reportMatchesSeverityFilter(report: ReportDamageApiRow, severityFilter:
   if (severityFilter === null) {
     return true;
   }
-  return getReportSeverity(report) === severityFilter;
+  const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
+  return entries.some(
+    (entry) => resolveDamageSeverity(entry as unknown as Record<string, unknown>) === severityFilter
+  );
 }
 
 function reportMatchesDamageAreaFilter(report: ReportDamageApiRow, areaFilter: string): boolean {
@@ -1613,10 +1601,10 @@ function reportMatchesDamageAreaFilter(report: ReportDamageApiRow, areaFilter: s
   const entries = Array.isArray(report.damage_entries) ? report.damage_entries : [];
   return entries.some((entry) => {
     const record = entry as unknown as Record<string, unknown>;
-    const area = normalizeSearchText(
-      getDamageEntryField(record, ["damage_area", "damage_area_code", "damage_area_name", "area", "area_code"])
-    );
-    return area === normalizedFilter || area.includes(normalizedFilter);
+    return ["damage_area", "damage_area_code", "damage_area_name", "area", "area_code"].some((key) => {
+      const area = normalizeSearchText(typeof record[key] === "string" ? record[key] : "");
+      return area === normalizedFilter || area.includes(normalizedFilter);
+    });
   });
 }
 
@@ -3130,36 +3118,100 @@ function FacilitySummaryCard({ facility }: { facility: DashboardFacilityItem }) 
 export default function HomeDashboard() {
   const { organizationId, session } = usePortalSession();
   const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
-  const [initialHomeAnalyticsFilters] = useState<HomeAnalyticsFilters>(() =>
-    typeof window === "undefined"
-      ? getDefaultHomeAnalyticsFilters()
-      : parseHomeAnalyticsFilters(new URLSearchParams(window.location.search))
+  const portalFilters = usePortalFilters({
+    allowedFields: HOME_PORTAL_QUERY_FIELDS,
+    preserveUrlParameters: ["countMode"],
+  });
+  const { data: filterFacetResponse, error: filterFacetError, isLoading: filterFacetsLoading, mutate: refreshFilterFacets } = usePortalFilterFacets();
+  const [rejectedFacetFilterNotice, setRejectedFacetFilterNotice] = useState<string | null>(null);
+  const facetValueValidation = useMemo(
+    () => filterFacetResponse
+      ? validatePortalQueryFacetValues(portalFilters.query, filterFacetResponse.facets)
+      : { ok: true as const, issues: [] },
+    [filterFacetResponse, portalFilters.query]
   );
+  useEffect(() => {
+    if (facetValueValidation.ok) return;
+    setRejectedFacetFilterNotice(
+      `Unsupported authorized filter values were removed: ${facetValueValidation.issues.map((issue) => issue.field).join(", ")}.`
+    );
+    const rejected = Object.fromEntries(
+      facetValueValidation.issues.map((issue) => [issue.field, undefined])
+    ) as Partial<PortalDataQuery>;
+    portalFilters.updateFilters(rejected, { history: "replace" });
+  // The validation result changes when the canonical URL query or authoritative
+  // facets change; the query-backed callback itself is intentionally excluded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facetValueValidation]);
+  const [initialCountMode] = useState<HomeCountMode>(() =>
+    typeof window === "undefined"
+      ? "reports"
+      : parseHomeAnalyticsFilters(new URLSearchParams(window.location.search)).countMode
+  );
+  const selectedFacilityKey = portalFilters.query.facilityId ?? "all";
+  const selectedSeverityLevel = portalFilters.query.severity ?? "all";
+  const selectedDamageAreaFilter = portalFilters.query.damageArea ?? "";
+  const damageTypeFilter = portalFilters.query.damageType ?? "";
+  const createdFrom = portalFilters.query.dateFrom ?? "";
+  const createdTo = portalFilters.query.dateTo ?? "";
+  const reportIdFilter = portalFilters.query.reportId ?? "";
+  const vinFilter = portalFilters.query.vin ?? "";
+  const inspectionTypeFilter = portalFilters.query.inspectionTypeNumber ?? "";
+  const makeFilter = portalFilters.query.make ?? "";
+  const modelFilter = portalFilters.query.model ?? "";
+  const yardFilter = portalFilters.query.yard ?? "";
+  const inspectorEmailFilter = portalFilters.query.inspector ?? "";
+  const statusFilter = portalFilters.query.status ?? "";
+  const resolveNextValue = (current: string, next: string | ((value: string) => string)) =>
+    typeof next === "function" ? next(current) : next;
+  const setSelectedFacilityKey = (next: string | ((value: string) => string)) => {
+    const value = resolveNextValue(selectedFacilityKey, next);
+    portalFilters.setFilter("facilityId", value === "all" ? undefined : value);
+  };
+  const setSelectedSeverityLevel = (next: string | ((value: string) => string)) => {
+    const value = resolveNextValue(selectedSeverityLevel, next);
+    portalFilters.setFilter("severity", value === "all" ? undefined : value);
+  };
+  const setSelectedDamageAreaFilter = (next: string | ((value: string) => string)) =>
+    portalFilters.setFilter("damageArea", resolveNextValue(selectedDamageAreaFilter, next) || undefined);
+  const setDamageTypeFilter = (next: string) => portalFilters.setFilter("damageType", next || undefined);
+  const setReportIdFilter = (next: string) => portalFilters.setFilter("reportId", next || undefined);
+  const setVinFilter = (next: string) => portalFilters.setFilter("vin", next || undefined);
+  const setInspectionTypeFilter = (next: string) => portalFilters.setFilter("inspectionTypeNumber", next || undefined);
+  const setMakeFilter = (next: string) => portalFilters.setFilter("make", next || undefined);
+  const setModelFilter = (next: string) => portalFilters.setFilter("model", next || undefined);
+  const setYardFilter = (next: string) => portalFilters.setFilter("yard", next || undefined);
+  const setInspectorEmailFilter = (next: string | ((value: string) => string)) =>
+    portalFilters.setFilter("inspector", resolveNextValue(inspectorEmailFilter, next) || undefined);
+  const setStatusFilter = (next: string) => portalFilters.setFilter("status", next || undefined);
   const [devStatsCopyStatus, setDevStatsCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [showDevStatsCopyButton, setShowDevStatsCopyButton] = useState(process.env.NODE_ENV !== "production");
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(organizationId ?? "");
-  const [selectedFacilityKey, setSelectedFacilityKey] = useState(initialHomeAnalyticsFilters.facilityKey);
-  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState(initialHomeAnalyticsFilters.severity ?? "all");
-  const [selectedDamageAreaFilter, setSelectedDamageAreaFilter] = useState(initialHomeAnalyticsFilters.damageArea ?? "");
-  const [createdFrom, setCreatedFrom] = useState(initialHomeAnalyticsFilters.from ?? "");
-  const [createdTo, setCreatedTo] = useState(initialHomeAnalyticsFilters.to ?? "");
-  const [reportIdFilter, setReportIdFilter] = useState(initialHomeAnalyticsFilters.reportId ?? "");
-  const [vinFilter, setVinFilter] = useState(initialHomeAnalyticsFilters.vin ?? "");
-  const [inspectionTypeFilter, setInspectionTypeFilter] = useState(initialHomeAnalyticsFilters.inspectionType ?? "");
-  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(initialHomeAnalyticsFilters.inspectionType ?? "");
+  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(inspectionTypeFilter);
   const [inspectionTypeSuggestionsOpen, setInspectionTypeSuggestionsOpen] = useState(false);
-  const [makeFilter, setMakeFilter] = useState(initialHomeAnalyticsFilters.make ?? "");
-  const [modelFilter, setModelFilter] = useState(initialHomeAnalyticsFilters.model ?? "");
-  const [yardFilter, setYardFilter] = useState(initialHomeAnalyticsFilters.yard ?? "");
-  const [inspectorEmailFilter, setInspectorEmailFilter] = useState(initialHomeAnalyticsFilters.inspectorKey);
-  const [statusFilter, setStatusFilter] = useState(initialHomeAnalyticsFilters.status ?? "");
   const [vinSheetExporting, setVinSheetExporting] = useState(false);
-  const homeCountMode: HomeCountMode = initialHomeAnalyticsFilters.countMode;
+  const homeCountMode: HomeCountMode = initialCountMode;
   const [homeFilterMenuOpen, setHomeFilterMenuOpen] = useState(false);
   const [activeHomeFilterKeys, setActiveHomeFilterKeys] = useState<HomeFilterKey[]>(() =>
-    getHomeFilterKeysWithValues(initialHomeAnalyticsFilters)
+    getHomeFilterKeysWithValues({
+      facilityKey: selectedFacilityKey,
+      inspectorKey: inspectorEmailFilter,
+      countMode: initialCountMode,
+      from: createdFrom || undefined,
+      to: createdTo || undefined,
+      status: statusFilter || undefined,
+      reportId: reportIdFilter || undefined,
+      vin: vinFilter || undefined,
+      inspectionType: inspectionTypeFilter || undefined,
+      make: makeFilter || undefined,
+      model: modelFilter || undefined,
+      yard: yardFilter || undefined,
+      severity: selectedSeverityLevel !== "all" ? selectedSeverityLevel : undefined,
+      damageArea: selectedDamageAreaFilter || undefined,
+      damageType: damageTypeFilter || undefined,
+    })
   );
-  const didMountOrganizationResetRef = useRef(false);
+  const previousSessionOrganizationIdRef = useRef<string | null>(organizationId?.trim() || null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3184,12 +3236,13 @@ export default function HomeDashboard() {
       yard: yardFilter || undefined,
       severity: selectedSeverityLevel !== "all" ? selectedSeverityLevel : undefined,
       damageArea: selectedDamageAreaFilter || undefined,
+      damageType: damageTypeFilter || undefined,
     }),
-    [createdFrom, createdTo, homeCountMode, inspectionTypeFilter, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedDamageAreaFilter, selectedFacilityKey, selectedSeverityLevel, statusFilter, vinFilter, yardFilter]
+    [createdFrom, createdTo, damageTypeFilter, homeCountMode, inspectionTypeFilter, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedDamageAreaFilter, selectedFacilityKey, selectedSeverityLevel, statusFilter, vinFilter, yardFilter]
   );
   const analyticsParams = useMemo(
-    () => buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
-    [currentHomeAnalyticsFilters]
+    () => adaptPortalQueryForDashboardAnalytics(portalFilters.query),
+    [portalFilters.query]
   );
   const {
     data: baseAnalyticsSnapshot,
@@ -3201,6 +3254,7 @@ export default function HomeDashboard() {
     isLoading: analyticsLoading,
     isValidating: analyticsValidating,
     hasCachedData: analyticsHasCachedData,
+    mutate: refreshAnalytics,
   } = useDashboardAnalyticsSnapshot(analyticsParams);
 
   const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
@@ -3213,14 +3267,13 @@ export default function HomeDashboard() {
   const reportsError = analyticsError;
   const activeInspectionTypeOptions = useMemo(
     () =>
-      (dashboardAnalytics?.byInspectionType ?? [])
-        .map((item) => ({
-          number: String((item as Record<string, unknown>).number ?? (item as Record<string, unknown>).inspection_type_number ?? ""),
-          label: String((item as Record<string, unknown>).label ?? (item as Record<string, unknown>).inspection_type_label ?? ""),
-          displayLabel: String((item as Record<string, unknown>).displayLabel ?? (item as Record<string, unknown>).label ?? ""),
-        }))
-        .filter((item) => item.number || item.label),
-    [dashboardAnalytics?.byInspectionType]
+      includeSelectedFacetOption(filterFacetResponse?.facets.inspectionTypes ?? [], inspectionTypeFilter)
+        .map((option) => ({
+          number: option.value,
+          label: option.label,
+          displayLabel: `${option.value} - ${option.label}`,
+        })),
+    [filterFacetResponse?.facets.inspectionTypes, inspectionTypeFilter]
   );
   const filteredInspectionTypeOptions = useMemo(() => {
     const query = inspectionTypeSearch.trim().toLowerCase();
@@ -3229,49 +3282,22 @@ export default function HomeDashboard() {
       `${option.number} ${option.label} ${option.displayLabel}`.toLowerCase().includes(query)
     );
   }, [activeInspectionTypeOptions, inspectionTypeSearch]);
-	  const homeFilters = useMemo(
-	    () => ({
-	      ...DEFAULT_DAMAGE_REPORT_FILTERS,
-	      facilityFilter: selectedFacilityKey,
-      reportIdFilter,
-      vinFilter,
-      inspectionTypeFilter,
-      makeFilter,
-      modelFilter,
-      yardFilter,
-      inspectorEmailFilter,
-      statusFilter: statusFilter as "" | import("@/lib/types").ReportStatus,
-      createdFrom,
-      createdTo,
-	    }),
-	    [createdFrom, createdTo, inspectorEmailFilter, inspectionTypeFilter, makeFilter, modelFilter, reportIdFilter, selectedFacilityKey, statusFilter, vinFilter, yardFilter]
-	  );
-  const exportFilterBundle = useMemo(
-    () =>
-      normalizeHomeReportFiltersForExport({
-        selectedFacilityKey,
-        reportIdFilter,
-        vinFilter,
-        inspectionTypeFilter,
-        makeFilter,
-        modelFilter,
-        yardFilter,
-        inspectorEmailFilter,
-        statusFilter,
-        createdFrom,
-        createdTo,
-      }),
-    [createdFrom, createdTo, inspectorEmailFilter, inspectionTypeFilter, makeFilter, modelFilter, reportIdFilter, selectedFacilityKey, statusFilter, vinFilter, yardFilter]
-  );
+  useEffect(() => {
+    if (!inspectionTypeFilter) {
+      setInspectionTypeSearch("");
+      return;
+    }
+    const option = activeInspectionTypeOptions.find((entry) => entry.number === inspectionTypeFilter);
+    setInspectionTypeSearch(option ? `${option.number} - ${option.label}` : inspectionTypeFilter);
+  }, [activeInspectionTypeOptions, inspectionTypeFilter]);
   const reportListParams = useMemo<ReportListParams>(
     () => ({
+      ...(adaptPortalQueryForReportList(portalFilters.query) as ReportListParams),
       page: 1,
-      pageSize: 50,
-      limit: 50,
+      page_size: 50,
       sort: "created_at_desc",
-      ...buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
     }),
-    [currentHomeAnalyticsFilters]
+    [portalFilters.query]
   );
   const {
     data: reportListSnapshot,
@@ -3286,17 +3312,9 @@ export default function HomeDashboard() {
         .sort((a, b) => b.totalReports - a.totalReports),
     [baseAnalyticsSnapshot?.byFacility, baseAnalyticsSnapshot?.facilities, dashboardAnalytics?.byFacility, dashboardAnalytics?.facilities]
   );
-	  const selectedSeverityNumber = selectedSeverityLevel === "all" ? null : Number(selectedSeverityLevel);
-	  const selectedSeverityFilter = Number.isFinite(selectedSeverityNumber) ? selectedSeverityNumber : null;
   const previewInspectionReports = useMemo(
-    () =>
-      filterHomeInspectionReports(
-        normalizeReportListRows(reportListSnapshot?.rows ?? []).map(normalizedRowToDamageReport),
-        exportFilterBundle,
-        selectedSeverityFilter,
-        selectedDamageAreaFilter
-      ),
-    [exportFilterBundle, reportListSnapshot?.rows, selectedDamageAreaFilter, selectedSeverityFilter]
+    () => normalizeReportListRows(reportListSnapshot?.rows ?? []).map(normalizedRowToDamageReport),
+    [reportListSnapshot?.rows]
   );
   const previewOutcomeCounts = useMemo(
     () => buildInspectionOutcomeCounts(previewInspectionReports),
@@ -3304,21 +3322,6 @@ export default function HomeDashboard() {
   );
   const reportListErrorMessage =
     reportListError instanceof Error ? reportListError.message : reportListError ? String(reportListError) : null;
-	  const hasClientOnlyHomeFilters = Boolean(
-    selectedFacilityKey !== "all" ||
-      createdFrom ||
-      createdTo ||
-      reportIdFilter ||
-      vinFilter ||
-      inspectionTypeFilter ||
-      makeFilter ||
-      modelFilter ||
-      yardFilter ||
-      inspectorEmailFilter ||
-      statusFilter ||
-      selectedSeverityLevel !== "all" ||
-      selectedDamageAreaFilter
-  );
   const fallbackSummary = useMemo(() => buildDashboardSummary([], [], []), []);
   const currentOrganizationLabel =
     session?.organization?.name ||
@@ -3345,24 +3348,76 @@ export default function HomeDashboard() {
     () => getActiveHomeFilterChips(currentHomeAnalyticsFilters),
     [currentHomeAnalyticsFilters]
   );
+  const activeHomeFilterChipLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    const addOptions = (key: string, options: Array<{ value: string; label: string }>) => {
+      for (const option of options) labels.set(`${key}:${option.value}`, option.label);
+    };
+    const facets = filterFacetResponse?.facets;
+    if (!facets) return labels;
+    addOptions("facility", facets.facilities);
+    addOptions("inspector", facets.inspectors);
+    addOptions("status", facets.statuses);
+    addOptions("inspection_type", facets.inspectionTypes);
+    addOptions("make", facets.makes);
+    addOptions("model", facets.models);
+    addOptions("yard", facets.yards);
+    addOptions("severity", facets.severities);
+    addOptions("damage_area", facets.damageAreas);
+    addOptions("damage_type", facets.damageTypes);
+    return labels;
+  }, [filterFacetResponse?.facets]);
+  const homeRequestDiagnostic = getLatestPortalRequestDiagnostic("/dashboard/analytics");
+  const homeFacetCounts = useMemo(() => {
+    const facets = filterFacetResponse?.facets;
+    if (!facets) return {};
+    return {
+      facilities: facets.facilities.length,
+      yards: facets.yards.length,
+      inspectionTypes: facets.inspectionTypes.length,
+      inspectors: facets.inspectors.length,
+      statuses: facets.statuses.length,
+      makes: facets.makes.length,
+      models: facets.models.length,
+      severities: facets.severities.length,
+      damageAreas: facets.damageAreas.length,
+      damageTypes: facets.damageTypes.length,
+    };
+  }, [filterFacetResponse?.facets]);
+  useEffect(() => {
+    const restoredKeys = getHomeFilterKeysWithValues(currentHomeAnalyticsFilters);
+    if (portalFilters.changeSource === "navigation") {
+      setActiveHomeFilterKeys(restoredKeys);
+      return;
+    }
+    if (!restoredKeys.length) return;
+    setActiveHomeFilterKeys((current) => Array.from(new Set([...current, ...restoredKeys])));
+  }, [currentHomeAnalyticsFilters, portalFilters.changeSource]);
   const clearHomeFilters = () => {
     setHomeFilterMenuOpen(false);
     setActiveHomeFilterKeys([]);
-      setSelectedFacilityKey("all");
-      setSelectedSeverityLevel("all");
-      setSelectedDamageAreaFilter("");
-      setCreatedFrom("");
-    setCreatedTo("");
-    setReportIdFilter("");
-    setVinFilter("");
-    setInspectionTypeFilter("");
     setInspectionTypeSearch("");
     setInspectionTypeSuggestionsOpen(false);
-    setMakeFilter("");
-    setModelFilter("");
-    setYardFilter("");
-    setInspectorEmailFilter("");
-    setStatusFilter("");
+    portalFilters.resetFilters("push");
+  };
+  const removeHomeFilter = (key: HomeFilterKey) => {
+    setActiveHomeFilterKeys((current) => current.filter((item) => item !== key));
+    const fieldByKey: Record<HomeFilterKey, PortalDataQueryField> = {
+      facility: "facilityId",
+      report_id: "reportId",
+      vin: "vin",
+      inspection_type: "inspectionTypeNumber",
+      make: "make",
+      model: "model",
+      yard: "yard",
+      severity: "severity",
+      damage_area: "damageArea",
+      damage_type: "damageType",
+      inspector_email: "inspector",
+      status: "status",
+    };
+    portalFilters.setFilter(fieldByKey[key], undefined);
+    if (key === "inspection_type") setInspectionTypeSearch("");
   };
   const renderHomeFilterControl = (key: (typeof activeHomeFilterKeys)[number]) => {
     if (key === "report_id") {
@@ -3421,13 +3476,28 @@ export default function HomeDashboard() {
       );
     }
     if (key === "make") {
-      return <input type="search" placeholder="Make" value={makeFilter} onChange={(e) => setMakeFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+      return (
+        <select value={makeFilter} onChange={(e) => setMakeFilter(e.target.value)} aria-label="Make" className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All makes</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.makes ?? [], makeFilter).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      );
     }
     if (key === "model") {
-      return <input type="search" placeholder="Model" value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+      return (
+        <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} aria-label="Model" className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All models</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.models ?? [], modelFilter).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      );
     }
     if (key === "yard") {
-      return <input type="search" placeholder="Yard" value={yardFilter} onChange={(e) => setYardFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+      return (
+        <select value={yardFilter} onChange={(e) => setYardFilter(e.target.value)} aria-label="Yard" className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All yards</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.yards ?? [], yardFilter).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      );
     }
     if (key === "inspector_email") {
       return (
@@ -3437,8 +3507,8 @@ export default function HomeDashboard() {
           className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
         >
           <option value="">All inspectors</option>
-          {inspectorChoices.map((inspector) => (
-            <option key={inspector.email} value={inspector.email}>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.inspectors ?? [], inspectorEmailFilter).map((inspector) => (
+            <option key={inspector.value} value={inspector.value}>
               {inspector.label}
             </option>
           ))}
@@ -3449,11 +3519,31 @@ export default function HomeDashboard() {
       return (
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
           <option value="">All statuses</option>
-          <option value="open">Open</option>
-          <option value="review">Review</option>
-          <option value="closed">Closed</option>
-          <option value="verified">Verified</option>
-          <option value="archived">Archived</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.statuses ?? [], statusFilter).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      );
+    }
+    if (key === "severity") {
+      return (
+        <select value={selectedSeverityLevel === "all" ? "" : selectedSeverityLevel} onChange={(e) => setSelectedSeverityLevel(e.target.value || "all")} aria-label="Severity" className="h-8 w-52 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All severities</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.severities ?? [], selectedSeverityLevel === "all" ? "" : selectedSeverityLevel).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      );
+    }
+    if (key === "damage_area") {
+      return (
+        <select value={selectedDamageAreaFilter} onChange={(e) => setSelectedDamageAreaFilter(e.target.value)} aria-label="Damage area" className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All damage areas</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.damageAreas ?? [], selectedDamageAreaFilter).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      );
+    }
+    if (key === "damage_type") {
+      return (
+        <select value={damageTypeFilter} onChange={(e) => setDamageTypeFilter(e.target.value)} aria-label="Damage type" className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All damage types</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.damageTypes ?? [], damageTypeFilter).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       );
     }
@@ -3461,39 +3551,19 @@ export default function HomeDashboard() {
   };
 
   useEffect(() => {
-    setSelectedOrganizationId(organizationId ?? "");
+    const nextOrganizationId = organizationId?.trim() || "";
+    const previousOrganizationId = previousSessionOrganizationIdRef.current;
+    setSelectedOrganizationId(nextOrganizationId);
+    if (previousOrganizationId && nextOrganizationId && previousOrganizationId !== nextOrganizationId) {
+      setActiveHomeFilterKeys([]);
+      setInspectionTypeSearch("");
+      portalFilters.resetFilters("replace");
+    }
+    if (nextOrganizationId) previousSessionOrganizationIdRef.current = nextOrganizationId;
+  // Session organization changes are the reset boundary. An initially unresolved
+  // session must not erase filters restored from a copied URL.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId]);
-
-  useEffect(() => {
-    if (!didMountOrganizationResetRef.current) {
-      didMountOrganizationResetRef.current = true;
-      return;
-    }
-    setSelectedFacilityKey("all");
-    setSelectedSeverityLevel("all");
-    setSelectedDamageAreaFilter("");
-    setCreatedFrom("");
-    setCreatedTo("");
-    setReportIdFilter("");
-    setVinFilter("");
-    setInspectionTypeFilter("");
-    setMakeFilter("");
-    setModelFilter("");
-    setYardFilter("");
-    setInspectorEmailFilter("");
-    setStatusFilter("");
-  }, [selectedOrganizationId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = serializeHomeAnalyticsFilters(currentHomeAnalyticsFilters);
-    const query = params.toString();
-    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (nextUrl !== currentUrl) {
-      window.history.replaceState(window.history.state, "", nextUrl);
-    }
-  }, [currentHomeAnalyticsFilters]);
 
 	  const inspectorChoices = useMemo(
 	    () => buildAnalyticsInspectorSummaries(dashboardAnalytics, homeCountMode),
@@ -3547,6 +3617,10 @@ export default function HomeDashboard() {
   const homeFacilityFilterOptions = useMemo(
     () => facilityDamageStats.filter((stats) => isHomeVisibleFacility(stats.label)),
     [facilityDamageStats]
+  );
+  const homeFacilityFacetOptions = useMemo(
+    () => includeSelectedFacetOption(filterFacetResponse?.facets.facilities ?? [], selectedFacilityKey === "all" ? "" : selectedFacilityKey),
+    [filterFacetResponse?.facets.facilities, selectedFacilityKey]
   );
   const inspectorChartRows = useMemo(
     () =>
@@ -3766,9 +3840,12 @@ export default function HomeDashboard() {
     () => new Map((chartSummary.topAreas ?? []).map((item) => [item.name, item.count] as const)),
     [chartSummary.topAreas]
   );
+  const selectedDamageAreaLabel =
+    filterFacetResponse?.facets.damageAreas.find((option) => option.value === selectedDamageAreaFilter)?.label ??
+    selectedDamageAreaFilter;
 	  const areaPieData = useMemo(
 	    () =>
-	      buildSelectedAreaPieData([...areaCounts.entries()].map(([name, count]) => ({ name, count })), selectedDamageAreaFilter).map((item) => {
+	      buildSelectedAreaPieData([...areaCounts.entries()].map(([name, count]) => ({ name, count })), selectedDamageAreaLabel).map((item) => {
 	        const matchingReports = previewInspectionReports.filter((report) => reportMatchesDamageAreaFilter(report, item.name));
 	        const counts = matchingReports.length ? buildInspectionOutcomeCounts(matchingReports) : null;
 	        return {
@@ -3779,7 +3856,7 @@ export default function HomeDashboard() {
 	          vinSamples: counts?.vinSamples ?? [],
 	        };
 	      }),
-	    [areaCounts, previewInspectionReports, selectedDamageAreaFilter]
+	    [areaCounts, previewInspectionReports, selectedDamageAreaLabel]
 	  );
   const visibleAreaPieData = useMemo(
     () => areaPieData.filter((item) => Number(item.count) > 0),
@@ -4121,7 +4198,7 @@ export default function HomeDashboard() {
   const selectedFacilityExportLabel =
     selectedFacilityKey === "all"
       ? "All facilities"
-      : homeFacilityFilterOptions.find((stats) => stats.key === selectedFacilityKey)?.label ?? selectedFacilityKey;
+      : homeFacilityFacetOptions.find((option) => option.value === selectedFacilityKey)?.label ?? selectedFacilityKey;
   const selectedSeverityExportLabel =
     selectedSeverityLevel === "all"
       ? "All severities"
@@ -4135,7 +4212,7 @@ export default function HomeDashboard() {
     ["Organization ID", selectedOrganizationId || organizationId || ""],
     ["Facility", sanitizeFacilityDisplay(selectedFacilityExportLabel)],
     ["Severity", selectedSeverityExportLabel],
-    ["Damage Area", selectedDamageAreaFilter || "All damage areas"],
+    ["Damage Area", selectedDamageAreaLabel || "All damage areas"],
     ["Date From", createdFrom || "All dates"],
     ["Date To", createdTo || "All dates"],
     ["Report ID", reportIdFilter || "All reports"],
@@ -4275,13 +4352,7 @@ export default function HomeDashboard() {
       limit: 100,
       sort: "created_at_desc",
     });
-    const filtered = filterHomeInspectionReports(
-      reports,
-      exportFilterBundle,
-      selectedSeverityFilter,
-      selectedDamageAreaFilter
-    );
-    return context.filterReport ? filtered.filter(context.filterReport) : filtered;
+    return context.filterReport ? reports.filter(context.filterReport) : reports;
   };
   const exportInspectionVinSheet = async (context: ExportCardContext) => {
     setVinSheetExporting(true);
@@ -4404,7 +4475,14 @@ export default function HomeDashboard() {
   }
 
   if (analyticsError && !analyticsHasUsableData) {
-    return <EmptyState title="Home data unavailable" description="Report data could not be loaded." tone="danger" />;
+    return (
+      <EmptyState
+        title="Home data unavailable"
+        description="Report data could not be loaded. The request stopped and can be retried."
+        tone="danger"
+        action={<button type="button" className="rounded-lg border border-current px-3 py-2 text-sm font-semibold" onClick={() => void refreshAnalytics()}>Retry analytics</button>}
+      />
+    );
   }
   const reportTrend = chartSummary.dailyTrend.length
     ? {
@@ -4418,11 +4496,11 @@ export default function HomeDashboard() {
   const reportTrendColors = new Map(reportTrend.keys.map((key, index) => [key, palette[index % palette.length]] as const));
   const selectFacilityFromChart = (facilityLabel: string) => {
     const normalizedFacilityLabel = sanitizeFacilityDisplay(facilityLabel);
-    const matched =
-      filteredFacilityStats.find((stats) => sanitizeFacilityDisplay(stats.label) === normalizedFacilityLabel) ??
-      homeFacilityFilterOptions.find((stats) => sanitizeFacilityDisplay(stats.label) === normalizedFacilityLabel);
+    const matched = homeFacilityFacetOptions.find(
+      (option) => sanitizeFacilityDisplay(option.label) === normalizedFacilityLabel
+    );
     if (matched) {
-      setSelectedFacilityKey(matched.key);
+      setSelectedFacilityKey(matched.value);
     }
   };
   const selectInspectorFromChart = (inspectorLabel: string) => {
@@ -4441,11 +4519,34 @@ export default function HomeDashboard() {
     }
   };
   const selectAreaFromPie = (areaName: string) => {
-    setSelectedDamageAreaFilter((current) => (current === areaName ? "" : areaName));
+    const option = (filterFacetResponse?.facets.damageAreas ?? []).find(
+      (entry) => normalizeSearchText(entry.label) === normalizeSearchText(areaName)
+    );
+    if (!option) return;
+    setSelectedDamageAreaFilter((current) => (current === option.value ? "" : option.value));
   };
 
   return (
     <div className="space-y-6">
+          {portalFilters.hasInvalidFilters ? (
+            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+              Some URL filters were rejected: {portalFilters.issues.map((issue) => issue.message).join(" ")}
+            </div>
+          ) : null}
+          {rejectedFacetFilterNotice ? (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+              <span>{rejectedFacetFilterNotice}</span>
+              <button type="button" className="underline" onClick={() => setRejectedFacetFilterNotice(null)}>Dismiss</button>
+            </div>
+          ) : null}
+          {filterFacetError ? (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
+              <span>Authorized filter options could not be loaded. No paginated or snapshot fallback was used.</span>
+              <button type="button" className="underline" onClick={() => void refreshFilterFacets()}>Retry filter options</button>
+            </div>
+          ) : filterFacetsLoading ? (
+            <p className="text-sm text-slate-500" aria-live="polite">Loading authorized filter options…</p>
+          ) : null}
           {showDevStatsCopyButton ? (
             <div className="fixed right-4 top-4 z-[80] flex items-center gap-2">
               <button
@@ -4475,6 +4576,11 @@ export default function HomeDashboard() {
             errorMessage={analyticsHasUsableData ? analyticsErrorMessage : null}
           />
           <AnalyticsCoverageAlert coverage={analyticsSplitCoverage} />
+          {reportListErrorMessage ? (
+            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              VIN preview data could not be loaded: {reportListErrorMessage}
+            </div>
+          ) : null}
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
             <span className="font-semibold text-slate-950">Dashboard model:</span>{" "}
             {HOME_DASHBOARD_VISUALS.length} configured visuals use shared filters, typed adapters, backend field coverage checks, and export rows.
@@ -4561,9 +4667,9 @@ export default function HomeDashboard() {
                       className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                     >
                       <option value="all">All facilities</option>
-                      {homeFacilityFilterOptions.map((stats) => (
-                        <option key={stats.key} value={stats.key}>
-                          {sanitizeFacilityDisplay(stats.label)}
+                      {homeFacilityFacetOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {sanitizeFacilityDisplay(option.label)}
                         </option>
                       ))}
                     </select>
@@ -4578,7 +4684,7 @@ export default function HomeDashboard() {
                     className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                   >
                     <option value="all">All severities</option>
-                    {DAMAGE_SEVERITIES.map((option) => (
+                    {includeSelectedFacetOption(filterFacetResponse?.facets.severities ?? [], selectedSeverityLevel === "all" ? "" : selectedSeverityLevel).map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -4591,12 +4697,9 @@ export default function HomeDashboard() {
                   <ReportDateRangeFilter
                     value={{ createdFrom, createdTo }}
                     onChange={({ createdFrom: nextFrom, createdTo: nextTo }) => {
-                      setCreatedFrom(nextFrom);
-                      setCreatedTo(nextTo);
+                      portalFilters.updateFilters({ dateFrom: nextFrom || undefined, dateTo: nextTo || undefined });
                     }}
                     label="Select date"
-                    minDate={reportDateBounds.minDate}
-                    maxDate={reportDateBounds.maxDate}
                   />
                 </div>
               </div>
@@ -4611,7 +4714,7 @@ export default function HomeDashboard() {
                           {renderHomeFilterControl(key)}
                           <button
                             type="button"
-                            onClick={() => setActiveHomeFilterKeys((current) => current.filter((item) => item !== key))}
+                            onClick={() => removeHomeFilter(key)}
                             className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
                             aria-label={`Remove ${label} filter`}
                           >
@@ -4628,7 +4731,7 @@ export default function HomeDashboard() {
                   <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Applied</span>
                   {activeHomeFilterChips.map((chip) => (
                     <span key={`${chip.key}-${chip.value}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                      {chip.label}: {chip.value}
+                      {chip.label}: {activeHomeFilterChipLabels.get(`${chip.key}:${chip.value}`) ?? chip.value}
                     </span>
                   ))}
                 </div>
@@ -4988,7 +5091,7 @@ export default function HomeDashboard() {
                           filenamePrefix: "damage-area-submission-detail",
                           title: "Top Damage Areas",
                           cardFilters: [
-                            ["Damage Area", selectedDamageAreaFilter || "All damage areas"],
+                            ["Damage Area", selectedDamageAreaLabel || "All damage areas"],
                             ["Card inspection type selector", selectedCardInspectionTypeLabel],
                           ],
                           cardRows: [
@@ -5060,6 +5163,26 @@ export default function HomeDashboard() {
             </Card>
           </div>
 
+      <PortalDataInspector
+        data={{
+          canonicalFilters: portalFilters.query,
+          endpointParams: analyticsParams,
+          activeEndpoint: DASHBOARD_ANALYTICS_ENDPOINT,
+          request: homeRequestDiagnostic.request,
+          rowCount: previewInspectionReports.length,
+          totalCount: reportListSnapshot?.total,
+          facetSource: filterFacetResponse?.meta.source,
+          facetCounts: homeFacetCounts,
+          snapshotStatus: "disabled",
+          cacheState: analyticsValidating
+            ? analyticsHasUsableData ? "revalidating" : "miss"
+            : analyticsHasCachedData ? "hit"
+            : analyticsHasUsableData ? "fresh"
+            : "empty",
+          errorCategory: analyticsError ? homeRequestDiagnostic.errorCategory : "none",
+          lastUpdated: homeRequestDiagnostic.lastUpdated,
+        }}
+      />
     </div>
   );
 }

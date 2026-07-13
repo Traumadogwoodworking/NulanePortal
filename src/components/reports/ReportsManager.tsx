@@ -37,11 +37,7 @@ import { ReportsAdapter, fetchDamageReportDetail, fetchReportList } from "@/lib/
 import {
   DAMAGE_FILTER_OPTIONS,
   DEFAULT_DAMAGE_REPORT_FILTERS,
-  getActiveInspectionTypeOptions,
   type DamageReportFilterKey,
-  matchesDamageReportFilters,
-  normalizeDamageReportFilters,
-  serializeDamageReportFilters,
 } from "@/lib/reportFilters";
 import { AuthRedirectError } from "@/lib/portalAuth";
 import JSZip from "jszip";
@@ -71,8 +67,19 @@ import {
 } from "@/lib/docudent/damageTaxonomy";
 import { toneForReportStatus } from "@/lib/status";
 import { severityPillClass } from "@/lib/severityTheme";
-import { getSessionYardOptions } from "@/lib/sessionYards";
 import { normalizeReportListRow } from "@/lib/reportNormalizer";
+import { usePortalFilterFacets } from "@/features/portal-filters/hooks/usePortalFilterFacets";
+import { usePortalFilters } from "@/features/portal-filters/hooks/usePortalFilters";
+import { PortalDataInspector } from "@/features/portal-diagnostics/PortalDataInspector";
+import { getLatestPortalRequestDiagnostic } from "@/features/portal-diagnostics/portalRequestDiagnostics";
+import {
+  adaptPortalQueryForReportList,
+  validatePortalQueryFacetValues,
+  type PortalDataQuery,
+  type PortalDataQueryField,
+  type PortalDataSort,
+} from "@/features/portal-filters/query";
+import type { PortalFilterOption } from "@/features/portal-filters/model/facets";
 import type {
   FacilitySummary,
   ReportDamageApiRow,
@@ -82,6 +89,30 @@ import type {
 
 interface ReportsManagerProps {
   mode: string;
+}
+
+const DAMAGE_REPORT_QUERY_FIELDS: readonly PortalDataQueryField[] = [
+  "dateFrom",
+  "dateTo",
+  "facilityId",
+  "yard",
+  "inspectionTypeNumber",
+  "inspector",
+  "status",
+  "make",
+  "model",
+  "severity",
+  "damageArea",
+  "damageType",
+  "search",
+  "sort",
+  "reportId",
+  "vin",
+];
+
+function includeSelectedFacetOption(options: PortalFilterOption[], selectedValue: string): PortalFilterOption[] {
+  if (!selectedValue || options.some((option) => option.value === selectedValue)) return options;
+  return [{ value: selectedValue, label: selectedValue }, ...options];
 }
 
 type ReportListRow = {
@@ -535,21 +566,81 @@ function normalizeReportListResponseRows(rows: unknown[] | undefined): ReportLis
 
 export function ReportsManager({ mode }: ReportsManagerProps) {
   const { organizationId, status: sessionStatus, isPortalAccessAllowed, session } = usePortalSession();
-  const [statusFilter, setStatusFilter] = useState<ReportStatus | "">(DEFAULT_DAMAGE_REPORT_FILTERS.statusFilter);
-  const [facilityFilter, setFacilityFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.facilityFilter);
-  const [searchTerm, setSearchTerm] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.searchTerm);
-  const [reportIdFilter, setReportIdFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.reportIdFilter);
-  const [vinFilter, setVinFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.vinFilter);
-  const [inspectionTypeFilter, setInspectionTypeFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectionTypeFilter);
-  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectionTypeFilter);
+  const portalFilters = usePortalFilters({ allowedFields: DAMAGE_REPORT_QUERY_FIELDS });
+  const { data: filterFacetResponse, error: filterFacetError, isLoading: filterFacetsLoading, mutate: refreshFilterFacets } = usePortalFilterFacets();
+  const [rejectedFacetFilterNotice, setRejectedFacetFilterNotice] = useState<string | null>(null);
+  const facetValueValidation = useMemo(
+    () => filterFacetResponse
+      ? validatePortalQueryFacetValues(portalFilters.query, filterFacetResponse.facets)
+      : { ok: true as const, issues: [] },
+    [filterFacetResponse, portalFilters.query]
+  );
+  useEffect(() => {
+    if (facetValueValidation.ok) return;
+    setRejectedFacetFilterNotice(
+      `Unsupported authorized filter values were removed: ${facetValueValidation.issues.map((issue) => issue.field).join(", ")}.`
+    );
+    const rejected = Object.fromEntries(
+      facetValueValidation.issues.map((issue) => [issue.field, undefined])
+    ) as Partial<PortalDataQuery>;
+    portalFilters.updateFilters(rejected, { history: "replace" });
+  }, [facetValueValidation]);
+  const statusFilter = portalFilters.query.status ?? "";
+  const facilityFilter = portalFilters.query.facilityId ?? DEFAULT_DAMAGE_REPORT_FILTERS.facilityFilter;
+  const searchTerm = portalFilters.query.search ?? "";
+  const reportIdFilter = portalFilters.query.reportId ?? "";
+  const vinFilter = portalFilters.query.vin ?? "";
+  const inspectionTypeFilter = portalFilters.query.inspectionTypeNumber ?? "";
+  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(inspectionTypeFilter);
   const [inspectionTypeSuggestionsOpen, setInspectionTypeSuggestionsOpen] = useState(false);
-  const [makeFilter, setMakeFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.makeFilter);
-  const [modelFilter, setModelFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.modelFilter);
-  const [yardFilter, setYardFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.yardFilter);
-  const [inspectorEmailFilter, setInspectorEmailFilter] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.inspectorEmailFilter);
-  const [createdFrom, setCreatedFrom] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.createdFrom);
-  const [createdTo, setCreatedTo] = useState(DEFAULT_DAMAGE_REPORT_FILTERS.createdTo);
-  const [activeDamageFilterKeys, setActiveDamageFilterKeys] = useState<DamageReportFilterKey[]>([]);
+  const makeFilter = portalFilters.query.make ?? "";
+  const modelFilter = portalFilters.query.model ?? "";
+  const yardFilter = portalFilters.query.yard ?? "";
+  const inspectorEmailFilter = portalFilters.query.inspector ?? "";
+  const severityFilter = portalFilters.query.severity ?? "";
+  const damageAreaFilter = portalFilters.query.damageArea ?? "";
+  const damageTypeFilter = portalFilters.query.damageType ?? "";
+  const createdFrom = portalFilters.query.dateFrom ?? "";
+  const createdTo = portalFilters.query.dateTo ?? "";
+  const setFacilityFilter = useCallback((value: string) => portalFilters.setFilter("facilityId", value === "all" ? undefined : value), [portalFilters]);
+  const setSearchTerm = useCallback((value: string) => portalFilters.setFilter("search", value || undefined), [portalFilters]);
+  const setReportIdFilter = useCallback((value: string) => portalFilters.setFilter("reportId", value || undefined), [portalFilters]);
+  const setVinFilter = useCallback((value: string) => portalFilters.setFilter("vin", value || undefined), [portalFilters]);
+  const setInspectionTypeFilter = useCallback((value: string) => portalFilters.setFilter("inspectionTypeNumber", value || undefined), [portalFilters]);
+  const setMakeFilter = useCallback((value: string) => portalFilters.setFilter("make", value || undefined), [portalFilters]);
+  const setModelFilter = useCallback((value: string) => portalFilters.setFilter("model", value || undefined), [portalFilters]);
+  const setYardFilter = useCallback((value: string) => portalFilters.setFilter("yard", value || undefined), [portalFilters]);
+  const setInspectorEmailFilter = useCallback((value: string) => portalFilters.setFilter("inspector", value || undefined), [portalFilters]);
+  const setStatusFilter = useCallback((value: string) => portalFilters.setFilter("status", value || undefined), [portalFilters]);
+  const setSeverityFilter = useCallback((value: string) => portalFilters.setFilter("severity", value || undefined), [portalFilters]);
+  const setDamageAreaFilter = useCallback((value: string) => portalFilters.setFilter("damageArea", value || undefined), [portalFilters]);
+  const setDamageTypeFilter = useCallback((value: string) => portalFilters.setFilter("damageType", value || undefined), [portalFilters]);
+  const queryDamageFilterKeys = useMemo<DamageReportFilterKey[]>(() => {
+    const keys: DamageReportFilterKey[] = [];
+    if (portalFilters.query.facilityId) keys.push("facility");
+    if (portalFilters.query.reportId) keys.push("report_id");
+    if (portalFilters.query.vin) keys.push("vin");
+    if (portalFilters.query.inspectionTypeNumber) keys.push("inspection_type");
+    if (portalFilters.query.make) keys.push("make");
+    if (portalFilters.query.model) keys.push("model");
+    if (portalFilters.query.yard) keys.push("yard");
+    if (portalFilters.query.inspector) keys.push("inspector_email");
+    if (portalFilters.query.status) keys.push("status");
+    if (portalFilters.query.severity) keys.push("severity");
+    if (portalFilters.query.damageArea) keys.push("damage_area");
+    if (portalFilters.query.damageType) keys.push("damage_type");
+    if (portalFilters.query.dateFrom || portalFilters.query.dateTo) keys.push("date_range");
+    return keys;
+  }, [portalFilters.query]);
+  const [activeDamageFilterKeys, setActiveDamageFilterKeys] = useState<DamageReportFilterKey[]>(queryDamageFilterKeys);
+  useEffect(() => {
+    if (portalFilters.changeSource === "navigation") {
+      setActiveDamageFilterKeys(queryDamageFilterKeys);
+      return;
+    }
+    if (!queryDamageFilterKeys.length) return;
+    setActiveDamageFilterKeys((current) => Array.from(new Set([...current, ...queryDamageFilterKeys])));
+  }, [portalFilters.changeSource, queryDamageFilterKeys]);
   const [damageFilterMenuOpen, setDamageFilterMenuOpen] = useState(false);
   const [damageSortField, setDamageSortField] = useState<"severity" | "created">("created");
   const [damageSortDirections, setDamageSortDirections] = useState<Record<"severity" | "created", "asc" | "desc">>({
@@ -574,15 +665,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const [listRows, setListRows] = useState<ReportListRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
-  const [listSort, setListSort] = useState("created_at_desc");
+  const listSort: PortalDataSort = portalFilters.query.sort ?? "created_at_desc";
   const [reloadToken, setReloadToken] = useState(0);
   const hideFacilitySelector = (session?.organization?.name ?? "").trim().toLowerCase() === "free tier organization";
   const hideFacilityColumn = hideFacilitySelector;
-  const debouncedBackendSearch = useDebouncedValue(
-    [searchTerm, reportIdFilter, vinFilter, makeFilter, modelFilter].map((value) => value.trim()).filter(Boolean).join(" "),
-    300
-  );
+  const debouncedBackendSearch = useDebouncedValue(searchTerm, 300);
   const debouncedInspectorEmailFilter = useDebouncedValue(inspectorEmailFilter, 300);
+  const listUserScopeId = session?.user?.user_id?.trim() ?? "";
 
   const isMounted = useRef(true);
   const damageSortFieldRef = useRef(damageSortField);
@@ -594,22 +683,51 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     damageSortFieldRef.current = damageSortField;
   }, [damageSortField]);
   const listFilters = useMemo(
-    () => ({
-      search: debouncedBackendSearch || undefined,
-      facility_id: facilityFilter !== "all" && facilityFilter !== "other" ? facilityFilter : undefined,
-      inspection_type: inspectionTypeFilter || undefined,
-      status: statusFilter || undefined,
-      yard: yardFilter || undefined,
-      from: createdFrom || undefined,
-      to: createdTo || undefined,
-      inspector_email: debouncedInspectorEmailFilter || undefined,
-      sort: listSort,
+    () =>
+      adaptPortalQueryForReportList({
+        dateFrom: portalFilters.query.dateFrom,
+        dateTo: portalFilters.query.dateTo,
+        yard: portalFilters.query.yard,
+        inspectionTypeNumber: portalFilters.query.inspectionTypeNumber,
+        status: portalFilters.query.status,
+        make: portalFilters.query.make,
+        model: portalFilters.query.model,
+        severity: portalFilters.query.severity,
+        damageArea: portalFilters.query.damageArea,
+        damageType: portalFilters.query.damageType,
+        reportId: portalFilters.query.reportId,
+        vin: portalFilters.query.vin,
+        search: debouncedBackendSearch || undefined,
+        inspector: debouncedInspectorEmailFilter || undefined,
+        facilityId: facilityFilter !== "all" && facilityFilter !== "other" ? facilityFilter : undefined,
+        sort: listSort,
+        pageSize,
+      }),
+    [
+      debouncedBackendSearch,
+      debouncedInspectorEmailFilter,
+      facilityFilter,
+      listSort,
       pageSize,
-    }),
-    [createdFrom, createdTo, debouncedBackendSearch, debouncedInspectorEmailFilter, facilityFilter, inspectionTypeFilter, listSort, pageSize, statusFilter, yardFilter]
+      portalFilters.query.damageArea,
+      portalFilters.query.damageType,
+      portalFilters.query.dateFrom,
+      portalFilters.query.dateTo,
+      portalFilters.query.inspectionTypeNumber,
+      portalFilters.query.make,
+      portalFilters.query.model,
+      portalFilters.query.reportId,
+      portalFilters.query.severity,
+      portalFilters.query.status,
+      portalFilters.query.vin,
+      portalFilters.query.yard,
+    ]
   );
-  const listFilterRequestKey = useMemo(() => JSON.stringify(listFilters), [listFilters]);
-  const activeInspectionTypeOptions = useMemo(() => getActiveInspectionTypeOptions(listRows as unknown as ReportDamageApiRow[]), [listRows]);
+  const activeInspectionTypeOptions = useMemo(
+    () => includeSelectedFacetOption(filterFacetResponse?.facets.inspectionTypes ?? [], inspectionTypeFilter)
+      .map((option) => ({ number: option.value, label: option.label, displayLabel: `${option.value} - ${option.label}` })),
+    [filterFacetResponse?.facets.inspectionTypes, inspectionTypeFilter]
+  );
   const filteredInspectionTypeOptions = useMemo(() => {
     const query = inspectionTypeSearch.trim().toLowerCase();
     if (!query) return activeInspectionTypeOptions;
@@ -617,6 +735,14 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       `${option.number} ${option.label} ${option.displayLabel}`.toLowerCase().includes(query)
     );
   }, [activeInspectionTypeOptions, inspectionTypeSearch]);
+  useEffect(() => {
+    if (!inspectionTypeFilter) {
+      setInspectionTypeSearch("");
+      return;
+    }
+    const option = activeInspectionTypeOptions.find((entry) => entry.number === inspectionTypeFilter);
+    setInspectionTypeSearch(option ? `${option.number} - ${option.label}` : inspectionTypeFilter);
+  }, [activeInspectionTypeOptions, inspectionTypeFilter]);
   const selectedDamageReports = useMemo(
     () =>
       selectedDamageReportIds
@@ -653,40 +779,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   const damageSummaries = useMemo<ReportSummary[]>(() => listRows.map(listRowToSummary), [listRows]);
 
-  const normalizedDamageFilters = useMemo(
-    () =>
-      normalizeDamageReportFilters({
-        facilityFilter,
-        searchTerm,
-        reportIdFilter,
-        vinFilter,
-        makeFilter,
-        modelFilter,
-        yardFilter,
-        inspectorEmailFilter,
-        statusFilter,
-        createdFrom,
-        createdTo,
-      }),
-    [
-      createdFrom,
-      createdTo,
-      facilityFilter,
-      inspectorEmailFilter,
-      makeFilter,
-      modelFilter,
-      yardFilter,
-      reportIdFilter,
-      searchTerm,
-      statusFilter,
-      vinFilter,
-    ]
-  );
-  const damageFilterKey = useMemo(() => serializeDamageReportFilters(normalizedDamageFilters), [normalizedDamageFilters]);
-
-  const filteredDamageReports = useMemo(() => {
-    return damageSummaries.filter((report) => matchesDamageReportFilters(report as unknown as ReportDamageApiRow, normalizedDamageFilters));
-  }, [damageFilterKey, damageSummaries, normalizedDamageFilters]);
+  // `/reports/list` is the authoritative filtered result. Re-filtering the
+  // projected summaries here previously discarded yard/inspection/facility IDs
+  // and rejected valid backend rows.
+  const filteredDamageReports = damageSummaries;
 
   const filteredDamageSummaries = useMemo(() => {
     return filteredDamageReports;
@@ -774,50 +870,19 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     };
   }, [selectedDamageFullRow, selectedDamageIsClearScan, selectedDamageReportId]);
   const facilityChoices = useMemo<FacilitySummary[]>(() => {
-    const choices = new Map<string, { id: string; label: string; slug: string }>();
-    listRows.forEach((row) => {
-      const normalized = normalizeReportListRow(row);
-      const label = normalizeFacilityChoiceLabel(normalized.locationLabel || normalized.facilityName || row.location_label || row.location_name || row.facility || "");
-      const id = label === "Other" ? "other" : String(normalized.facilityId || row.facility_id || row.location_id || slugForFacilityLabel(label));
-      const slug = slugForFacilityLabel(label);
-      if (!choices.has(id)) choices.set(id, { id, label, slug });
-    });
-    damageSummaries.forEach((summary) => {
-      const label = normalizeFacilityChoiceLabel(summary.locationName || summary.facilityName || "");
-      const slug = slugForFacilityLabel(label);
-      const id = label === "Other" ? "other" : slug;
-      if (!choices.has(id)) choices.set(id, { id, label, slug });
-    });
-    return Array.from(choices.values()).map((choice) => ({
-      id: choice.id,
-      name: choice.label,
-      slug: choice.slug,
+    return includeSelectedFacetOption(filterFacetResponse?.facets.facilities ?? [], facilityFilter === "all" ? "" : facilityFilter).map((option) => ({
+      id: option.value,
+      name: option.label,
+      slug: slugForFacilityLabel(option.label),
       active: true,
       locationCount: 1,
     }));
-  }, [damageSummaries, listRows]);
-  const yardChoices = useMemo(() => {
-    const choices = new Map<string, string>();
-    getSessionYardOptions(session).forEach((yard) => {
-      const label = yard.facilityLabel ? `${yard.facilityLabel} - ${yard.label}` : yard.label;
-      choices.set(yard.value, label);
-    });
-    listRows.forEach((row) => {
-      const record = row as Record<string, unknown>;
-      const value = String(record.yard ?? record.yard_id ?? record.yard_name ?? record.yard_label ?? "").trim();
-      if (value && !choices.has(value)) choices.set(value, value);
-    });
-    return Array.from(choices.entries()).map(([value, label]) => ({ value, label }));
-  }, [listRows, session]);
-  const inspectorChoices = useMemo(() => {
-    const usersByEmail = new Map<string, { email: string; label: string }>();
-    damageSummaries.forEach((summary) => {
-      const email = summary.inspectorEmail?.trim();
-      if (!email || usersByEmail.has(email.toLowerCase())) return;
-      usersByEmail.set(email.toLowerCase(), { email, label: email });
-    });
-    return Array.from(usersByEmail.values()).sort((left, right) => left.label.localeCompare(right.label));
-  }, [damageSummaries]);
+  }, [facilityFilter, filterFacetResponse?.facets.facilities]);
+  const yardChoices = includeSelectedFacetOption(filterFacetResponse?.facets.yards ?? [], yardFilter);
+  const inspectorChoices = useMemo(
+    () => includeSelectedFacetOption(filterFacetResponse?.facets.inspectors ?? [], inspectorEmailFilter).map((option) => ({ email: option.value, label: option.label })),
+    [filterFacetResponse?.facets.inspectors, inspectorEmailFilter]
+  );
   const reportDateBounds = useMemo(() => {
     const dates = damageSummaries
       .map((summary) => (summary.createdAt ? new Date(summary.createdAt) : null))
@@ -828,17 +893,66 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       maxDate: dates[dates.length - 1] ? toDateInputValue(dates[dates.length - 1]) : null,
     };
   }, [damageSummaries]);
+  const reportRequestDiagnostic = getLatestPortalRequestDiagnostic("/reports/list");
+  const reportFacetCounts = useMemo(() => {
+    const facets = filterFacetResponse?.facets;
+    if (!facets) return {};
+    return {
+      facilities: facets.facilities.length,
+      yards: facets.yards.length,
+      inspectionTypes: facets.inspectionTypes.length,
+      inspectors: facets.inspectors.length,
+      statuses: facets.statuses.length,
+      makes: facets.makes.length,
+      models: facets.models.length,
+      severities: facets.severities.length,
+      damageAreas: facets.damageAreas.length,
+      damageTypes: facets.damageTypes.length,
+    };
+  }, [filterFacetResponse?.facets]);
 
   useEffect(() => {
     const loadSequence = listLoadSequenceRef.current + 1;
     listLoadSequenceRef.current = loadSequence;
+    const logStaleResponse = (pageNumber: number) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.info("[portal-data] stale response ignored", {
+          endpoint: "/api/reports/list",
+          page: pageNumber,
+          requestSequence: loadSequence,
+        });
+      }
+    };
+    const clearVisibleRows = () => {
+      listRowIdsRef.current = new Set();
+      setListRows([]);
+      setListError(null);
+      setSelectedDamageReportId(null);
+      setSelectedDamageReportIds([]);
+      setPage(1);
+      setTotalCount(0);
+      setHasNextPage(true);
+    };
+
+    clearVisibleRows();
+    if (!organizationId || sessionStatus !== "success" || !listUserScopeId || !isPortalAccessAllowed) {
+      listPageRequestInFlightRef.current = false;
+      setListLoading(false);
+      return () => {
+        if (listLoadSequenceRef.current === loadSequence) listLoadSequenceRef.current += 1;
+      };
+    }
+
     async function loadPage(nextPage: number, reset = false) {
       listPageRequestInFlightRef.current = true;
       setListLoading(true);
       setListError(null);
       try {
         const response = await fetchReportList({ ...listFilters, page: nextPage, pageSize });
-        if (listLoadSequenceRef.current !== loadSequence) return;
+        if (listLoadSequenceRef.current !== loadSequence) {
+          logStaleResponse(nextPage);
+          return;
+        }
         const nextRows = normalizeReportListResponseRows(response.rows);
         const responsePage = Number(response.page ?? nextPage);
         const responseHasMore =
@@ -860,9 +974,6 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         }
       }
     }
-    setPage(1);
-    setHasNextPage(true);
-    listRowIdsRef.current = new Set();
     void loadPage(1, true);
     return () => {
       if (listLoadSequenceRef.current === loadSequence) {
@@ -871,15 +982,17 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         setListLoading(false);
       }
     };
-  }, [listFilters, pageSize, reloadToken]);
+  }, [isPortalAccessAllowed, listFilters, listUserScopeId, organizationId, pageSize, reloadToken, sessionStatus]);
 
   const loadNextPage = useCallback(() => {
     if (listLoading || !hasNextPage || listPageRequestInFlightRef.current) return;
     void (async () => {
+      const requestSequence = listLoadSequenceRef.current;
       listPageRequestInFlightRef.current = true;
       setListLoading(true);
       setListError(null);
       await fetchReportList({ ...listFilters, page: page + 1, pageSize }).then((response) => {
+        if (listLoadSequenceRef.current !== requestSequence) return;
         const responsePage = Number(response.page ?? page + 1);
         const nextRows = normalizeReportListResponseRows(response.rows);
         const uniqueRows = nextRows.filter((row) => {
@@ -901,8 +1014,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
           setListRows((current) => [...current, ...uniqueRows]);
         }
       }).catch((err) => {
+        if (listLoadSequenceRef.current !== requestSequence) return;
         setListError(err instanceof Error ? err.message : "Unable to load more reports.");
       }).finally(() => {
+        if (listLoadSequenceRef.current !== requestSequence) return;
         listPageRequestInFlightRef.current = false;
         setListLoading(false);
       });
@@ -911,21 +1026,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   const clearDamageFilters = useCallback(() => {
     setActiveDamageFilterKeys([]);
-    setFacilityFilter("all");
-    setSearchTerm("");
-    setReportIdFilter("");
-    setVinFilter("");
-    setInspectionTypeFilter("");
     setInspectionTypeSearch("");
     setInspectionTypeSuggestionsOpen(false);
-    setMakeFilter("");
-    setModelFilter("");
-    setYardFilter("");
-    setInspectorEmailFilter("");
-    setStatusFilter("");
-    setCreatedFrom("");
-    setCreatedTo("");
-  }, []);
+    portalFilters.resetFilters("push");
+  }, [portalFilters]);
   const availableDamageFilterOptions = useMemo(
     () =>
       DAMAGE_FILTER_OPTIONS.filter(
@@ -944,11 +1048,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     if (key === "yard") setYardFilter("");
     if (key === "inspector_email") setInspectorEmailFilter("");
     if (key === "status") setStatusFilter("");
+    if (key === "severity") setSeverityFilter("");
+    if (key === "damage_area") setDamageAreaFilter("");
+    if (key === "damage_type") setDamageTypeFilter("");
     if (key === "date_range") {
-      setCreatedFrom("");
-      setCreatedTo("");
+      portalFilters.updateFilters({ dateFrom: undefined, dateTo: undefined });
     }
-  }, []);
+  }, [portalFilters, setDamageAreaFilter, setDamageTypeFilter, setFacilityFilter, setInspectionTypeFilter, setInspectorEmailFilter, setMakeFilter, setModelFilter, setReportIdFilter, setSeverityFilter, setStatusFilter, setVinFilter, setYardFilter]);
   const selectedDamageReportComment = useMemo(() => {
     if (!selectedDamageFullRow) {
       return "";
@@ -1273,24 +1379,22 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     }
     if (key === "make") {
       return (
-          <input
-            type="search"
-            placeholder="Make"
-            value={makeFilter}
-            onChange={(event) => setMakeFilter(event.target.value)}
-            className={damageFilterInputClass}
-          />
+        <select value={makeFilter} onChange={(event) => setMakeFilter(event.target.value)} className={damageFilterInputClass} aria-label="Make">
+          <option value="">All makes</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.makes ?? [], makeFilter).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
       );
     }
     if (key === "model") {
       return (
-          <input
-            type="search"
-            placeholder="Model"
-            value={modelFilter}
-            onChange={(event) => setModelFilter(event.target.value)}
-            className={damageFilterInputClass}
-          />
+        <select value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} className={damageFilterInputClass} aria-label="Model">
+          <option value="">All models</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.models ?? [], modelFilter).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
       );
     }
     if (key === "yard") {
@@ -1319,13 +1423,41 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     }
     if (key === "status") {
       return (
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ReportStatus | "")} className={damageFilterInputClass}>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={damageFilterInputClass}>
           <option value="">All statuses</option>
-          <option value="open">Open</option>
-          <option value="review">Review</option>
-          <option value="closed">Closed</option>
-          <option value="verified">Verified</option>
-          <option value="archived">Archived</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.statuses ?? [], statusFilter).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      );
+    }
+    if (key === "severity") {
+      return (
+        <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className={damageFilterInputClass} aria-label="Severity">
+          <option value="">All severities</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.severities ?? [], severityFilter).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      );
+    }
+    if (key === "damage_area") {
+      return (
+        <select value={damageAreaFilter} onChange={(event) => setDamageAreaFilter(event.target.value)} className={wideDamageFilterInputClass} aria-label="Damage area">
+          <option value="">All damage areas</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.damageAreas ?? [], damageAreaFilter).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      );
+    }
+    if (key === "damage_type") {
+      return (
+        <select value={damageTypeFilter} onChange={(event) => setDamageTypeFilter(event.target.value)} className={wideDamageFilterInputClass} aria-label="Damage type">
+          <option value="">All damage types</option>
+          {includeSelectedFacetOption(filterFacetResponse?.facets.damageTypes ?? [], damageTypeFilter).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </select>
       );
     }
@@ -1334,12 +1466,9 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         <ReportDateRangeFilter
           value={{ createdFrom, createdTo }}
           onChange={({ createdFrom: nextFrom, createdTo: nextTo }) => {
-            setCreatedFrom(nextFrom);
-            setCreatedTo(nextTo);
+            portalFilters.updateFilters({ dateFrom: nextFrom || undefined, dateTo: nextTo || undefined });
           }}
           label="Select date"
-          minDate={reportDateBounds.minDate}
-          maxDate={reportDateBounds.maxDate}
         />
       );
     }
@@ -1367,6 +1496,25 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
               Reports: {sortedDamageSummaries.length}
             </Badge>
           </div>
+          {portalFilters.hasInvalidFilters ? (
+            <div role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+              Some URL filters were rejected: {portalFilters.issues.map((issue) => issue.message).join(" ")}
+            </div>
+          ) : null}
+          {rejectedFacetFilterNotice ? (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+              <span>{rejectedFacetFilterNotice}</span>
+              <button type="button" className="underline" onClick={() => setRejectedFacetFilterNotice(null)}>Dismiss</button>
+            </div>
+          ) : null}
+          {filterFacetError ? (
+            <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-900">
+              <span>Filter options could not be loaded. Existing selections remain active; no row-derived fallback was used.</span>
+              <button type="button" className="underline" onClick={() => void refreshFilterFacets()}>Retry filter options</button>
+            </div>
+          ) : filterFacetsLoading ? (
+            <p className="mt-2 text-xs text-slate-500" aria-live="polite">Loading authorized filter options…</p>
+          ) : null}
         </div>
         <CardContent className="p-0">
           <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(420px,0.85fr)] lg:items-start">
@@ -2191,6 +2339,22 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
           ) : null}
         </DialogContent>
       </Dialog>
+      <PortalDataInspector
+        data={{
+          canonicalFilters: portalFilters.query,
+          endpointParams: { ...listFilters, page, page_size: pageSize },
+          activeEndpoint: "/api/reports/list",
+          request: reportRequestDiagnostic.request,
+          rowCount: listRows.length,
+          totalCount,
+          facetSource: filterFacetResponse?.meta.source,
+          facetCounts: reportFacetCounts,
+          snapshotStatus: "disabled",
+          cacheState: "disabled",
+          errorCategory: listError ? reportRequestDiagnostic.errorCategory : "none",
+          lastUpdated: reportRequestDiagnostic.lastUpdated,
+        }}
+      />
     </div>
   );
 }
