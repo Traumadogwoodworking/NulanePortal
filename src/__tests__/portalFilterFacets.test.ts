@@ -59,7 +59,7 @@ describe("parsePortalFilterFacetsResponse", () => {
     expect(parsed.facets.statuses[0]?.value).toBe("complete");
     expect(parsed.facets.makes[0]?.value).toBe("Ford");
     expect(parsed.facets.models[0]?.value).toBe("F-150");
-    expect(parsed.facets.severities[0]).toEqual({ value: "5", label: ">12 inches", count: 2 });
+    expect(parsed.facets.severities[0]).toEqual({ value: "5", label: '5 - >12" (≥30 cm)', count: 2 });
     expect(parsed.facets.damageAreas[0]).toEqual({ value: "27", label: "Hood", count: 2 });
     expect(parsed.facets.damageTypes[0]).toEqual({ value: "01", label: "Dent", count: 2 });
     expect(parsed.meta).toEqual({ source: "authorized_report_filter_facets", generatedAt });

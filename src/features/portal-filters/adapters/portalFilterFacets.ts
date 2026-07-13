@@ -4,6 +4,7 @@ import type {
   PortalFilterFacetsResponse,
   PortalFilterOption,
 } from "@/features/portal-filters/model/facets";
+import { DAMAGE_SEVERITIES } from "@/lib/docudent/damageTaxonomy";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -78,13 +79,23 @@ function parseOption(value: unknown): PortalFilterOption | null {
   return { value: optionValue, label };
 }
 
+function normalizeFacetOption(option: PortalFilterOption, facetName: keyof PortalFilterFacets): PortalFilterOption {
+  if (facetName !== "severities") return option;
+  const severity = DAMAGE_SEVERITIES.find((candidate) => candidate.value === option.value);
+  return severity ? { ...option, label: severity.label } : option;
+}
+
 function normalizeOptions(value: unknown, facetName: keyof PortalFilterFacets): PortalFilterOption[] {
   if (!Array.isArray(value)) {
     throw new PortalFilterFacetsContractError(`${facetName} must be an array`);
   }
 
   const exactOptions = new Map<string, PortalFilterOption>();
-  for (const option of value.map(parseOption).filter((item): item is PortalFilterOption => Boolean(item)).sort(compareOptions)) {
+  for (const option of value
+    .map(parseOption)
+    .filter((item): item is PortalFilterOption => Boolean(item))
+    .map((item) => normalizeFacetOption(item, facetName))
+    .sort(compareOptions)) {
     if (facetName === "facilities" && LOWERCASE_HYPHENATED_FACILITY_LABEL.test(option.label)) {
       continue;
     }
