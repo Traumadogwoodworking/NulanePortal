@@ -30,6 +30,10 @@ const CASE_INSENSITIVE_VALUE_FACETS = new Set<keyof PortalFilterFacets>([
   "damageTypes",
 ]);
 
+// Temporary display guard for legacy facility records whose label is only a
+// lowercase, hyphenated identifier (for example, "x-x-x-x").
+const LOWERCASE_HYPHENATED_FACILITY_LABEL = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
+
 export class PortalFilterFacetsContractError extends Error {
   constructor(message: string) {
     super(`Invalid portal filter facets response: ${message}`);
@@ -81,6 +85,9 @@ function normalizeOptions(value: unknown, facetName: keyof PortalFilterFacets): 
 
   const exactOptions = new Map<string, PortalFilterOption>();
   for (const option of value.map(parseOption).filter((item): item is PortalFilterOption => Boolean(item)).sort(compareOptions)) {
+    if (facetName === "facilities" && LOWERCASE_HYPHENATED_FACILITY_LABEL.test(option.label)) {
+      continue;
+    }
     if (!exactOptions.has(option.value)) exactOptions.set(option.value, option);
   }
 

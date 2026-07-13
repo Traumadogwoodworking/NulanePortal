@@ -124,6 +124,17 @@ describe("parsePortalFilterFacetsResponse", () => {
     expect(parsed.facets.yards[0]?.value).toBe("organization-yard-id");
   });
 
+  it("hides lowercase hyphenated facility labels while retaining facility codes", () => {
+    const parsed = parsePortalFilterFacetsResponse(responseWith(completeFacets({
+      facilities: [
+        { value: "facility-shap", label: "SHAP" },
+        { value: "legacy-location-id", label: "x-x-x-x" },
+      ],
+    })));
+
+    expect(parsed.facets.facilities).toEqual([{ value: "facility-shap", label: "SHAP" }]);
+  });
+
   it("accepts canonical camel-case wire keys and metadata", () => {
     const parsed = parsePortalFilterFacetsResponse({
       facets: completeFacets({
