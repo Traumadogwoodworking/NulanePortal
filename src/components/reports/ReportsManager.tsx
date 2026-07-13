@@ -1333,6 +1333,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         <div className="relative w-96">
           <input
             type="search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={inspectionTypeSuggestionsOpen}
+            aria-controls="damage-report-inspection-type-options"
             placeholder="Type inspection number or name"
             value={inspectionTypeSearch}
             onChange={(event) => {
@@ -1343,20 +1347,26 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                 setInspectionTypeFilter("");
               }
             }}
-            onFocus={() => setInspectionTypeSuggestionsOpen(Boolean(inspectionTypeSearch.trim()))}
+            onFocus={() => setInspectionTypeSuggestionsOpen(true)}
             onBlur={() => {
               window.setTimeout(() => setInspectionTypeSuggestionsOpen(false), 120);
             }}
             className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
           />
-          {inspectionTypeSuggestionsOpen && inspectionTypeSearch.trim() ? (
-            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
+          {inspectionTypeSuggestionsOpen ? (
+            <div
+              id="damage-report-inspection-type-options"
+              role="listbox"
+              className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.14)]"
+            >
               <div className="max-h-64 overflow-auto py-1">
                 {filteredInspectionTypeOptions.length > 0 ? (
                   filteredInspectionTypeOptions.map((option) => (
                     <button
                       key={option.number}
                       type="button"
+                      role="option"
+                      aria-selected={option.number === inspectionTypeFilter}
                       onClick={() => {
                         setInspectionTypeFilter(option.number);
                         setInspectionTypeSearch(`${option.number} - ${option.label}`);
