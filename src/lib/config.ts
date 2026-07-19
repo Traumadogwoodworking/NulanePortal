@@ -22,7 +22,8 @@ const defaultPortalBasePath = "";
 
 const selectApiBase = () => {
   const configured = normalizeBaseUrl(
-    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_BASE ||
       process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_BASE ||
       process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_URL
   );
@@ -33,6 +34,7 @@ const selectApiBase = () => {
 export const portalConfig = {
   apiBase: selectApiBase(),
   usesDefaultApiBase: !(
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_BASE ||
     process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_URL

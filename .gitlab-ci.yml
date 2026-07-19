@@ -2,7 +2,7 @@ stages:
   - validate
   - test
   - build
-  - deploy_pages
+  - deploy
 
 default:
   image: node:22-bookworm
@@ -21,8 +21,10 @@ default:
 variables:
   NEXT_TELEMETRY_DISABLED: "1"
   NO_COLOR: "1"
-  GITHUB_PAGES_REPOSITORY: "Traumadogwoodworking/inspection-trac.git"
-  GITHUB_PAGES_BRANCH: "gh-pages"
+  VERCEL_CLI_VERSION: "56.3.2"
+  VERCEL_ORG_ID: "team_CczJOjtPJm7x5HiMADhsAkYb"
+  VERCEL_PROJECT_ID: "prj_BSarJ0dL2TCvoKRSbTJnuiWCqnYX"
+  NEXT_PUBLIC_API_BASE_URL: "https://api.nulanesystems.com/inspection-trac/api"
 
 lint:
   stage: validate
@@ -69,62 +71,47 @@ e2e_smoke:
       - playwright-report/
       - test-results/
 
-static_export:
+vercel_build:
   stage: build
-  variables:
-    NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
+  needs:
+    - lint
+    - typecheck
+    - unit_tests
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == "cicd/vercel-dev-cors"'
+    - when: never
   script:
-    - npm run build
-    - npm run export:validate
-    - tar -czf portal-static-${CI_COMMIT_SHA}.tar.gz out
-    - sha256sum portal-static-${CI_COMMIT_SHA}.tar.gz > portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
-    - sha256sum -c portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
+    - test -n "$VERCEL_TOKEN"
+    - npx --yes "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=production
+    - npx --yes "vercel@${VERCEL_CLI_VERSION}" build --prod
   artifacts:
     expire_in: 30 days
     paths:
-      - out/
-      - portal-static-${CI_COMMIT_SHA}.tar.gz
-      - portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
+      - .vercel/output/
 
-deploy_github_pages:
-  image: alpine:3.20
-  stage: deploy_pages
+deploy_vercel_production:
+  stage: deploy
   needs:
-    - static_export
-  before_script:
-    - apk add --no-cache git openssh-client rsync
-    - test -n "$GITHUB_PAGES_SSH_KEY_B64"
-    - test -n "$GITHUB_PAGES_KNOWN_HOSTS"
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - printf '%s' "$GITHUB_PAGES_SSH_KEY_B64" | base64 -d > ~/.ssh/id_ed25519
-    - chmod 600 ~/.ssh/id_ed25519
-    - printf '%s\n' "$GITHUB_PAGES_KNOWN_HOSTS" > ~/.ssh/known_hosts
-    - chmod 600 ~/.ssh/known_hosts
-    - export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-  resource_group: inspection-trac-gh-pages
+    - vercel_build
+  resource_group: inspection-trac-vercel-production
   environment:
-    name: github-pages-production
-    url: https://inspection-trac.com
+    name: vercel-production
+    url: https://inspection-trac-portal-dev.vercel.app
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: manual
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == "cicd/vercel-dev-cors"'
     - when: never
   script:
-    - test -f out/index.html
-    - test -d out/_next
-    - test "$(cat out/CNAME)" = "inspection-trac.com"
-    - test -f out/.nojekyll
-    - publish_dir="$(mktemp -d)"
-    - git clone --branch "$GITHUB_PAGES_BRANCH" --single-branch "git@github.com:${GITHUB_PAGES_REPOSITORY}" "$publish_dir"
-    - rsync -a --delete --exclude=.git out/ "$publish_dir/"
-    - cd "$publish_dir"
-    - test "$(cat CNAME)" = "inspection-trac.com"
-    - test -f .nojekyll
-    - test -f index.html
-    - test -d _next
-    - git config user.name "Nulane GitLab Pages Publisher"
-    - git config user.email "gitlab-pages@nulanesystems.local"
-    - git add --all
-    - git diff --cached --quiet || git commit -m "Publish portal ${CI_COMMIT_SHA}"
-    - git push origin "$GITHUB_PAGES_BRANCH"
+    - test -n "$VERCEL_TOKEN"
+    - deployment_url="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --prod)"
+    - test -n "$deployment_url"
+    - printf 'VERCEL_DEPLOYMENT_URL=%s\n' "$deployment_url" | tee deploy.env
+    - npx --yes "vercel@${VERCEL_CLI_VERSION}" inspect "$deployment_url"
+    - VERCEL_DEPLOYMENT_URL="$deployment_url" node -e 'const url = process.env.VERCEL_DEPLOYMENT_URL + "/inspection/24-hour/"; fetch(url).then((response) => { if (!response.ok) throw new Error(`${url} returned ${response.status}`); console.log(`inspection_24_hour_publish_probe status=${response.status} url=${url}`); })'
+  artifacts:
+    reports:
+      dotenv: deploy.env
+    expire_in: 30 days
+    paths:
+      - deploy.env
