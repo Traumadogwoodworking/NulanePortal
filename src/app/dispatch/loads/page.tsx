@@ -5,6 +5,7 @@ import { RefreshCw, Truck, Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorPanel } from "@/components/ui/ErrorPanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { CircleLoadBuilder } from "@/components/circle/CircleLoadBuilder";
 import {
   CircleDispatchDriver,
   CircleDispatchLoad,
@@ -116,6 +117,8 @@ export default function CircleDispatchLoadsPage() {
           Refresh
         </button>
       </header>
+
+      <CircleLoadBuilder drivers={drivers} onPublished={refresh} />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {BOARD_STATES.map((state) => (
