@@ -57,6 +57,14 @@ const portalRoutes: PortalRoute[] = [
     moduleKey: "reports",
   },
   {
+    label: "Dispatch / Loads",
+    href: "/dispatch/loads",
+    description: "Circle load and driver operations",
+    section: "core",
+    icon: "dispatch",
+    connectionStatus: "real",
+  },
+  {
     label: "RSA Reports",
     href: "/reports/rsa",
     description: "Railcar security audits",

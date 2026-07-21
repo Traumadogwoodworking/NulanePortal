@@ -8,7 +8,7 @@ import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
-import { Clock3, Home, LayoutGrid, Mail } from "lucide-react";
+import { Clock3, Home, LayoutGrid, Mail, Truck } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
   if (href === "/") {
@@ -273,6 +273,7 @@ export function PortalSidebar() {
                       {item.icon === "notifications" && <NotificationsIcon />}
                       {item.icon === "email" && <EmailIcon />}
                       {item.icon === "clock" && <Clock3 className={sharedSidebarIconSize} />}
+                      {item.icon === "dispatch" && <Truck className={sharedSidebarIconSize} />}
                       {item.icon === "palette" && <PaletteIcon />}
                       {item.icon === "rsa" && <TrainIcon />}
                       {item.icon === "support" && <SupportIcon />}
