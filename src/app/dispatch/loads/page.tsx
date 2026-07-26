@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorPanel } from "@/components/ui/ErrorPanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CircleLoadBuilder } from "@/components/circle/CircleLoadBuilder";
+import { CircleLoadDetailPanel } from "@/components/circle/CircleLoadDetailPanel";
 import {
   CircleDispatchDriver,
   CircleDispatchLoad,
@@ -46,6 +47,7 @@ export default function CircleDispatchLoadsPage() {
   const [drivers, setDrivers] = useState<CircleDispatchDriver[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [selectedLoadId, setSelectedLoadId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -119,6 +121,14 @@ export default function CircleDispatchLoadsPage() {
       </header>
 
       <CircleLoadBuilder drivers={drivers} onPublished={refresh} />
+      {selectedLoadId ? (
+        <CircleLoadDetailPanel
+          key={selectedLoadId}
+          loadId={selectedLoadId}
+          onClose={() => setSelectedLoadId(null)}
+          onChanged={refresh}
+        />
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {BOARD_STATES.map((state) => (
@@ -163,7 +173,7 @@ export default function CircleDispatchLoadsPage() {
       {!error && !loading && loads.length === 0 ? (
         <EmptyState
           title="No Circle loads yet"
-          description="Create/import and publish actions arrive in the next backend slice. Published loads will appear here."
+          description="Create a draft load, add stops and VINs, assign a driver, then publish it."
         />
       ) : null}
 
@@ -187,7 +197,11 @@ export default function CircleDispatchLoadsPage() {
                     ? driverById.get(load.primaryDriverId)
                     : null;
                   return (
-                    <tr key={load.id} className="hover:bg-slate-50/70">
+                    <tr
+                      key={load.id}
+                      className="cursor-pointer hover:bg-slate-50/70"
+                      onClick={() => setSelectedLoadId(load.id)}
+                    >
                       <td className="px-4 py-4">
                         <p className="font-bold text-slate-950">{load.tripNumber}</p>
                         <p className="text-xs text-slate-500">{load.externalLoadId || "No external ID"}</p>
