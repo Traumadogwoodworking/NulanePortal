@@ -46,6 +46,27 @@ function normalizePublicPortalUrl(value: string | null | undefined): string | nu
 }
 
 const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">> = {
+  circleLogistics: {
+    companyName: "Circle Logistics",
+    appName: "Circle Logistics Portal",
+    shortDescription: "Circle load assignment, delivery progress, and ePOD portal.",
+    landingHeadline: "Circle Logistics",
+    landingSubheadline: "Load assignment and delivery operations.",
+    landingExplainer:
+      "Create and publish loads, assign Circle drivers, monitor VIN delivery progress, and retrieve stored ePOD artifacts.",
+    supportEmail: "support@nulanesystems.com",
+    reportsEmail: "reports@nulanesystems.com",
+    logoPath: "/media/circle-logistics-logo.png",
+    footerLegalOwner: "Circle Logistics",
+    primaryColor: PORTAL_BRANDING_PRESETS.circleLogistics.portalBrandColor,
+    accentColor: PORTAL_BRANDING_PRESETS.circleLogistics.portalBrandAccentColor,
+    loginButtonLabel: "Log In",
+    openPortalButtonLabel: "Open Circle Portal",
+    portalUrl: "/dispatch/loads",
+    appStoreUrl:
+      "https://apps.apple.com/us/app/docudent-damage-submissions/id6756033587",
+    googlePlayUrl: "",
+  },
   inspectionTrac: {
     companyName: "Inspection-Trac",
     appName: "Inspection-Trac",

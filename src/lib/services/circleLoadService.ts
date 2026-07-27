@@ -30,9 +30,12 @@ export interface CircleDispatchDriver {
   id: string;
   driverNumber: string;
   displayName: string;
+  email: string;
   phone: string;
   carrierName: string;
   active: boolean;
+  requirePodConditionPhotos: boolean;
+  podPdfLayout: "standard" | "compact";
 }
 
 export interface CircleDispatchStop {
@@ -166,6 +169,44 @@ export async function fetchCircleDispatchDrivers(): Promise<CircleDispatchDriver
     "/portal/v1/drivers",
   );
   return Array.isArray(payload.drivers) ? payload.drivers : [];
+}
+
+export async function createCircleDispatchDriver(input: {
+  email: string;
+  driverNumber: string;
+  displayName: string;
+  phone?: string;
+  carrierName?: string;
+  requirePodConditionPhotos: boolean;
+  podPdfLayout: "standard" | "compact";
+}): Promise<CircleDispatchDriver> {
+  const payload = await fetchCircleApi<{ driver: CircleDispatchDriver }>(
+    "/portal/v1/drivers",
+    {
+      method: "POST",
+      headers: commandHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return payload.driver;
+}
+
+export async function updateCircleDispatchDriverSettings(
+  driverId: string,
+  input: {
+    requirePodConditionPhotos: boolean;
+    podPdfLayout: "standard" | "compact";
+  },
+): Promise<CircleDispatchDriver> {
+  const payload = await fetchCircleApi<{ driver: CircleDispatchDriver }>(
+    `/portal/v1/drivers/${driverId}/settings`,
+    {
+      method: "PATCH",
+      headers: commandHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return payload.driver;
 }
 
 export async function createCircleDispatchLoad(input: {

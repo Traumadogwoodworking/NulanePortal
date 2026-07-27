@@ -7,6 +7,7 @@ import { ErrorPanel } from "@/components/ui/ErrorPanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CircleLoadBuilder } from "@/components/circle/CircleLoadBuilder";
 import { CircleLoadDetailPanel } from "@/components/circle/CircleLoadDetailPanel";
+import { CircleDriverManager } from "@/components/circle/CircleDriverManager";
 import {
   CircleDispatchDriver,
   CircleDispatchLoad,
@@ -120,6 +121,7 @@ export default function CircleDispatchLoadsPage() {
         </button>
       </header>
 
+      <CircleDriverManager drivers={drivers} onChanged={refresh} />
       <CircleLoadBuilder drivers={drivers} onPublished={refresh} />
       {selectedLoadId ? (
         <CircleLoadDetailPanel

@@ -1,6 +1,7 @@
 import type { PermissionKey } from "./access";
 import { isModuleEnabled, ModuleToggleKey } from "@/lib/modules";
 import { publicBranding } from "@/lib/publicBranding";
+import { ACTIVE_PORTAL_BRANDING } from "@/lib/brandingPresets";
 
 export type RouteSectionKey = "core" | "apps" | "administration" | "support";
 
@@ -162,7 +163,16 @@ const sectionOrder: Array<{ key: RouteSectionKey; title: string }> = [
 
 export const navSections: PortalNavSection[] = sectionOrder.map((section) => ({
   ...section,
-  items: portalRoutes.filter((route) => route.section === section.key),
+  items: portalRoutes.filter((route) => {
+    if (route.section !== section.key) return false;
+    if (ACTIVE_PORTAL_BRANDING !== "circleLogistics") return true;
+    return [
+      "/dispatch/loads",
+      "/users",
+      "/support",
+      "/settings",
+    ].includes(route.href);
+  }),
 }));
 
 const routeLookup = portalRoutes.reduce<Record<string, PortalRoute>>((acc, route) => {
