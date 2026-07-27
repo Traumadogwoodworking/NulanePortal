@@ -16,7 +16,8 @@ const DEFAULT_AUTH0_ORGANIZATION_ID = "org_hgGvkUBSZuyEg9Mg";
 const DEFAULT_AUTH0_AUDIENCE = "https://inspection-trac.us.auth0.com/api/v2/";
 const DEV_ACCESS_TOKEN = "dev-portal-token";
 const DEV_AUTH_BYPASS_FLAG = "true";
-const DEFAULT_PORTAL_RETURN_TO = "/home/";
+const DEFAULT_PORTAL_RETURN_TO =
+  ACTIVE_PORTAL_BRANDING === "circleLogistics" ? "/dispatch/loads" : "/home/";
 const DEFAULT_LOGOUT_RETURN_TO = "/";
 const DEFAULT_LOGIN_PATH = "/login";
 const FIXED_REDIRECT_MODE = "fixed";
