@@ -1,0 +1,83 @@
+name: nulane-work-control
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: nulane-work-postgres
+    environment:
+      POSTGRES_DB: ${CONTROL_POSTGRES_DB}
+      POSTGRES_USER: ${CONTROL_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${CONTROL_POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - nulane-work-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  web:
+    build:
+      context: .
+    container_name: nulane-work-web
+    environment:
+      DATABASE_URL: postgresql://${CONTROL_POSTGRES_USER}:${CONTROL_POSTGRES_PASSWORD}@postgres:5432/${CONTROL_POSTGRES_DB}
+      CONTROL_PLANE_BASE_URL: http://127.0.0.1:3000
+    ports:
+      - "127.0.0.1:4310:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - npm run db:init && npm run db:seed && npm run start
+
+  telegram:
+    profiles:
+      - telegram
+    build:
+      context: .
+    container_name: nulane-work-telegram
+    environment:
+      DATABASE_URL: postgresql://${CONTROL_POSTGRES_USER}:${CONTROL_POSTGRES_PASSWORD}@postgres:5432/${CONTROL_POSTGRES_DB}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_PAIRING_CODE: ${TELEGRAM_PAIRING_CODE}
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - npm
+      - run
+      - bot
+
+  dispatcher:
+    profiles:
+      - telegram
+    build:
+      context: .
+    container_name: nulane-work-dispatcher
+    environment:
+      DATABASE_URL: postgresql://${CONTROL_POSTGRES_USER}:${CONTROL_POSTGRES_PASSWORD}@postgres:5432/${CONTROL_POSTGRES_DB}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      DISPATCH_INTERVAL_MS: ${DISPATCH_INTERVAL_MS:-15000}
+      STALE_WORK_MINUTES: ${STALE_WORK_MINUTES:-45}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - npm
+      - run
+      - dispatcher
+
+volumes:
+  nulane-work-postgres-data:
+    name: nulane-work-postgres-data
+

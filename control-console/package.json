@@ -1,27 +1,43 @@
 {
-  "name": "control-console",
-  "version": "0.1.0",
+  "name": "nulane-work-control",
+  "version": "0.2.0",
   "private": true,
+  "type": "module",
+  "overrides": {
+    "postcss": "8.5.24",
+    "sharp": "0.35.3"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "lint": "eslint .",
+    "type-check": "next typegen && tsc --noEmit",
+    "db:init": "tsx scripts/db-init.ts",
+    "db:seed": "tsx scripts/db-seed.ts",
+    "bot": "tsx workers/telegram.ts",
+    "dispatcher": "tsx workers/dispatcher.ts",
+    "work": "tsx bin/nulane-work.ts"
   },
   "dependencies": {
-    "next": "16.2.1",
+    "grammy": "^1.45.1",
+    "next": "^16.2.12",
+    "pg": "^8.22.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tsx": "^4.23.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.1",
-    "postcss": "^8",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
+    "postcss": "8.5.24",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

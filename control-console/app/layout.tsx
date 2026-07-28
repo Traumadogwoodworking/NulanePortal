@@ -2,8 +2,8 @@ import "@/styles/globals.css";
 import { AdminShell } from "@components/layout/AdminShell";
 
 export const metadata = {
-  title: "Control Console",
-  description: "Production-grade registry-driven control plane for DocuDent"
+  title: "Nulane Work Control",
+  description: "Durable task, interview, decision, and progress control plane"
 };
 
 export default function RootLayout({

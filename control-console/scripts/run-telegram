@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+base_env="/Users/home/.nulane/dev/env/nulane-work-control.env"
+if [ ! -r "$base_env" ]; then
+  echo "Missing $base_env" >&2
+  exit 1
+fi
+
+bot_token="$(security find-generic-password -s com.nulane.work.telegram -a bot-token -w)"
+pairing_code="$(security find-generic-password -s com.nulane.work.telegram -a pairing-code -w)"
+runtime_env="$(mktemp /tmp/nulane-work-telegram.XXXXXX)"
+trap 'rm -f "$runtime_env"' EXIT INT TERM
+chmod 600 "$runtime_env"
+
+cp "$base_env" "$runtime_env"
+{
+  printf '\nTELEGRAM_ENABLED=true\n'
+  printf 'TELEGRAM_BOT_TOKEN=%s\n' "$bot_token"
+  printf 'TELEGRAM_PAIRING_CODE=%s\n' "$pairing_code"
+} >> "$runtime_env"
+
+exec docker compose \
+  --env-file "$runtime_env" \
+  --profile telegram \
+  -f docker-compose.control-plane.yml \
+  up --build telegram dispatcher

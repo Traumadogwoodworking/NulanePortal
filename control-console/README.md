@@ -1,54 +1,69 @@
-# Control Console
+# Nulane Work Control
 
-Fresh, registry-first control plane for docudent automation, observability, and admin workflows.
+Local-first operational control plane for Nulane work. It keeps the operator,
+Codex, repositories, Telegram, and supervised services on the same durable
+timeline without OpenClaw or an unbounded model loop.
 
-## Overview
+## What is included
 
-This standalone Next.js app targets operators and automation engineers. It is intentionally small, modular, and built for the App Router, Tailwind, and future automation/AI surfaces.
+- PostgreSQL task state with an append-only event history
+- A Next.js dashboard at `http://127.0.0.1:4310/admin/control`
+- A repository-backed, one-question-at-a-time feature interview
+- `nulane-work`, the CLI Codex uses to report progress and blockers
+- A private Telegram Bot API adapter built with grammY
+- A durable notification dispatcher for approvals and stale-work prompts
+- Docker Compose services owned by the central `nulane-dev` supervisor
 
-## Getting started
+See [the operating model](docs/OPERATING_MODEL.md) and
+[the feature-init standard](docs/FEATURE_INIT_STANDARD.md).
 
-1. `cd control-console`
-2. `npm install` (network access is required to bootstrap dependencies)
-3. `npm run dev`
-4. Visit `http://localhost:3000/admin/control`
+## Daily operation
 
-> Environment hints: set `CONTROL_PLANE_API_BASE_URL` to point at the backend control plane, and provide `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, and `CONTROL_CONSOLE_REDIRECT_URI` for Auth0 readiness. Use `CONTROL_CONSOLE_ADMIN_EMAILS` (comma separated) to seed admins during early testing.
+The recurring runtime is registered centrally. Do not launch a duplicate
+long-running stack directly.
 
-## Architecture
-
-- **App layout:** `app/layout.tsx` wraps pages with `AdminShell`, which surfaces the navigation and nav summary derived from the registry.
-- **Registry-driven surfaces:** `lib/registry` hosts `ControlSurfaceRegistry` and a self-registering `registerDefaultSurfaces` helper. Each surface exports a `ControlSurfaceDefinition` that includes metadata and a render function (§ components/surfaces).
-- **Services:** `lib/services/controlConsoleClient.ts` centralizes backend requests, handles fallbacks, and keeps HTTP concerns in one place.
-- **Auth stubs:** `lib/auth/auth0.ts` codifies the environment names and helper guards that will be wired to Auth0 (or `@auth0/nextjs-auth0`) later.
-- **UI primitives:** `components/ui` houses composable cards, badges, metric grids, and buttons so surfaces stay focused on data and layout.
-
-## Folder expectations
-
-```
-control-console/
-├── app/                 Next.js App Router entrypoints (landing page + admin paths)
-├── components/          Layout shell, reusable UI atoms, and surface definitions
-├── lib/
-│   ├── auth/            Auth0 helpers and session guards
-│   ├── registry/        Registry implementation and surface registration bootstrapping
-│   ├── services/         APIs for control-plane telemetry and blueprint data
-│   └── types/           Shared TypeScript interfaces
-├── styles/              Tailwind globals
-├── package.json         Scripts and dependency declarations
-└── tailwind.config.ts   Tailwind 4 configuration
+```sh
+nulane-dev status
+nulane-dev start nulane-work-control
+nulane-dev logs nulane-work-control
 ```
 
-## Running guidance
+For one-off task and progress commands, use the installed wrapper:
 
-- Use `npm run dev` while pointing `.env.local` to the target backend.
-- Add new ControlSurfaceDefinition exports under `components/surfaces` and register them via `lib/registry/registerDefaultSurfaces.ts` to keep the shell fully registry-driven.
-- Tailwind 4 is configured in `tailwind.config.ts`; run `npm run lint` to keep formatting and linting tidy.
+```sh
+nulane-work list
+nulane-work status OPS-002
+```
 
-## Editing guidance
+## Telegram activation
 
-- Inspect the active surface before editing it.
-- Keep changes small and local unless a larger change is required by the current behavior.
-- Prefer obvious code paths over layered abstractions.
-- Centralize style only when the source of truth is clear and the change is safe.
-- Preserve existing behavior when the task is a simplification, not a redesign.
+Never reuse a token pasted into chat or source control. Revoke it with
+BotFather, generate a new token, and store it in macOS Keychain under:
+
+- service `com.nulane.work.telegram`, account `bot-token`
+- service `com.nulane.work.telegram`, account `pairing-code`
+
+The `scripts/run-telegram` adapter reads both values into a mode-600 temporary
+environment file and deletes that file when the supervised process exits.
+
+Then start the disabled-by-default adapter:
+
+```sh
+nulane-dev start nulane-work-telegram
+```
+
+Send `/start <pairing-code>` to the bot from the one Telegram account that
+should own it. Pairing is closed after the first owner is stored.
+
+## Development checks
+
+```sh
+npm install
+npm run type-check
+npm run lint
+npm run build
+```
+
+Database migrations are currently idempotent SQL in `db/schema.sql`.
+`npm run db:init` applies them and `npm run db:seed` creates the initial
+projects and private Telegram setup task.

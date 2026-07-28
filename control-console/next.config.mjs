@@ -1,8 +1,8 @@
 const nextConfig = {
-  experimental: {
-    appDir: true
-  },
   reactStrictMode: true,
+  turbopack: {
+    root: process.cwd()
+  },
   typescript: {
     tsconfigPath: "./tsconfig.json"
   }
