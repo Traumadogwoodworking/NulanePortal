@@ -1,6 +1,6 @@
 # OPS-005: Finish Work Control execution views and Inspection Trac operations page
 
-Status: verifying
+Status: complete
 Owner: shared
 Scope: Compact the existing Today and task-detail views; finish the Inspection Trac operational readiness page from existing PostgreSQL, service-health, task/event, release, and evidence data; preserve Work Control as a thin execution/evidence console; do not build a planner, calendar, notification platform, aggregation service, or parallel source of truth.
 

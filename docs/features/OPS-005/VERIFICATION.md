@@ -21,6 +21,10 @@ Done means all specified acceptance checks pass against real local PostgreSQL da
 
 Inspection Trac field release remains **BLOCKED**. No on-device testing was performed. Android/iOS installed-build, authenticated SHAP configuration, exact backend acknowledgement, MDM/device inventory and formal field sign-off evidence remain explicitly UNKNOWN or BLOCKED in the page and must be supplied through the existing QA/evidence workflow before any release claim.
 
+### Work Control closure
+
+`OPS-005` was completed in the authoritative Work Control database at `2026-07-29T05:50:32.174Z`. This closes the bounded console/read-model work only; it does not close `INS-001` field readiness or change its NO-GO evidence requirements.
+
 ## 2026-07-29T05:48:24.979Z npm run type-check && npm run lint && npm test
 
 Passed: type generation and TypeScript clean; ESLint clean; 7 tests passed, including Inspection Trac module-surface and UNKNOWN/BLOCKED guardrails.
@@ -32,3 +36,7 @@ Passed: overall BLOCKED, 6 components, 20 QA items, 3 critical notifications, 2 
 ## 2026-07-29T05:48:25.398Z Browser render at desktop and 900px viewport
 
 Passed: Inspection Trac, compact Today, and INS-001 detail captured; QA and status views remain legible at narrow laptop width.
+
+## 2026-07-29T05:50:32.187Z Completion evidence
+
+Implemented and live-verified compact Today/task-detail execution views and the database-backed Inspection Trac operations page with all 20 QA records. Validation passed; field readiness remains BLOCKED and no device testing was performed.
