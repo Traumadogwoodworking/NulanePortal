@@ -17,6 +17,7 @@ import {
   transitionTask
 } from "@lib/work/task-service";
 import type { TaskPriority } from "@lib/work/types";
+import { syncCircleState } from "@lib/circle/sync";
 
 const args = process.argv.slice(2);
 const command = args.shift();
@@ -45,7 +46,8 @@ function usage() {
   answer <TASK_ID> --message "..."
   verify <TASK_ID> --test "..." --result "..."
   complete <TASK_ID> --evidence "..."
-  pause <TASK_ID>`);
+  pause <TASK_ID>
+  sync-circle`);
 }
 
 function timestamp() {
@@ -468,6 +470,10 @@ async function main() {
           2
         )
       );
+      break;
+    }
+    case "sync-circle": {
+      console.log(JSON.stringify(await syncCircleState(), null, 2));
       break;
     }
     default:

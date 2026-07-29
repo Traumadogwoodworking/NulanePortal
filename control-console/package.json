@@ -10,11 +10,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "node --import tsx --test test/*.test.ts",
     "start": "next start",
     "lint": "eslint .",
     "type-check": "next typegen && tsc --noEmit",
     "db:init": "tsx scripts/db-init.ts",
     "db:seed": "tsx scripts/db-seed.ts",
+    "sync:circle": "tsx scripts/sync-circle.ts",
+    "sync:services": "tsx scripts/sync-services.ts",
     "bot": "tsx workers/telegram.ts",
     "dispatcher": "tsx workers/dispatcher.ts",
     "work": "tsx bin/nulane-work.ts"

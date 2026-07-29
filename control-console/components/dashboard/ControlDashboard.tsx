@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import type { CirclePilotPayload } from "@lib/circle/types";
+import type { ServicesOverviewPayload } from "@lib/services/types";
 
 type Task = {
   id: string;
@@ -176,6 +178,8 @@ function eventSummary(event: TaskEvent) {
 
 export function ControlDashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [circle, setCircle] = useState<CirclePilotPayload | null>(null);
+  const [services, setServices] = useState<ServicesOverviewPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [projectCode, setProjectCode] = useState("OPS");
@@ -184,11 +188,21 @@ export function ControlDashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch("/api/overview", { cache: "no-store" });
+      const [response, circleResponse, servicesResponse] = await Promise.all([
+        fetch("/api/overview", { cache: "no-store" }),
+        fetch("/api/circle", { cache: "no-store" }),
+        fetch("/api/services", { cache: "no-store" })
+      ]);
       if (!response.ok) {
         throw new Error(`Overview returned ${response.status}`);
       }
       setOverview((await response.json()) as Overview);
+      if (circleResponse.ok) {
+        setCircle((await circleResponse.json()) as CirclePilotPayload);
+      }
+      if (servicesResponse.ok) {
+        setServices((await servicesResponse.json()) as ServicesOverviewPayload);
+      }
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Control plane unavailable");
@@ -329,6 +343,69 @@ export function ControlDashboard() {
           {error}
         </div>
       ) : null}
+
+      {circle?.today ? (
+        <section className="rounded-[1.75rem] border border-cyan-400/15 bg-cyan-400/5 p-5 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                Circle · Today&apos;s goal
+              </p>
+              <h2 className="mt-2 max-w-4xl text-xl font-semibold leading-relaxed text-white">
+                {circle.today.goal}
+              </h2>
+              <p className="mt-2 max-w-4xl text-sm leading-relaxed text-slate-400">
+                {circle.today.progress_summary}
+              </p>
+            </div>
+            <Link
+              href="/admin/circle"
+              className="shrink-0 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-cyan-950 hover:bg-cyan-200"
+            >
+              Open Circle pilot
+            </Link>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-white/8 bg-black/15 p-3">
+              <p className="text-xs text-slate-500">Next work</p>
+              <p className="mt-1 text-sm text-slate-200">
+                {circle.today.items.find((item) => item.status !== "complete")?.title ??
+                  "Today plan complete"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-black/15 p-3">
+              <p className="text-xs text-slate-500">Needs Review</p>
+              <p className="mt-1 text-xl font-semibold text-amber-100">
+                {circle.needsReview.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-black/15 p-3">
+              <p className="text-xs text-slate-500">Open notifications</p>
+              <p className="mt-1 text-xl font-semibold text-rose-100">
+                {circle.notifications.length}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {(() => {
+        const inspectionApi = services?.monitors.find((monitor) => monitor.slug === "inspection-trac-api");
+        if (!inspectionApi) return null;
+        const state = inspectionApi.latest?.outcome ?? "unknown";
+        const stateTone = state === "ready" ? "border-emerald-400/20 bg-emerald-400/5" : state === "degraded" ? "border-amber-400/25 bg-amber-400/5" : "border-rose-400/25 bg-rose-400/5";
+        return <section className={`rounded-[1.75rem] border p-5 sm:p-6 ${stateTone}`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">Inspection Trac · production API</p>
+              <h2 className="mt-2 text-xl font-semibold text-white">{state === "ready" ? "Ready" : state.replaceAll("_", " ")}</h2>
+              <p className="mt-1 text-sm text-slate-400">HTTP {inspectionApi.latest?.http_status ?? "—"} · {inspectionApi.latest?.latency_ms ?? "—"}ms · {inspectionApi.latest?.summary ?? "No stored probe"}</p>
+              <p className="mt-1 text-xs text-slate-500">24h observed: {inspectionApi.observedUptime24h == null ? "not sampled" : `${inspectionApi.observedUptime24h}% across ${inspectionApi.samples24h} samples`}</p>
+            </div>
+            <Link href="/admin/services/inspection-trac-api" className="shrink-0 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-2.5 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/20">Open API status</Link>
+          </div>
+        </section>;
+      })()}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[

@@ -20,12 +20,30 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             >
               Today
             </Link>
-            <a
-              href="/api/health"
+            <Link
+              href="/admin/circle"
+              className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-4 py-2 font-medium text-cyan-100 transition hover:border-cyan-300/50 hover:text-white"
+            >
+              Circle
+            </Link>
+            <Link
+              href="/admin/services/inspection-trac-api"
               className="rounded-full px-3 py-2 text-slate-400 transition hover:text-white"
             >
-              Health
-            </a>
+              Inspection Trac
+            </Link>
+            <Link
+              href="/admin/services/docudent-api"
+              className="rounded-full px-3 py-2 text-slate-400 transition hover:text-white"
+            >
+              DocuDent
+            </Link>
+            <Link
+              href="/admin/services"
+              className="rounded-full px-3 py-2 text-slate-400 transition hover:text-white"
+            >
+              Services
+            </Link>
           </nav>
         </div>
       </header>

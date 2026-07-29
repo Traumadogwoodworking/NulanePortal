@@ -67,3 +67,41 @@ npm run build
 Database migrations are currently idempotent SQL in `db/schema.sql`.
 `npm run db:init` applies them and `npm run db:seed` creates the initial
 projects and private Telegram setup task.
+
+## Circle pilot
+
+Circle is registered as one product with mobile, API/load engine, and
+portal/dispatch components. The pilot keeps cross-repository release state,
+QA statuses and evidence, review items, Git/runtime history, and the current
+work plan in PostgreSQL.
+
+Synchronize the actual host checkouts, Process Compose runners, redacted log
+excerpts, public health probes, and optional GitLab pipeline metadata with:
+
+```sh
+nulane-work sync-circle
+```
+
+The sync uses the existing local Git repositories and `nulane-dev`; it does not
+start services or create another monitor. Private GitLab pipeline data remains
+explicitly unavailable unless `GITLAB_BASE_URL` and an approved `GITLAB_TOKEN`
+are present in the invoking environment. The Circle dashboard is available at
+`http://127.0.0.1:4310/admin/circle`.
+
+## Product and service status
+
+Inspection Trac and DocuDent are registered alongside Circle. The dashboard
+shows the latest explicit Inspection Trac production API probe. Per-service
+status is at `http://127.0.0.1:4310/admin/services` and includes Circle,
+Inspection Trac, and DocuDent APIs/portals.
+
+Run an on-demand, durable health sample with:
+
+```sh
+npm run sync:services
+```
+
+Observed uptime is calculated only from stored probe samples; it is not
+presented as continuous availability. The UI can also check one service or all
+services explicitly. No additional supervisor, daemon, or monitoring stack is
+created.
