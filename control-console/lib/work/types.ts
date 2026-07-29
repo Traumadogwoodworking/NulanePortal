@@ -34,6 +34,9 @@ export interface WorkTask {
   acceptance_criteria: unknown[];
   required_verification: unknown[];
   blocker: string | null;
+  verification_event_count: number;
+  pending_question_count: number;
+  latest_action: string | null;
   due_at: string | null;
   started_at: string | null;
   completed_at: string | null;

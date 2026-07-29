@@ -131,8 +131,12 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     return <p className="text-slate-500">Loading task…</p>;
   }
 
+  const answeredQuestions = data.questions.filter((question) => question.status === "answered");
+  const verificationEvents = data.events.filter((event) => event.event_type === "verification");
+  const latestEvent = data.events[0];
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-4">
       <Link
         href="/admin/control"
         className="text-sm font-medium text-emerald-300 hover:text-emerald-200"
@@ -140,13 +144,13 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         ← Back to Today
       </Link>
 
-      <section className="rounded-[2rem] border border-white/8 bg-[#10131a] p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <section className="rounded-xl border border-white/8 bg-[#10131a] p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="font-mono text-sm font-semibold text-emerald-300">
               {data.task.public_id}
             </p>
-            <h1 className="mt-3 max-w-4xl text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            <h1 className="mt-1 max-w-4xl text-2xl font-semibold tracking-tight text-white sm:text-3xl">
               {data.task.title}
             </h1>
             <p className="mt-3 text-sm text-slate-400">
@@ -159,12 +163,12 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           </span>
         </div>
         {data.task.description ? (
-          <p className="mt-6 max-w-3xl leading-relaxed text-slate-300">
+          <p className="mt-4 max-w-4xl text-sm leading-relaxed text-slate-300">
             {data.task.description}
           </p>
         ) : null}
         {data.task.allowed_scope ? (
-          <div className="mt-5 rounded-xl border border-white/8 bg-black/20 p-4">
+          <div className="mt-4 rounded-lg border border-white/8 bg-black/20 p-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Allowed scope
             </p>
@@ -174,11 +178,11 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           </div>
         ) : null}
         {data.task.blocker ? (
-          <div className="mt-5 rounded-xl border border-rose-400/25 bg-rose-400/8 p-4 text-sm leading-relaxed text-rose-100">
+          <div className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/8 p-3 text-sm leading-relaxed text-rose-100">
             <strong>Blocked:</strong> {data.task.blocker}
           </div>
         ) : null}
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           <button
             disabled={saving}
             onClick={() => void changeStatus("working")}
@@ -203,19 +207,28 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         </div>
       </section>
 
+      <section className="grid overflow-hidden rounded-xl border border-white/8 bg-[#10131a] sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Current state", data.task.status.replaceAll("_", " ")],
+          ["Next action", data.pendingQuestion ? `Answer question ${data.pendingQuestion.sequence}` : data.task.blocker ?? "Record verification evidence"],
+          ["Evidence", `${verificationEvents.length} verification record${verificationEvents.length === 1 ? "" : "s"}`],
+          ["Last update", latestEvent ? new Date(latestEvent.created_at).toLocaleString() : "Not recorded"]
+        ].map(([label, value]) => <div key={label} className="border-b border-r border-white/8 px-3 py-2.5"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1 line-clamp-2 text-xs font-medium text-slate-200">{value}</p></div>)}
+      </section>
+
       {error ? (
         <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
           {error}
         </div>
       ) : null}
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-        <div className="rounded-[1.75rem] border border-white/8 bg-[#10131a] p-5 sm:p-6">
+      <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+        <div className="rounded-xl border border-white/8 bg-[#10131a] p-4">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">
             Feature interview
           </p>
           <p className="mt-1 text-xs text-slate-600">
-            One answer at a time. These answers become the feature contract.
+            Answers are the durable feature contract; evidence belongs on the timeline.
           </p>
 
           {data.pendingQuestion ? (
@@ -266,10 +279,10 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             </div>
           )}
 
-          <div className="mt-7 space-y-3">
-            {data.questions
-              .filter((question) => question.status === "answered")
-              .map((question) => (
+          <details className="mt-5" open={answeredQuestions.length <= 3}>
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-slate-400">Answered contract decisions ({answeredQuestions.length})</summary>
+            <div className="mt-3 space-y-2">
+            {answeredQuestions.map((question) => (
                 <details
                   key={question.id}
                   className="rounded-xl border border-white/8 bg-black/15 p-4"
@@ -282,15 +295,16 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   </p>
                 </details>
               ))}
-          </div>
+            </div>
+          </details>
         </div>
 
-        <div className="rounded-[1.75rem] border border-white/8 bg-[#10131a] p-5 sm:p-6">
+        <div className="rounded-xl border border-white/8 bg-[#10131a] p-4">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">
             Evidence timeline
           </p>
-          <div className="mt-5 space-y-5 border-l border-white/10 pl-5">
-            {data.events.map((event) => (
+          <div className="mt-4 space-y-4 border-l border-white/10 pl-5">
+            {data.events.slice(0, 12).map((event) => (
               <div key={event.id} className="relative">
                 <span className="absolute -left-[25px] top-1.5 h-2 w-2 rounded-full bg-emerald-400 ring-4 ring-[#10131a]" />
                 <p className="text-sm leading-relaxed text-slate-300">
@@ -303,6 +317,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               </div>
             ))}
           </div>
+          {data.events.length > 12 ? <details className="mt-4 text-xs text-slate-500"><summary className="cursor-pointer">Show {data.events.length - 12} older events</summary><div className="mt-3 space-y-3">{data.events.slice(12).map((event) => <p key={event.id} className="text-slate-400">{detail(event)}</p>)}</div></details> : null}
         </div>
       </section>
     </div>

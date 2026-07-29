@@ -16,7 +16,31 @@ const TASK_SELECT = `
     p.code AS project_code,
     p.name AS project_name,
     r.name AS repository_name,
-    COALESCE(r.local_path, p.repository_path) AS repository_path
+    COALESCE(r.local_path, p.repository_path) AS repository_path,
+    (
+      SELECT count(*)::int
+      FROM task_events evidence_event
+      WHERE evidence_event.task_id = t.id
+        AND evidence_event.event_type = 'verification'
+    ) AS verification_event_count,
+    (
+      SELECT count(*)::int
+      FROM questions pending_question
+      WHERE pending_question.task_id = t.id
+        AND pending_question.status = 'pending'
+    ) AS pending_question_count,
+    COALESCE(
+      t.blocker,
+      (
+        SELECT NULLIF(progress_event.payload->>'message', '')
+        FROM task_events progress_event
+        WHERE progress_event.task_id = t.id
+          AND progress_event.event_type = 'progress'
+        ORDER BY progress_event.created_at DESC
+        LIMIT 1
+      ),
+      t.description
+    ) AS latest_action
   FROM tasks t
   JOIN projects p ON p.id = t.project_id
   LEFT JOIN repositories r ON r.id = t.repository_id
