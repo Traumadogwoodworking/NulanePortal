@@ -27,7 +27,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               Circle
             </Link>
             <Link
-              href="/admin/services/inspection-trac-api"
+              href="/admin/inspection-trac"
               className="rounded-full px-3 py-2 text-slate-400 transition hover:text-white"
             >
               Inspection Trac
