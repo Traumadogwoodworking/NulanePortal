@@ -12,6 +12,7 @@ import {
   getPendingQuestion,
   getTask,
   listTasks,
+  recordVerification,
   setBlocker,
   startInterview,
   transitionTask
@@ -425,10 +426,7 @@ async function main() {
           "verify requires TASK_ID, --test, and --result"
         );
       }
-      await transitionTask(taskId, "verifying", "cli", { test, result });
-      const task = await addProgress(taskId, `Verification: ${test}`, "cli", {
-        result
-      });
+      const task = await recordVerification(taskId, test, result, "cli");
       await appendFeatureRecord({
         taskId,
         repositoryPath: task.repository_path,

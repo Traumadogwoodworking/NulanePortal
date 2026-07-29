@@ -9,6 +9,8 @@ import type {
   WorkQuestion,
   WorkTask
 } from "@lib/work/types";
+import { verificationEvidenceSql } from "@lib/work/evidence-sql";
+import { assertTaskTransitionAllowed } from "@lib/work/transitions";
 
 const TASK_SELECT = `
   SELECT
@@ -21,7 +23,7 @@ const TASK_SELECT = `
       SELECT count(*)::int
       FROM task_events evidence_event
       WHERE evidence_event.task_id = t.id
-        AND evidence_event.event_type = 'verification'
+        AND ${verificationEvidenceSql("evidence_event")}
     ) AS verification_event_count,
     (
       SELECT count(*)::int
@@ -228,6 +230,8 @@ export async function transitionTask(
     if (!current) {
       throw new Error(`Task ${publicId} was not found`);
     }
+    assertTaskTransitionAllowed(current.status, status);
+    if (current.status === status) return current;
 
     if (status === "working" || status === "complete") {
       const pending = await client.query<{ count: string }>(
@@ -274,6 +278,64 @@ export async function transitionTask(
   });
 }
 
+export async function recordVerification(
+  publicId: string,
+  test: string,
+  result: string,
+  actorType: string
+) {
+  const normalizedTest = test.trim();
+  const normalizedResult = result.trim();
+  if (!normalizedTest || !normalizedResult) {
+    throw new Error(`Task ${publicId} requires a verification test and result`);
+  }
+
+  return withTransaction(async (client) => {
+    const current = await getTask(publicId, client);
+    if (!current) {
+      throw new Error(`Task ${publicId} was not found`);
+    }
+    assertTaskTransitionAllowed(current.status, "verifying");
+
+    if (current.status !== "verifying") {
+      await client.query(
+        `UPDATE tasks
+         SET status = 'verifying',
+             blocker = NULL,
+             last_activity_at = now(),
+             updated_at = now()
+         WHERE id = $1`,
+        [current.id]
+      );
+      await appendTaskEvent(
+        current.id,
+        "status_changed",
+        actorType,
+        { from: current.status, to: "verifying" },
+        null,
+        client
+      );
+    } else {
+      await client.query(
+        `UPDATE tasks
+         SET last_activity_at = now(), updated_at = now()
+         WHERE id = $1`,
+        [current.id]
+      );
+    }
+
+    await appendTaskEvent(
+      current.id,
+      "verification",
+      actorType,
+      { test: normalizedTest, result: normalizedResult },
+      null,
+      client
+    );
+    return getTask(publicId, client);
+  });
+}
+
 export async function addProgress(
   publicId: string,
   message: string,
@@ -313,6 +375,7 @@ export async function setBlocker(
     if (!task) {
       throw new Error(`Task ${publicId} was not found`);
     }
+    assertTaskTransitionAllowed(task.status, "blocked");
     await client.query(
       `UPDATE tasks
        SET status = 'blocked',
@@ -340,6 +403,7 @@ export async function startInterview(publicId: string, actorType = "system") {
     if (!task) {
       throw new Error(`Task ${publicId} was not found`);
     }
+    assertTaskTransitionAllowed(task.status, "interviewing");
 
     const existing = await client.query<WorkQuestion>(
       `SELECT * FROM questions WHERE task_id = $1 ORDER BY sequence`,

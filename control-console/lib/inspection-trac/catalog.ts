@@ -20,3 +20,9 @@ export const SHAP_MODULE_EVIDENCE_STATES = {
   backend: "BLOCKED",
   portal: "BLOCKED"
 } as const;
+
+export const INSPECTION_TRAC_PHYSICAL_GATE = {
+  state: "BLOCKED",
+  summary:
+    "Field approval requires approved installed Android and iOS builds plus an authorized physical workflow result. That complete gate is not recorded; no device testing is included in this run."
+} as const;

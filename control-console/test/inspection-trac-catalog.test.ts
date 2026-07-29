@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  INSPECTION_TRAC_PHYSICAL_GATE,
   INSPECTION_TRAC_SHAP_MODULES,
   SHAP_MODULE_EVIDENCE_STATES
 } from "../lib/inspection-trac/catalog";
@@ -10,6 +11,12 @@ test("Inspection Trac keeps every requested SHAP readiness surface visible", () 
     "Damage Submission", "RSA", "24-Hour Inspection", "Type 02", "Type 04",
     "Type 06", "Type 07", "Type 08", "9x / generic"
   ]);
+});
+
+test("the shared physical-device gate is explicit and summarized once", () => {
+  assert.equal(INSPECTION_TRAC_PHYSICAL_GATE.state, "BLOCKED");
+  assert.match(INSPECTION_TRAC_PHYSICAL_GATE.summary, /Android and iOS/);
+  assert.match(INSPECTION_TRAC_PHYSICAL_GATE.summary, /no device testing/i);
 });
 
 test("unknown configuration cannot be represented as field readiness", () => {

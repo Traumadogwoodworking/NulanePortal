@@ -1,44 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-
-type Task = {
-  id: string;
-  public_id: string;
-  project_code: string;
-  project_name: string;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: "P0" | "P1" | "P2" | "P3";
-  owner: string;
-  blocker: string | null;
-  latest_action: string | null;
-  verification_event_count: number;
-  pending_question_count: number;
-  due_at: string | null;
-  completed_at: string | null;
-  last_activity_at: string;
-};
-
-type TaskEvent = {
-  id: string;
-  public_id: string;
-  event_type: string;
-  actor_type: string;
-  payload: Record<string, unknown>;
-  created_at: string;
-};
-
-type Overview = {
-  generatedAt: string;
-  tasks: Task[];
-  events: TaskEvent[];
-  projects: Array<{ code: string; name: string; active: boolean }>;
-};
-
-type Filter = "open" | "p0" | "due" | "blocked" | "approval" | "evidence" | "complete";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import {
+  dueLabel,
+  filterTodayTasks,
+  getTodayCounts,
+  LatestRequestGate,
+  parseOverviewPayload,
+  type TodayFilter,
+  type TodayTask,
+  type WorkOverview
+} from "@lib/work/today";
 
 const STATUS_LABELS: Record<string, string> = {
   queued: "Queued",
@@ -74,7 +54,12 @@ function relativeTime(value: string) {
   return `${Math.floor(seconds / 86_400)}d`;
 }
 
-function eventSummary(event: TaskEvent) {
+function updatedLabel(value: string) {
+  const age = relativeTime(value);
+  return age === "now" ? "Updated now" : `Updated ${age} ago`;
+}
+
+function eventSummary(event: WorkOverview["events"][number]) {
   if (event.event_type === "progress" && typeof event.payload.message === "string") {
     return event.payload.message;
   }
@@ -90,89 +75,81 @@ function eventSummary(event: TaskEvent) {
   return event.event_type.replaceAll("_", " ");
 }
 
-function dueLabel(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  const now = new Date();
-  if (date.toDateString() === now.toDateString()) return "Today";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function isDueToday(task: Task) {
-  return Boolean(task.due_at && new Date(task.due_at).toDateString() === new Date().toDateString());
-}
-
-function isMissingEvidence(task: Task) {
-  return task.status !== "complete" && task.verification_event_count === 0;
+function payloadError(payload: unknown, fallback: string) {
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    "error" in payload &&
+    typeof payload.error === "string"
+  ) {
+    return payload.error;
+  }
+  return fallback;
 }
 
 export function ControlDashboard() {
-  const [overview, setOverview] = useState<Overview | null>(null);
+  const [overview, setOverview] = useState<WorkOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<Filter>("open");
+  const [filter, setFilter] = useState<TodayFilter>("open");
   const [title, setTitle] = useState("");
   const [projectCode, setProjectCode] = useState("OPS");
   const [priority, setPriority] = useState("P2");
   const [creating, setCreating] = useState(false);
+  const requestGate = useRef(new LatestRequestGate());
+  const activeRequest = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
+    const requestId = requestGate.current.begin();
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setRefreshing(true);
     try {
-      const response = await fetch("/api/overview", { cache: "no-store" });
-      const payload = (await response.json()) as Overview & { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? `Overview returned ${response.status}`);
+      const response = await fetch("/api/overview", {
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const rawPayload: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          payloadError(rawPayload, `Overview returned ${response.status}`)
+        );
+      }
+      const payload = parseOverviewPayload(rawPayload);
+      if (!requestGate.current.isCurrent(requestId)) return;
       setOverview(payload);
       setError(null);
     } catch (cause) {
+      if (!requestGate.current.isCurrent(requestId)) return;
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
       setError(cause instanceof Error ? cause.message : "Control plane unavailable");
     } finally {
-      setRefreshing(false);
+      if (requestGate.current.isCurrent(requestId)) setRefreshing(false);
+      if (activeRequest.current === controller) activeRequest.current = null;
     }
   }, []);
 
   useEffect(() => {
+    const gate = requestGate.current;
     const initial = window.setTimeout(() => void refresh(), 0);
     const timer = window.setInterval(() => void refresh(), 15_000);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(timer);
+      gate.invalidate();
+      activeRequest.current?.abort();
     };
   }, [refresh]);
 
+  const operationalNow = overview?.generatedAt ?? new Date().toISOString();
   const counts = useMemo(() => {
-    const tasks = overview?.tasks ?? [];
-    return {
-      open: tasks.filter((task) => !["complete", "cancelled"].includes(task.status)).length,
-      p0: tasks.filter((task) => task.priority === "P0" && task.status !== "complete").length,
-      due: tasks.filter(isDueToday).length,
-      blocked: tasks.filter((task) => ["blocked", "failed"].includes(task.status)).length,
-      approval: tasks.filter((task) => task.status === "approval_required" || task.pending_question_count > 0).length,
-      evidence: tasks.filter(isMissingEvidence).length,
-      complete: tasks.filter((task) => task.status === "complete" && task.completed_at &&
-        new Date(task.completed_at).toDateString() === new Date().toDateString()).length
-    };
-  }, [overview]);
+    return getTodayCounts(overview?.tasks ?? [], operationalNow);
+  }, [operationalNow, overview]);
 
   const visibleTasks = useMemo(() => {
-    const tasks = overview?.tasks ?? [];
-    const filtered = tasks.filter((task) => {
-      if (filter === "open") return !["complete", "cancelled"].includes(task.status);
-      if (filter === "p0") return task.priority === "P0" && task.status !== "complete";
-      if (filter === "due") return isDueToday(task);
-      if (filter === "blocked") return ["blocked", "failed"].includes(task.status);
-      if (filter === "approval") return task.status === "approval_required" || task.pending_question_count > 0;
-      if (filter === "evidence") return isMissingEvidence(task);
-      return task.status === "complete";
-    });
-    return filtered.sort((a, b) => {
-      const priority = Number(a.priority.slice(1)) - Number(b.priority.slice(1));
-      if (priority !== 0) return priority;
-      if (a.status === "blocked" && b.status !== "blocked") return -1;
-      if (b.status === "blocked" && a.status !== "blocked") return 1;
-      return new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime();
-    });
-  }, [filter, overview]);
+    return filterTodayTasks(overview?.tasks ?? [], filter, operationalNow);
+  }, [filter, operationalNow, overview]);
 
   async function createFeature(event: FormEvent) {
     event.preventDefault();
@@ -184,7 +161,7 @@ export function ControlDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectCode, title: title.trim(), priority, owner: "shared", status: "interviewing" })
       });
-      const payload = (await response.json()) as { task?: Task; error?: string };
+      const payload = (await response.json()) as { task?: TodayTask; error?: string };
       if (!response.ok || !payload.task) throw new Error(payload.error ?? "Task creation failed");
       const questionResponse = await fetch(`/api/tasks/${payload.task.public_id}/questions`, {
         method: "POST",
@@ -201,7 +178,7 @@ export function ControlDashboard() {
     }
   }
 
-  const summary: Array<{ id: Filter; label: string; value: number }> = [
+  const summary: Array<{ id: TodayFilter; label: string; value: number }> = [
     { id: "p0", label: "P0", value: counts.p0 },
     { id: "due", label: "Due today", value: counts.due },
     { id: "blocked", label: "Blocked", value: counts.blocked },
@@ -218,9 +195,9 @@ export function ControlDashboard() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">Today</h1>
           <p className="mt-1 text-sm text-slate-500">P0, blockers, decisions and missing evidence from PostgreSQL.</p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
           <Link href="/admin/inspection-trac" className="font-semibold text-cyan-200 hover:text-cyan-100">Inspection Trac operations</Link>
-          <span>{overview ? `Updated ${relativeTime(overview.generatedAt)} ago` : "Loading current work…"}</span>
+          <span>{overview ? updatedLabel(overview.generatedAt) : "Loading current work…"}</span>
           <button type="button" onClick={() => void refresh()} disabled={refreshing} className="rounded-lg border border-white/10 px-3 py-1.5 font-medium text-slate-300 hover:border-emerald-400/40 disabled:opacity-50">
             {refreshing ? "Refreshing…" : "Refresh"}
           </button>
@@ -285,7 +262,7 @@ export function ControlDashboard() {
                     <td className="px-3 py-2 align-top capitalize text-slate-400">{task.owner}</td>
                     <td className="px-3 py-2 align-top"><span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${STATUS_TONES[task.status] ?? "border-white/10 bg-white/5 text-slate-300"}`}>{STATUS_LABELS[task.status] ?? task.status}</span></td>
                     <td className={`max-w-[360px] px-3 py-2 align-top leading-snug ${task.blocker ? "text-rose-100" : "text-slate-400"}`}><span className="line-clamp-2">{task.latest_action ?? "No next action recorded."}</span></td>
-                    <td className="whitespace-nowrap px-3 py-2 align-top text-slate-400">{dueLabel(task.due_at)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 align-top text-slate-400">{dueLabel(task.due_at, operationalNow)}</td>
                     <td className="whitespace-nowrap px-3 py-2 align-top">{task.verification_event_count ? <span className="text-emerald-300">{task.verification_event_count} recorded</span> : <span className="text-amber-200">Missing</span>}</td>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-slate-500">{relativeTime(task.last_activity_at)} ago</td>
                   </tr>

@@ -5,10 +5,12 @@ import type {
   InspectionTracComponent,
   InspectionTracNotification,
   InspectionTracOperationsPayload,
+  InspectionTracQaEvidence,
   InspectionTracQaItem,
   InspectionTracRelease,
   InspectionTracVerification
 } from "@lib/inspection-trac/types";
+import { verificationEvidenceSql } from "@lib/work/evidence-sql";
 
 export async function getInspectionTracOperations(): Promise<InspectionTracOperationsPayload> {
   const projectResult = await query<{ id: string; code: string; name: string; description: string | null }>(
@@ -17,7 +19,17 @@ export async function getInspectionTracOperations(): Promise<InspectionTracOpera
   const project = projectResult.rows[0];
   if (!project) throw new Error("Inspection Trac project is not registered");
 
-  const [componentsResult, releasesResult, releaseComponentsResult, qaResult, notificationsResult, verificationsResult, services, tasks] = await Promise.all([
+  const [
+    componentsResult,
+    releasesResult,
+    releaseComponentsResult,
+    qaResult,
+    qaEvidenceResult,
+    notificationsResult,
+    verificationsResult,
+    services,
+    tasks
+  ] = await Promise.all([
     query<InspectionTracComponent>(
       `SELECT c.id, c.code, c.name, c.component_type, c.production_url, c.authoritative_branch,
         CASE WHEN s.id IS NULL THEN NULL ELSE jsonb_build_object(
@@ -65,7 +77,17 @@ export async function getInspectionTracOperations(): Promise<InspectionTracOpera
          FROM qa_evidence e WHERE e.qa_item_id = q.id
        ) evidence ON true
        WHERE q.project_id = $1
-       ORDER BY q.display_order, q.title`,
+      ORDER BY q.display_order, q.title`,
+      [project.id]
+    ),
+    query<InspectionTracQaEvidence>(
+      `SELECT e.id::text, e.qa_item_id::text, q.slug AS qa_item_slug,
+         q.title AS qa_item_title, e.evidence_type, e.summary,
+         e.build_device, e.tester, e.captured_at::text, e.created_at::text
+       FROM qa_evidence e
+       JOIN qa_items q ON q.id = e.qa_item_id
+       WHERE q.project_id = $1
+       ORDER BY e.captured_at DESC, e.created_at DESC, e.id DESC`,
       [project.id]
     ),
     query<InspectionTracNotification>(
@@ -78,7 +100,7 @@ export async function getInspectionTracOperations(): Promise<InspectionTracOpera
     query<InspectionTracVerification>(
       `SELECT e.id::text, e.event_type, e.actor_type, e.payload, e.created_at, t.public_id AS task_public_id
        FROM task_events e JOIN tasks t ON t.id = e.task_id
-       WHERE t.project_id = $1 AND e.event_type IN ('verification', 'progress', 'blocked')
+       WHERE t.project_id = $1 AND ${verificationEvidenceSql("e")}
        ORDER BY e.created_at DESC LIMIT 24`,
       [project.id]
     ),
@@ -121,6 +143,7 @@ export async function getInspectionTracOperations(): Promise<InspectionTracOpera
     components: componentsResult.rows,
     releases,
     qaItems: qaResult.rows,
+    qaEvidence: qaEvidenceResult.rows,
     notifications: notificationsResult.rows,
     tasks: inspectionTasks,
     verifications: verificationsResult.rows,

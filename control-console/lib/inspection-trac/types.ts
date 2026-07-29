@@ -55,6 +55,19 @@ export interface InspectionTracQaItem {
   latest_evidence_at: string | null;
 }
 
+export interface InspectionTracQaEvidence {
+  id: string;
+  qa_item_id: string;
+  qa_item_slug: string;
+  qa_item_title: string;
+  evidence_type: string;
+  summary: string;
+  build_device: string | null;
+  tester: string | null;
+  captured_at: string;
+  created_at: string;
+}
+
 export interface InspectionTracNotification {
   id: string;
   severity: string;
@@ -92,6 +105,7 @@ export interface InspectionTracOperationsPayload {
   components: InspectionTracComponent[];
   releases: InspectionTracRelease[];
   qaItems: InspectionTracQaItem[];
+  qaEvidence: InspectionTracQaEvidence[];
   notifications: InspectionTracNotification[];
   tasks: InspectionTracTask[];
   verifications: InspectionTracVerification[];

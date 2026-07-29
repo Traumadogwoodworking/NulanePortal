@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  isVerificationEvidenceEvent,
+  verificationEvidenceDetails
+} from "@lib/work/evidence";
+import { isTerminalTaskStatus } from "@lib/work/transitions";
 
 type TaskDetailPayload = {
   task: {
@@ -42,6 +47,10 @@ type TaskDetailPayload = {
 };
 
 function detail(event: TaskDetailPayload["events"][number]) {
+  const verification = verificationEvidenceDetails(event);
+  if (verification) {
+    return `Verification: ${verification.test} — ${verification.result}`;
+  }
   if (typeof event.payload.message === "string") return event.payload.message;
   if (event.event_type === "status_changed") {
     return `${String(event.payload.from)} → ${String(event.payload.to)}`;
@@ -132,8 +141,9 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   }
 
   const answeredQuestions = data.questions.filter((question) => question.status === "answered");
-  const verificationEvents = data.events.filter((event) => event.event_type === "verification");
+  const verificationEvents = data.events.filter(isVerificationEvidenceEvent);
   const latestEvent = data.events[0];
+  const isTerminal = isTerminalTaskStatus(data.task.status);
 
   return (
     <div className="space-y-4">
@@ -182,35 +192,42 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             <strong>Blocked:</strong> {data.task.blocker}
           </div>
         ) : null}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            disabled={saving}
-            onClick={() => void changeStatus("working")}
-            className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 disabled:opacity-40"
-          >
-            Start work
-          </button>
-          <button
-            disabled={saving}
-            onClick={() => void changeStatus("paused")}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-40"
-          >
-            Pause
-          </button>
-          <button
-            disabled={saving}
-            onClick={() => void changeStatus("verifying")}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-40"
-          >
-            Begin verification
-          </button>
-        </div>
+        {isTerminal ? (
+          <p className="mt-4 rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-sm text-slate-400">
+            This task is read-only because it is {data.task.status}. New work
+            requires an explicit operator reopen workflow.
+          </p>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              disabled={saving}
+              onClick={() => void changeStatus("working")}
+              className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 disabled:opacity-40"
+            >
+              Start work
+            </button>
+            <button
+              disabled={saving}
+              onClick={() => void changeStatus("paused")}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-40"
+            >
+              Pause
+            </button>
+            <button
+              disabled={saving}
+              onClick={() => void changeStatus("verifying")}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-40"
+            >
+              Begin verification
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="grid overflow-hidden rounded-xl border border-white/8 bg-[#10131a] sm:grid-cols-2 xl:grid-cols-4">
         {[
           ["Current state", data.task.status.replaceAll("_", " ")],
-          ["Next action", data.pendingQuestion ? `Answer question ${data.pendingQuestion.sequence}` : data.task.blocker ?? "Record verification evidence"],
+          ["Next action", isTerminal ? `No further action — task ${data.task.status}` : data.pendingQuestion ? `Answer question ${data.pendingQuestion.sequence}` : data.task.blocker ?? "Record verification evidence"],
           ["Evidence", `${verificationEvents.length} verification record${verificationEvents.length === 1 ? "" : "s"}`],
           ["Last update", latestEvent ? new Date(latestEvent.created_at).toLocaleString() : "Not recorded"]
         ].map(([label, value]) => <div key={label} className="border-b border-r border-white/8 px-3 py-2.5"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1 line-clamp-2 text-xs font-medium text-slate-200">{value}</p></div>)}
@@ -231,7 +248,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             Answers are the durable feature contract; evidence belongs on the timeline.
           </p>
 
-          {data.pendingQuestion ? (
+          {data.pendingQuestion && !isTerminal ? (
             <form onSubmit={submitAnswer} className="mt-5">
               <p className="font-mono text-xs text-emerald-300">
                 Question {data.pendingQuestion.sequence}
@@ -275,7 +292,9 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             </form>
           ) : (
             <div className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-4 text-sm text-emerald-100">
-              No unanswered interview question.
+              {isTerminal
+                ? `Task ${data.task.status}; interview changes are read-only.`
+                : "No unanswered interview question."}
             </div>
           )}
 
