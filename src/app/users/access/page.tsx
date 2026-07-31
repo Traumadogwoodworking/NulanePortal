@@ -22,7 +22,11 @@ import type {
 const FACILITY_ALL = "all";
 
 export default function AccessPage() {
-  const { organizationId, isFacilityAdmin: isOrgAdmin } = usePortalSession();
+  const {
+    organizationId,
+    isFacilityAdmin: isOrgAdmin,
+    selectedOrganizationScopeKey,
+  } = usePortalSession();
   const [roles, setRoles] = useState<RoleCatalog[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);
@@ -41,11 +45,11 @@ export default function AccessPage() {
     setStatusMessage(null);
     try {
       const [userList, roleList, membershipList, locationMembers, facilityList] = await Promise.all([
-        UsersAdapter.getUsers(organizationId),
+        UsersAdapter.getUsers(organizationId, selectedOrganizationScopeKey),
         UsersAdapter.getRoles(organizationId),
         UsersAdapter.getMemberships(organizationId),
         UsersAdapter.getLocationMemberships(organizationId),
-        FacilitiesAdapter.getFacilities(organizationId),
+        FacilitiesAdapter.getFacilities(organizationId, selectedOrganizationScopeKey),
       ]);
       setUsers(userList);
       setRoles(roleList);
@@ -59,7 +63,7 @@ export default function AccessPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, selectedOrganizationScopeKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -67,6 +71,11 @@ export default function AccessPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadAccessData]);
+
+  useEffect(() => {
+    setFacilityFilter(FACILITY_ALL);
+    setSelectedUserId(null);
+  }, [selectedOrganizationScopeKey]);
 
   const userLookup = useMemo(() => {
     return users.reduce<Record<string, UserSummary>>((acc, user) => {
@@ -148,8 +157,8 @@ export default function AccessPage() {
             </div>
           }
         >
-          <div className="grid gap-4 lg:grid-cols-4">
-            <div className="lg:col-span-3">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-4">
+            <div className="min-w-0 lg:col-span-3">
                {isLoading ? (
                  <div className="py-20 flex justify-center"><Fingerprint className="w-8 h-8 animate-pulse text-slate-400" /></div>
                ) : statusMessage ? (
@@ -176,7 +185,7 @@ export default function AccessPage() {
                                   </div>
                                   <div className="flex flex-col min-w-0">
                                      <span className={`text-xs font-bold truncate ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-900 dark:text-white'}`}>{role.name}</span>
-                                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight truncate">{role.description}</span>
+                                     <span className="text-xs text-slate-500 font-bold uppercase tracking-tight truncate">{role.description}</span>
                                   </div>
                                </div>
                             </td>
@@ -186,7 +195,7 @@ export default function AccessPage() {
                             <td className="px-4 py-2">
                                <div className="flex flex-wrap gap-1">
                                   {role.permissions.map(p => (
-                                     <span key={p} className="px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-800/50 text-[8px] font-black text-slate-500 uppercase tracking-widest border border-slate-100 dark:border-slate-800">
+                                     <span key={p} className="px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-800/50 text-xs font-black text-slate-500 uppercase tracking-widest border border-slate-100 dark:border-slate-800">
                                         {p}
                                      </span>
                                   ))}
@@ -203,46 +212,46 @@ export default function AccessPage() {
                )}
             </div>
 
-            <aside className="space-y-4">
+            <aside className="min-w-0 space-y-4">
               <PageSection title="Role Context" description="Impacted identities." variant="panel">
                  {selectedRole ? (
                     <div className="space-y-4">
                       <header className="space-y-1">
                          <p className="text-[14px] font-black text-slate-950 dark:text-white uppercase tracking-tight leading-none">{selectedRole.name}</p>
-                         <p className="text-[10px] font-bold text-slate-500 uppercase">{selectedRole.description}</p>
+                         <p className="text-xs font-bold text-slate-500 uppercase">{selectedRole.description}</p>
                       </header>
                       <div className="space-y-2">
-                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Active Impact</p>
+                         <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Active Impact</p>
                          <div className="space-y-1.5">
                             {impactedUsers.length > 0 ? (
                               impactedUsers.map((user) => (
                                 <div key={user.id} className="p-2 rounded-lg bg-slate-50/50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between group/row">
                                    <div className="min-w-0">
-                                      <p className="text-[10px] font-black text-slate-900 dark:text-white leading-none truncate">{user.name}</p>
-                                      <p className="text-[8px] text-slate-500 font-bold mt-0.5 uppercase tracking-tighter truncate">{user.email}</p>
+                                      <p className="text-xs font-black text-slate-900 dark:text-white leading-none truncate">{user.name}</p>
+                                      <p className="text-xs text-slate-500 font-bold mt-0.5 uppercase tracking-tighter truncate">{user.email}</p>
                                    </div>
                                    <ChevronRight className="w-2.5 h-2.5 text-slate-300" />
                                 </div>
                               ))
                             ) : (
-                              <p className="text-[10px] font-bold text-slate-400 px-1 italic">No active assignments</p>
+                              <p className="text-xs font-bold text-slate-400 px-1 italic">No active assignments</p>
                             )}
                          </div>
                       </div>
                     </div>
                  ) : (
-                    <p className="text-[10px] font-bold text-slate-500 text-center py-6">Select a group to review</p>
+                    <p className="text-xs font-bold text-slate-500 text-center py-6">Select a group to review</p>
                  )}
               </PageSection>
 
               <PageSection title="Identity Assignment" description="Calibrate user permissions." variant="panel">
                   <div className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">Target User</label>
+                      <label className="text-xs font-black uppercase tracking-widest text-slate-400 px-1">Target User</label>
                       <select
                         value={selectedUserId ?? ""}
                         onChange={(e) => setSelectedUserId(e.target.value)}
-                        className="w-full h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[11px] font-black text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        className="w-full h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-black text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-300"
                       >
                         {users.map((user) => (
                           <option key={user.id} value={user.id}>
@@ -260,8 +269,8 @@ export default function AccessPage() {
                                 <ShieldCheck className="w-4 h-4" />
                              </div>
                              <div className="min-w-0">
-                                <p className="text-[11px] font-black text-slate-950 dark:text-white uppercase leading-none truncate">{selectedUser.name}</p>
-                                <p className="text-[9px] text-slate-500 font-bold mt-1 uppercase tracking-tighter truncate">{selectedUser.email}</p>
+                                <p className="text-xs font-black text-slate-950 dark:text-white uppercase leading-none truncate">{selectedUser.name}</p>
+                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-tighter truncate">{selectedUser.email}</p>
                              </div>
                           </div>
                           <div className="mt-3 flex gap-1">
@@ -271,18 +280,18 @@ export default function AccessPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Registry Scopes</p>
+                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Registry Scopes</p>
                           {selectedUserLocations.length > 0 ? (
                             <div className="grid gap-1.5">
                               {selectedUserLocations.map((f) => (
                                 <div key={f.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                                   <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{f.name}</span>
+                                   <span className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{f.name}</span>
                                    <StatusBadge label={f.region ?? "GLB"} tone="neutral" />
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[9px] font-bold text-slate-400 px-1 italic">Public registry access only</p>
+                            <p className="text-xs font-bold text-slate-400 px-1 italic">Public registry access only</p>
                           )}
                         </div>
 
@@ -290,20 +299,20 @@ export default function AccessPage() {
                           <button
                             onClick={handleAssignFacilityToUser}
                             disabled={!isOrgAdmin || facilityFilter === FACILITY_ALL}
-                          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-950 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-md disabled:opacity-30 disabled:grayscale"
+                          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-950 dark:bg-white text-white dark:text-slate-900 text-xs font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-md disabled:opacity-30 disabled:grayscale"
                           >
                             <UserPlus className="w-3.5 h-3.5" />
                             Apply Filter Access
                           </button>
                           {operationMessage && (
-                            <p className="text-[8px] font-black text-slate-700 text-center mt-2 uppercase tracking-widest">{operationMessage}</p>
+                            <p className="text-xs font-black text-slate-700 text-center mt-2 uppercase tracking-widest">{operationMessage}</p>
                           )}
                         </div>
                       </div>
                     )}
                   </div>
               </PageSection>
-              
+
               <PageSection title="Pending Invitations" description="Review and manage outstanding user invitations." variant="panel">
                 <EmptyState title="No Invitations Found" description="Invitation endpoint not connected." />
               </PageSection>
@@ -314,4 +323,3 @@ export default function AccessPage() {
     </TooltipProvider>
   );
 }
-

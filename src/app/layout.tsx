@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
+import { Geist } from "next/font/google";
 import Script from "next/script";
 import { Suspense } from "react";
 import "./globals.css";
 import { RootRouteShell } from "@/components/RootRouteShell";
 import { publicBranding } from "@/lib/publicBranding";
+
+const portalSans = Geist({
+  display: "swap",
+  subsets: ["latin"],
+  variable: "--font-portal-sans",
+});
 
 export const metadata: Metadata = {
   title: publicBranding.appName,
@@ -22,7 +29,7 @@ export default function RootLayout({
   const shouldInjectDevMockScript = process.env.NODE_ENV !== "production" && devSessionBypassEnabled;
 
 return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className={`${portalSans.variable} h-full antialiased`}>
       <body className="min-h-screen">
         {devSessionBypassEnabled ? (
           <Script id="portal-dev-session-bypass" strategy="beforeInteractive">

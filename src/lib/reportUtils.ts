@@ -10,6 +10,14 @@ const severityPriority: Record<string, number> = {
   low: 1,
 };
 
+function severityScore(value: unknown): number {
+  const normalized = (value ?? "").toString().trim().toLowerCase();
+  if (!normalized) return 0;
+  const numeric = Number(normalized);
+  if (Number.isFinite(numeric)) return numeric;
+  return severityPriority[normalized] ?? 0;
+}
+
 const USER_PALETTE = [
   { bg: 'bg-slate-100 dark:bg-slate-900', text: 'text-slate-700 dark:text-slate-200', border: 'border-slate-200 dark:border-slate-800', circle: 'bg-slate-500 dark:bg-slate-400' },
   { bg: 'bg-emerald-100 dark:bg-emerald-900', text: 'text-emerald-700 dark:text-emerald-200', border: 'border-emerald-200 dark:border-emerald-800', circle: 'bg-emerald-500 dark:bg-emerald-400' },
@@ -60,19 +68,31 @@ function normalizeFacilityDisplayValue(value: string | null | undefined): string
 }
 
 export function deriveReportSeverity(report: ReportDamageApiRow): ReportSeverity {
+  const reportRecord = report as unknown as Record<string, unknown>;
+  const damageSummaryRecord =
+    reportRecord.damage_summary &&
+    typeof reportRecord.damage_summary === "object" &&
+    !Array.isArray(reportRecord.damage_summary)
+      ? (reportRecord.damage_summary as Record<string, unknown>)
+      : null;
   const entries = Array.isArray(report.damage_entries)
     ? report.damage_entries
     : Array.isArray(report.damage_summary)
     ? report.damage_summary
     : [];
-  let bestSeverity: ReportSeverity = "low";
-  let bestScore = 0;
+  const directSeverity =
+    reportRecord.severity ??
+    damageSummaryRecord?.max_severity ??
+    damageSummaryRecord?.maxSeverity ??
+    null;
+  let bestSeverity: ReportSeverity = directSeverity ? String(directSeverity).trim() : "n/a";
+  let bestScore = severityScore(directSeverity);
   entries.forEach((entry) => {
-    const severity = (entry?.severity || "").toString().toLowerCase();
-    const score = severityPriority[severity] ?? 0;
+    const severity = (entry?.severity || "").toString().trim();
+    const score = severityScore(severity);
     if (score > bestScore) {
       bestScore = score;
-      bestSeverity = severity || "low";
+      bestSeverity = severity;
     }
   });
   return bestSeverity;

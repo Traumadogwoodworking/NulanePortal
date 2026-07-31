@@ -4,6 +4,7 @@
   --color-brand: var(--brand);
   --color-brand-accent: var(--brand-accent);
   --color-brand-light: var(--brand-light);
+  --font-sans: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 :root {
@@ -11,8 +12,8 @@
   --brand: #2563eb;
   --brand-accent: #1d4ed8;
   --brand-light: #eff6ff;
-  --font-geist-sans: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-  --font-inter: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --font-geist-sans: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-inter: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
 
     /* Surface System (Pure White Premium) */
     --bg: #f8fafc;
@@ -327,7 +328,7 @@ body {
 }
 
 body {
-  font-family: var(--font-geist-sans), var(--font-inter), "Geist Sans", "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  font-family: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   background-image: var(--bg-gradient);
   color: var(--text-primary);

@@ -2,14 +2,25 @@
 
 import { useEffect, useState } from "react";
 import {
-  buildPortalLoginUrl,
+  AuthRedirectError,
+  cleanAuthCallbackUrl,
   clearPortalAuthStorage,
   completeAuth0Callback,
   hasPersistedPortalToken,
   logAuthFlow,
+  prepareExplicitAuthRetry,
+  startAuth0Login,
 } from "@/lib/portalAuth";
 
 type CallbackStatus = "starting" | "processing" | "redirecting" | "failed";
+
+function classifyCallbackError(errorCode: string | null, message: string) {
+  if (errorCode) return `provider_error:${errorCode}`;
+  const normalized = message.toLowerCase();
+  if (normalized.includes("invalid state")) return "invalid_state";
+  if (normalized.includes("token")) return "token_rejection";
+  return "callback_failure";
+}
 
 export function AuthCallbackClient() {
   const [status, setStatus] = useState<CallbackStatus>("starting");
@@ -26,14 +37,15 @@ export function AuthCallbackClient() {
       const authError = callbackParams.get("error");
       const authErrorDescription = callbackParams.get("error_description");
       if (authError) {
-        clearPortalAuthStorage({ includeAuth0Sdk: true });
+        clearPortalAuthStorage();
+        cleanAuthCallbackUrl();
         logAuthFlow("AuthCallbackClient.run", {
           reason: "provider_error",
           error: authError,
           tokenExists: false,
-          redirectTarget: "/login",
         });
-        window.location.replace(buildPortalLoginUrl("/home/"));
+        setErrorMessage(authErrorDescription || authError);
+        setStatus("failed");
         return;
       }
       logAuthFlow("AuthCallbackClient.run", {
@@ -49,6 +61,7 @@ export function AuthCallbackClient() {
         }
         setDestination(target);
         setStatus("redirecting");
+        cleanAuthCallbackUrl();
         logAuthFlow("AuthCallbackClient.run", {
           reason: "redirecting",
           redirectTarget: target,
@@ -60,9 +73,10 @@ export function AuthCallbackClient() {
           return;
         }
         const message = error instanceof Error ? error.message : "Unknown callback error";
-        clearPortalAuthStorage({ includeAuth0Sdk: true });
+        clearPortalAuthStorage();
+        cleanAuthCallbackUrl();
         logAuthFlow("AuthCallbackClient.run", {
-          reason: "failed",
+          reason: classifyCallbackError(authError, message),
           tokenExists: hasPersistedPortalToken(),
         });
         setErrorMessage(authErrorDescription || message);
@@ -108,12 +122,18 @@ export function AuthCallbackClient() {
           <button
             type="button"
             onClick={() => {
-              clearPortalAuthStorage({ includeAuth0Sdk: true });
-              window.location.replace(buildPortalLoginUrl("/home/"));
+              prepareExplicitAuthRetry();
+              setStatus("processing");
+              setErrorMessage(null);
+              void startAuth0Login("/home/").catch((error) => {
+                if (error instanceof AuthRedirectError) return;
+                setErrorMessage(error instanceof Error ? error.message : "Unable to restart sign in.");
+                setStatus("failed");
+              });
             }}
             className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
           >
-            Return to sign in
+            Try sign in again
           </button>
         </div>
       </div>

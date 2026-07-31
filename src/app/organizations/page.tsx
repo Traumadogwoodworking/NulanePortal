@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { PageTitle } from "@/components/ui/PageTitle";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { usePortalSession } from "@/lib/portalSession";
 import { usePortalDirectorySnapshot } from "@/lib/portalData";
@@ -18,12 +16,6 @@ export default function OrganizationsPage() {
 
   return (
     <div className="space-y-6">
-        <PageTitle
-          title="Organizations"
-          subtitle="Manage your connected organizations and tenant data."
-          titleClassName="text-slate-900"
-        />
-
         <Card className="overflow-hidden shadow-sm bg-slate-50">
           <CardHeader
             title={currentOrganizationName}

@@ -39,7 +39,26 @@ describe("SVL dashboard access", () => {
     expect(getAccessBarrier(route, buildAccessInfo({ isSvl: true, isSuperAdmin: true }))).toEqual({ type: "permission" });
   });
 
-  test("keeps Dashboard available for users without an SVL assignment", () => {
+  test("keeps the direct route available but removes Dashboard from portal navigation", () => {
     expect(getAccessBarrier(getRouteByPath("/dashboard"), buildAccessInfo())).toBeNull();
+    const sections = filterNavSectionsByAccess(navSections, buildAccessInfo());
+    expect(sections.flatMap((section) => section.items.map((item) => item.href))).not.toContain("/dashboard");
+  });
+});
+
+describe("24-hour inspection access", () => {
+  test("shows the tab for portal users regardless of SHAP assignment", () => {
+    const shapSections = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: true }));
+    const otherFacilitySections = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: false }));
+
+    expect(shapSections.flatMap((section) => section.items.map((item) => item.href))).toContain("/inspection/24-hour");
+    expect(otherFacilitySections.flatMap((section) => section.items.map((item) => item.href))).toContain("/inspection/24-hour");
+  });
+
+  test("allows direct access without a SHAP facility", () => {
+    const route = getRouteByPath("/inspection/24-hour");
+
+    expect(getAccessBarrier(route, buildAccessInfo({ isShap: true }))).toBeNull();
+    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false }))).toBeNull();
   });
 });

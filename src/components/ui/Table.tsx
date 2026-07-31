@@ -22,7 +22,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
 }
 
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
-  return <th className={cn("h-10 px-4 text-left align-middle text-[10px] font-black uppercase tracking-[0.2em] text-slate-500", className)} {...props} />;
+  return <th className={cn("h-10 px-4 text-left align-middle text-xs font-bold tracking-wide text-slate-600", className)} {...props} />;
 }
 
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {

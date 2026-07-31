@@ -549,19 +549,11 @@ export function RsaReportsManager() {
       }> = [];
 
       if (!summary.vins.length) {
-        rows.push({
-          spot: summary.spot || "",
-          carId: summary.railcarId || "",
-          deck: "",
-          submittedAt: summary.createdAt || null,
-          count: 0,
-          vins: [],
-          track: summary.track || "Uncategorized",
-        });
         return rows;
       }
 
       Object.entries(summary.deckVinsMap).forEach(([deck, vins]) => {
+        if (!vins.length) return;
         rows.push({
           spot: summary.spot || "",
           carId: summary.railcarId || "",
@@ -583,6 +575,7 @@ export function RsaReportsManager() {
 
     const trackMap = new Map<string, typeof rows>();
     rows.forEach((row) => {
+      if (!row.vins.length) return;
       const track = row.track || fallbackTrackLabel;
       if (!trackMap.has(track)) {
         trackMap.set(track, []);
@@ -604,10 +597,6 @@ export function RsaReportsManager() {
       trackRows.forEach((row) => {
         const formattedDate = formatRsaDate(row.submittedAt);
         const formattedTime = formatRsaTime(row.submittedAt);
-        if (!row.vins.length) {
-          lines.push([row.spot || "", row.carId, row.deck, formattedDate, formattedTime, ""].map(csvEscape).join(","));
-          return;
-        }
         row.vins.forEach((vin) => {
           lines.push([row.spot || "", row.carId, row.deck, formattedDate, formattedTime, vin].map(csvEscape).join(","));
         });
@@ -1045,13 +1034,10 @@ export function RsaReportsManager() {
             <div className="flex h-full min-h-0 flex-col overflow-hidden">
               <div className="h-1.5 shrink-0 bg-gradient-to-r from-slate-900 via-slate-600 to-slate-200" />
               <header className="border-b border-slate-100 bg-slate-50/80 p-5">
-                <div className="mb-4 flex items-start justify-between">
+                <div className="mb-4 flex items-start">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm">
                     <FileText className="h-5 w-5" />
                   </div>
-                  <span className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    {selectedRsaRailcar.reportId.substring(0, 8)}
-                  </span>
                 </div>
                 <div>
                   <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.25em] text-slate-700">

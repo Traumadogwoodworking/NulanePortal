@@ -37,6 +37,16 @@ export type HomeAnalyticsSnapshotResult = {
     severities?: HomeAnalyticsFilterOption[];
     damageAreas?: HomeAnalyticsFilterOption[];
     damageTypes?: HomeAnalyticsFilterOption[];
+    statuses?: HomeAnalyticsFilterOption[];
+    makes?: HomeAnalyticsFilterOption[];
+    models?: HomeAnalyticsFilterOption[];
+    inspection_types?: HomeAnalyticsFilterOption[];
+    inspection_type?: HomeAnalyticsFilterOption[];
+    damage_areas?: HomeAnalyticsFilterOption[];
+    damage_area?: HomeAnalyticsFilterOption[];
+    damage_types?: HomeAnalyticsFilterOption[];
+    damage_type?: HomeAnalyticsFilterOption[];
+    severity?: HomeAnalyticsFilterOption[];
   };
   metadata?: {
     source?: string;

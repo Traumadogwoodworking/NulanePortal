@@ -1,5 +1,9 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { FacilitySummary } from "@/lib/types";
 import { facilityFilterLabel } from "@/lib/access";
+import { normalizeSearchText } from "@/lib/searchText";
 
 interface FacilitySelectorProps {
   facilities: FacilitySummary[];
@@ -8,23 +12,54 @@ interface FacilitySelectorProps {
   label?: string;
   includeAllOption?: boolean;
   emptyLabel?: string;
+  searchable?: boolean;
+  showSlug?: boolean;
 }
 
-export function FacilitySelector({ facilities, value, onChange, label, includeAllOption = true, emptyLabel = "No facilities available." }: FacilitySelectorProps) {
+export function FacilitySelector({
+  facilities,
+  value,
+  onChange,
+  label,
+  includeAllOption = true,
+  emptyLabel = "No facilities available.",
+  searchable = false,
+  showSlug = true,
+}: FacilitySelectorProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const visibleFacilities = useMemo(() => {
+    const query = normalizeSearchText(searchTerm);
+    if (!query) return facilities;
+    return facilities.filter((facility) => normalizeSearchText(facility.name).includes(query));
+  }, [facilities, searchTerm]);
+
   return (
     <div className="flex flex-col gap-1.5">
       {label && <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60 ml-1">{label}</span>}
+      {searchable ? (
+        <input
+          type="search"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Search facilities by label"
+          aria-label="Search facilities by label"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:ring-1 focus:ring-slate-300"
+        />
+      ) : null}
       <div className="relative group">
         <select
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:ring-1 focus:ring-slate-300 shadow-sm cursor-pointer appearance-none w-full"
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setSearchTerm("");
+          }}
         >
           {includeAllOption ? <option value="all">All Facility Custom</option> : null}
-          {facilities.length ? (
-            facilities.map((facility) => (
+          {visibleFacilities.length ? (
+            visibleFacilities.map((facility) => (
               <option key={facility.id} value={facility.id}>
-                {facilityFilterLabel(facility)}
+                {showSlug ? facilityFilterLabel(facility) : facility.name}
               </option>
             ))
           ) : (

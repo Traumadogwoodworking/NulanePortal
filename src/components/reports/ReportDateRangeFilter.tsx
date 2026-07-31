@@ -163,11 +163,11 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
   }, [isOpen]);
 
   return (
-    <div ref={rootRef} className="group relative">
+    <div ref={rootRef} className="group relative min-w-0">
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex h-8 w-72 cursor-pointer list-none items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm"
+        className="flex h-9 w-full min-w-0 cursor-pointer list-none items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm"
       >
         <span className="min-w-0 flex-1 truncate">
           {value.createdFrom || value.createdTo
@@ -181,7 +181,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       {isOpen ? (
       <div className="absolute right-0 top-10 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
         <div className="mb-3">
-          <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Presets</div>
+          <div className="mb-2 text-xs font-bold text-slate-600">Presets</div>
           <div className="flex flex-col gap-2">
             {presetRanges.map((preset) => (
               <button
@@ -192,7 +192,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
                   onChange(preset.range);
                   setIsOpen(false);
                 }}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-[11px] font-black uppercase tracking-widest text-slate-700 transition hover:border-slate-300 hover:bg-white"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
               >
                 {preset.label}
               </button>
@@ -220,7 +220,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
                   });
                 }
               }}
-              className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-black uppercase tracking-widest ${
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold ${
                 dateFilterMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
               }`}
             >
@@ -230,7 +230,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
         </div>
         <div className="space-y-4">
           <div>
-            <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
               <span>{dateFilterMode === "single" ? "Day" : "Active range"}</span>
               <span>
                 {dateFilterMode === "single"

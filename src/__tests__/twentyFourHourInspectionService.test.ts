@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTwentyFourHourDisplayEndpoint,
   filterTwentyFourHourRows,
+  orderTwentyFourHourRowsByPriority,
   validateTwentyFourHourInspectionResponse,
 } from "@/lib/services/twentyFourHourInspectionService";
 
@@ -56,6 +58,15 @@ function rawResponse(rows: unknown[] = [rawRow()]) {
 }
 
 describe("24-hour inspection data contract", () => {
+  it("uses a unique refresh token while preserving the facility scope", () => {
+    const first = buildTwentyFourHourDisplayEndpoint({ facility: "SHAP", requestId: "refresh-1" });
+    const second = buildTwentyFourHourDisplayEndpoint({ facility: "SHAP", requestId: "refresh-2" });
+
+    expect(first).toBe("/inspection/24-hour/portal-display?refresh=refresh-1&facility=SHAP");
+    expect(second).toBe("/inspection/24-hour/portal-display?refresh=refresh-2&facility=SHAP");
+    expect(second).not.toBe(first);
+  });
+
   it("accepts rows explicitly associated with the latest completed snapshot", () => {
     const result = validateTwentyFourHourInspectionResponse(rawResponse(), "fallback");
     expect(result.rows.map((row) => row.vin)).toEqual(["UNINSPECTEDVIN001"]);
@@ -113,6 +124,26 @@ describe("24-hour inspection data contract", () => {
     ]), "fallback");
     expect(filterTwentyFourHourRows(result.rows, { search: "", yard: "", recordFilter: "critical" })).toHaveLength(1);
     expect(result.rows).toHaveLength(2);
+  });
+
+  it("orders visible work by urgency without mutating the filtered rows", () => {
+    const result = validateTwentyFourHourInspectionResponse(rawResponse([
+      rawRow({ id: "snapshot-1:normal", inventory_row_id: "snapshot-1:normal", vin: "NORMALVIN00000001", severity: "normal", display_label: "Normal", time_until_24h_seconds: 40_000, overdue_seconds: 0 }),
+      rawRow({ id: "snapshot-1:critical", inventory_row_id: "snapshot-1:critical", vin: "CRITICALVIN00001", severity: "critical", display_label: "Critical", time_until_24h_seconds: 1_000, overdue_seconds: 0 }),
+      rawRow({ id: "snapshot-1:overdue-1", inventory_row_id: "snapshot-1:overdue-1", vin: "OVERDUEVIN000001", overdue_seconds: 3_600 }),
+      rawRow({ id: "snapshot-1:overdue-2", inventory_row_id: "snapshot-1:overdue-2", vin: "OVERDUEVIN000002", overdue_seconds: 7_200 }),
+      rawRow({ id: "snapshot-1:inspected", inventory_row_id: "snapshot-1:inspected", vin: "INSPECTEDVIN00001", inspected: true, bucket: "inspected", severity: "inspected", display_label: "Inspected", time_until_24h_seconds: 0, overdue_seconds: 0 }),
+    ]), "fallback");
+
+    const originalOrder = result.rows.map((row) => row.vin);
+    expect(orderTwentyFourHourRowsByPriority(result.rows).map((row) => row.vin)).toEqual([
+      "OVERDUEVIN000002",
+      "OVERDUEVIN000001",
+      "CRITICALVIN00001",
+      "NORMALVIN00000001",
+      "INSPECTEDVIN00001",
+    ]);
+    expect(result.rows.map((row) => row.vin)).toEqual(originalOrder);
   });
 
   it("deduplicates stable identities deterministically", () => {

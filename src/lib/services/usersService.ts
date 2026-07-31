@@ -1,5 +1,9 @@
 import { apiFetch } from "@/lib/apiClient";
 import {
+  appendOrganizationScope,
+  type PortalOrganizationScopeKey,
+} from "@/lib/portalOrganizations";
+import {
   DeletedUserSummary,
   LocationMembership,
   OrganizationMembership,
@@ -213,20 +217,30 @@ function readArrayFromPayload<T>(payload: unknown, keys: string[]): T[] {
 }
 
 
-export async function fetchOrganizationUsers(organizationId: string): Promise<UserSummary[]> {
+export async function fetchOrganizationUsers(
+  organizationId: string,
+  organizationScope?: PortalOrganizationScopeKey
+): Promise<UserSummary[]> {
   if (!organizationId) {
     return [];
   }
-  const payload = await apiFetch<unknown>(USERS_ENDPOINT(organizationId));
+  const payload = await apiFetch<unknown>(
+    appendOrganizationScope(USERS_ENDPOINT(organizationId), organizationScope)
+  );
   const records = readArrayFromPayload<PortalUserRecord>(payload, ["users", "data", "results", "rows"]);
   return records.map((user) => mapUserRecord(user));
 }
 
-export async function fetchDeletedOrganizationUsers(organizationId: string): Promise<DeletedUserSummary[]> {
+export async function fetchDeletedOrganizationUsers(
+  organizationId: string,
+  organizationScope?: PortalOrganizationScopeKey
+): Promise<DeletedUserSummary[]> {
   if (!organizationId) {
     return [];
   }
-  const payload = await apiFetch<unknown>(DELETED_USERS_ENDPOINT(organizationId));
+  const payload = await apiFetch<unknown>(
+    appendOrganizationScope(DELETED_USERS_ENDPOINT(organizationId), organizationScope)
+  );
   const records = readArrayFromPayload<PortalUserRecord & {
     organization_membership?: OrganizationMembership | null;
     location_memberships?: LocationMembership[] | null;
@@ -493,12 +507,18 @@ export async function removeLocationMembership(
 }
 
 export class UsersAdapter {
-  static async getUsers(organizationId: string): Promise<UserSummary[]> {
-    return fetchOrganizationUsers(organizationId);
+  static async getUsers(
+    organizationId: string,
+    organizationScope?: PortalOrganizationScopeKey
+  ): Promise<UserSummary[]> {
+    return fetchOrganizationUsers(organizationId, organizationScope);
   }
 
-  static async getDeletedUsers(organizationId: string): Promise<DeletedUserSummary[]> {
-    return fetchDeletedOrganizationUsers(organizationId);
+  static async getDeletedUsers(
+    organizationId: string,
+    organizationScope?: PortalOrganizationScopeKey
+  ): Promise<DeletedUserSummary[]> {
+    return fetchDeletedOrganizationUsers(organizationId, organizationScope);
   }
 
   static async getUserDetail(

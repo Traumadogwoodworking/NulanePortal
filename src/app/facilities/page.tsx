@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageSection } from "@/components/ui/PageSection";
 import { StatCard } from "@/components/ui/StatCard";
@@ -85,7 +85,11 @@ function getFacilityMatchKeys(facility: {
 }
 
 export default function FacilitiesPage() {
-  const { organizationId, isFacilityAdmin: isOrgAdmin } = usePortalSession();
+  const {
+    organizationId,
+    isFacilityAdmin: isOrgAdmin,
+    selectedOrganizationScopeKey,
+  } = usePortalSession();
   const searchParams = useSearchParams();
   const { data: branding } = usePortalBrandingSnapshot();
   const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
@@ -105,6 +109,17 @@ export default function FacilitiesPage() {
   const [facilityAssignmentDraftUserIds, setFacilityAssignmentDraftUserIds] = useState<string[]>([]);
   const [facilityAssignmentSaving, setFacilityAssignmentSaving] = useState(false);
   const [isAssignmentEditorOpen, setIsAssignmentEditorOpen] = useState(false);
+  const didMountOrganizationScopeRef = useRef(false);
+
+  useEffect(() => {
+    if (!didMountOrganizationScopeRef.current) {
+      didMountOrganizationScopeRef.current = true;
+      return;
+    }
+    setSelectedFacilityId(null);
+    setFacilityAssignmentDraftUserIds([]);
+    setIsAssignmentEditorOpen(false);
+  }, [selectedOrganizationScopeKey]);
   const loadFacilities = async () => {
     setStatusMessage(null);
     await refreshDirectory();
@@ -340,7 +355,7 @@ export default function FacilitiesPage() {
             <button
               type="button"
               onClick={() => setRemoveTarget(null)}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-700"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-700"
             >
               Cancel
             </button>
@@ -348,7 +363,7 @@ export default function FacilitiesPage() {
               type="button"
               onClick={() => void handleRemoveFacilityMembership()}
               disabled={!removeTarget}
-              className="rounded-full border border-rose-600 bg-rose-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+              className="rounded-full border border-rose-600 bg-rose-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
             >
               Remove Access
             </button>
@@ -380,10 +395,10 @@ export default function FacilitiesPage() {
                     title={assignedFacilities?.size ? "Direct facility assignment" : "No direct facility assignment"}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-[11px] font-bold text-slate-900">{user.name}</p>
-                      <p className="truncate text-[10px] font-medium text-slate-500">{user.email}</p>
+                      <p className="truncate text-xs font-bold text-slate-900">{user.name}</p>
+                      <p className="truncate text-xs font-medium text-slate-500">{user.email}</p>
                     </div>
-                    <span className="flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                    <span className="flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-black uppercase tracking-widest text-slate-500">
                       {checked ? <Check className="h-3 w-3 text-emerald-500" /> : <Minus className="h-3 w-3 text-slate-300" />}
                       {checked ? "Assigned" : "Unassigned"}
                     </span>
@@ -391,7 +406,7 @@ export default function FacilitiesPage() {
                 );
               }) : (
                 <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">No users available</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No users available</p>
                 </div>
               )}
             </div>
@@ -400,7 +415,7 @@ export default function FacilitiesPage() {
             <button
               type="button"
               onClick={() => setIsAssignmentEditorOpen(false)}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-700"
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-700"
             >
               Cancel
             </button>
@@ -408,7 +423,7 @@ export default function FacilitiesPage() {
               type="button"
               onClick={() => void handleSaveFacilityAssignments()}
               disabled={!isOrgAdmin || facilityAssignmentSaving || !selectedFacilityId}
-              className="rounded-full border border-brand/20 bg-brand px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-full border border-brand/20 bg-brand px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {facilityAssignmentSaving ? "Saving..." : "Save"}
             </button>
@@ -419,14 +434,14 @@ export default function FacilitiesPage() {
         <ErrorPanel
           title="Partial directory data"
           error={directoryPartialError}
-          action={<button type="button" onClick={() => void loadFacilities()} className="rounded-full border border-current/20 px-4 py-2 text-[11px] font-black uppercase tracking-widest">Retry</button>}
+          action={<button type="button" onClick={() => void loadFacilities()} className="rounded-full border border-current/20 px-4 py-2 text-xs font-black uppercase tracking-widest">Retry</button>}
         />
       ) : null}
       {facilitiesError ? (
         <ErrorPanel
           title="Facility load failed"
           error={facilitiesError}
-          action={<button type="button" onClick={() => void loadFacilities()} className="rounded-full border border-current/20 px-4 py-2 text-[11px] font-black uppercase tracking-widest">Retry</button>}
+          action={<button type="button" onClick={() => void loadFacilities()} className="rounded-full border border-current/20 px-4 py-2 text-xs font-black uppercase tracking-widest">Retry</button>}
         />
       ) : null}
       {facilityActionMessage ? (
@@ -454,7 +469,7 @@ export default function FacilitiesPage() {
                 placeholder="Search registry..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm"
+                className="w-48 pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand/40 transition-all shadow-sm"
               />
             </div>
             <button
@@ -469,7 +484,7 @@ export default function FacilitiesPage() {
               trigger={
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-lg bg-brand hover:bg-brand-accent px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-brand/10 transition-all active:scale-95 disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-lg bg-brand hover:bg-brand-accent px-3 py-1.5 text-xs font-black uppercase tracking-widest text-white shadow-md shadow-brand/10 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <Building2 className="w-3.5 h-3.5" />
                   Add Facility
@@ -489,7 +504,7 @@ export default function FacilitiesPage() {
             {isLoading ? (
               <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-brand/40" /></div>
             ) : statusMessage ? (
-              <EmptyState title="Facility sync error" description={statusMessage} tone="danger" action={<button type="button" onClick={() => void loadFacilities()} className="rounded-full border border-current/20 px-4 py-2 text-[11px] font-black uppercase tracking-widest">Retry</button>} />
+              <EmptyState title="Facility sync error" description={statusMessage} tone="danger" action={<button type="button" onClick={() => void loadFacilities()} className="rounded-full border border-current/20 px-4 py-2 text-xs font-black uppercase tracking-widest">Retry</button>} />
             ) : showEmptyState ? (
               <EmptyState title="No facilities match the current view" description="Try adjusting search parameters. This is an empty filtered result, not a load failure." />
             ) : (
@@ -518,7 +533,6 @@ export default function FacilitiesPage() {
                               </div>
                               <div className="flex flex-col min-w-0">
                                  <span className={`text-xs font-bold truncate ${isSelected ? 'text-brand' : 'text-slate-900'}`}>{f.name}</span>
-                                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight truncate">{f.slug}</span>
                               </div>
                            </div>
                         </td>
@@ -552,7 +566,7 @@ export default function FacilitiesPage() {
                           </div>
                       </div>
                       <div className="flex gap-1.5">
-                         <span className="px-2 py-0.5 rounded bg-slate-100 text-[9px] font-black text-slate-500 uppercase tracking-widest border border-slate-200">
+                         <span className="px-2 py-0.5 rounded bg-slate-100 text-xs font-black text-slate-500 uppercase tracking-widest border border-slate-200">
                            ID: {selectedFacilityId.slice(0, 8)}
                          </span>
                       </div>
@@ -562,8 +576,8 @@ export default function FacilitiesPage() {
                       <div className="space-y-2">
                          <div className="flex items-center justify-between gap-2 px-1">
                            <div className="min-w-0">
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Direct Assignments</p>
-                             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-300">
+                             <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Direct Assignments</p>
+                             <p className="text-xs font-bold uppercase tracking-widest text-slate-300">
                                {assignedUsers.length} directly assigned
                              </p>
                            </div>
@@ -571,9 +585,10 @@ export default function FacilitiesPage() {
                              type="button"
                              onClick={() => void openAssignmentEditor()}
                              disabled={!isOrgAdmin || !selectedFacilityId}
-                             className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                             title={!isOrgAdmin ? "Organization admin permission is required." : "Manage users assigned to this facility"}
+                             className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                            >
-                             Edit Facility
+                             Manage Assignments
                            </button>
                          </div>
                         <div className="rounded-xl border border-slate-200 bg-white p-2">
@@ -587,10 +602,10 @@ export default function FacilitiesPage() {
                                     className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2 text-left"
                                   >
                                     <div className="min-w-0">
-                                      <p className="truncate text-[11px] font-bold text-slate-900">{user.name}</p>
-                                      <p className="truncate text-[10px] font-medium text-slate-500">{user.email}</p>
+                                      <p className="truncate text-xs font-bold text-slate-900">{user.name}</p>
+                                      <p className="truncate text-xs font-medium text-slate-500">{user.email}</p>
                                     </div>
-                                    <span className="flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                    <span className="flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-black uppercase tracking-widest text-slate-500">
                                       <Check className="h-3 w-3 text-emerald-500" />
                                       Assigned
                                     </span>
@@ -598,7 +613,7 @@ export default function FacilitiesPage() {
                                 );
                               }) : (
                                 <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
-                                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">No directly assigned users</p>
+                                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No directly assigned users</p>
                                 </div>
                               )}
                             </div>
@@ -607,10 +622,10 @@ export default function FacilitiesPage() {
                       </div>
 
                       <div className="space-y-2">
-                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Branding</p>
+                         <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Branding</p>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                          <p className="text-[11px] font-bold text-slate-900">Organization branding applied to this facility</p>
-                          <div className="grid grid-cols-2 gap-2 text-[10px]">
+                          <p className="text-xs font-bold text-slate-900">Organization branding applied to this facility</p>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               <p className="font-black uppercase tracking-widest text-slate-400">Org name</p>
                               <p className="mt-1 font-semibold text-slate-900">
@@ -626,7 +641,7 @@ export default function FacilitiesPage() {
                           </div>
                           <Link
                             href="/branding"
-                            className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-300 text-[10px] font-black uppercase tracking-widest text-slate-900 transition-all bg-white hover:bg-slate-50"
+                            className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 transition-all bg-white hover:bg-slate-50"
                           >
                             Open Branding Settings
                             <Settings2 className="w-3.5 h-3.5" />
@@ -641,8 +656,8 @@ export default function FacilitiesPage() {
                           <button
                             type="button"
                             disabled={!organizationId || !isOrgAdmin || !selectedFacility}
-                            title={!isOrgAdmin ? "Organization admin required" : !selectedFacility ? "Backend action pending" : "Edit facility"}
-                            className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-300 text-[10px] font-black uppercase tracking-widest text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
+                            title={!isOrgAdmin ? "Organization admin required" : !selectedFacility ? "Select a facility to edit" : "Edit facility"}
+                            className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
                           >
                             Edit Facility
                             <Settings2 className="w-3.5 h-3.5" />
@@ -673,7 +688,7 @@ export default function FacilitiesPage() {
                     <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mx-auto">
                        <Building2 className="w-5 h-5" />
                     </div>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Select facility entry</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select facility entry</p>
                  </div>
                )}
             </div>

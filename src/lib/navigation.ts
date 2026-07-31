@@ -47,6 +47,7 @@ const portalRoutes: PortalRoute[] = [
     section: "core",
     icon: "dashboard",
     hiddenForSvl: true,
+    hideFromNav: true,
   },
   {
     label: "Damage Reports",
@@ -59,7 +60,7 @@ const portalRoutes: PortalRoute[] = [
   {
     label: "RSA Reports",
     href: "/reports/rsa",
-    description: "Railcar security audits",
+    description: "Rail Safe Audit",
     section: "core",
     icon: "rsa",
     moduleKey: "reports",
@@ -67,11 +68,10 @@ const portalRoutes: PortalRoute[] = [
   {
     label: "24 Hour",
     href: "/inspection/24-hour",
-    description: "SHAP 24-hour inventory inspection queue",
+    description: "24-hour inventory inspection",
     section: "core",
     icon: "clock",
     moduleKey: "reports",
-    requiresShap: true,
   },
 
   // Apps

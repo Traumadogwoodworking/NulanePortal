@@ -92,6 +92,28 @@ describe("completeAuth0Callback", () => {
     expect(window.localStorage.getItem("portal_token")).toBe("callback-token");
   });
 
+  it("records duplicate facade invocations while consuming the Auth0 transaction once", async () => {
+    window.localStorage.setItem("portalAuthTrace", "1");
+    window.sessionStorage.setItem("a0.spajs.txs.test", "redacted-transaction");
+    window.history.replaceState({}, "", "/auth/callback/?code=present&state=state-ending");
+    auth0Mocks.getTokenSilently.mockResolvedValue("callback-token");
+    const logSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { completeAuth0Callback } = await importPortalAuth();
+
+    await Promise.all([completeAuth0Callback(), completeAuth0Callback()]);
+
+    expect(auth0Mocks.handleRedirectCallback).toHaveBeenCalledTimes(1);
+    const invocationLogs = logSpy.mock.calls
+      .map((call) => call[1] as Record<string, unknown>)
+      .filter((entry) => entry?.functionName === "completeAuth0Callback" && entry?.reason === "invoked");
+    expect(invocationLogs).toEqual([
+      expect.objectContaining({ invocationCount: 1, stateSuffix: "ending", pkceTransactionPresent: true }),
+      expect.objectContaining({ invocationCount: 2, stateSuffix: "ending", pkceTransactionPresent: true }),
+    ]);
+    expect(JSON.stringify(invocationLogs)).not.toContain("state-ending");
+    expect(JSON.stringify(invocationLogs)).not.toContain("redacted-transaction");
+  });
+
   it("does not reuse a completed callback result for a later Auth0 code/state", async () => {
     auth0Mocks.isAuthenticated.mockResolvedValue(true);
     auth0Mocks.getTokenSilently
@@ -139,6 +161,49 @@ describe("startAuth0Login", () => {
         }),
       })
     );
+  });
+
+  it("single-flights duplicate login starts so one transaction is created", async () => {
+    window.history.replaceState({}, "", "http://localhost:3000/login?returnTo=%2Fhome%2F");
+    const { startAuth0Login, AuthRedirectError } = await importPortalAuth();
+
+    const results = await Promise.allSettled([
+      startAuth0Login("/home/"),
+      startAuth0Login("/home/"),
+    ]);
+
+    expect(results).toHaveLength(2);
+    expect(results.every((result) => result.status === "rejected" && result.reason instanceof AuthRedirectError)).toBe(true);
+    expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("logoutRejectedPortalSession", () => {
+  it("clears local auth, logs out of Auth0, and returns through the auto-login route", async () => {
+    window.localStorage.setItem("portal_token", "rejected-token");
+    window.localStorage.setItem("@@auth0spajs@@::cached", "rejected-session");
+    const { logoutRejectedPortalSession } = await importPortalAuth();
+
+    await logoutRejectedPortalSession("/reports/damage/?page=2");
+
+    expect(window.localStorage.getItem("portal_token")).toBeNull();
+    expect(window.localStorage.getItem("@@auth0spajs@@::cached")).toBeNull();
+    expect(auth0Mocks.logout).toHaveBeenCalledWith({
+      logoutParams: {
+        returnTo: "http://localhost:3000/portal/",
+      },
+    });
+  });
+
+  it("single-flights simultaneous backend rejections", async () => {
+    const { logoutRejectedPortalSession } = await importPortalAuth();
+
+    await Promise.all([
+      logoutRejectedPortalSession("/home/"),
+      logoutRejectedPortalSession("/home/"),
+    ]);
+
+    expect(auth0Mocks.logout).toHaveBeenCalledTimes(1);
   });
 });
 

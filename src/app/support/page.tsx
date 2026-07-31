@@ -4,7 +4,6 @@ import { useRef, useState, type DragEvent, type FormEvent } from "react";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { portalConfig } from "@/lib/config";
 import { submitSupportTicket } from "@/lib/services/supportService";
 
 const MAX_MEDIA_FILES = 3;
@@ -191,8 +190,8 @@ export default function SupportPage() {
                 {isSubmitting ? "Submitting..." : "Submit Ticket"}
               </button>
               <StatusBadge
-                label={portalConfig.supportFormUrl ? "Support configured" : "Using portal submission"}
-                tone={portalConfig.supportFormUrl ? "positive" : "neutral"}
+                label="Portal API submission"
+                tone="positive"
               />
             </div>
 

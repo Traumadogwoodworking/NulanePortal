@@ -23,6 +23,7 @@ export const homeDashboardAnalyticsFixture = {
   filters: {
     facilities: [
       { label: "SHAP", value: "it-9a6e0f-locawctshap", count: 6 },
+      { label: "SHAP Duplicate", value: "it-9a6e0f-locawctshap", count: 6 },
       { label: "JNAP", value: "it-9a6e0f-locawctjn", count: 6 },
     ],
     yards: [
@@ -41,9 +42,17 @@ export const homeDashboardAnalyticsFixture = {
   ],
   severityGroups: { low: 3, medium: 4, high: 5 },
   dailyTrend: [
-    { date: "2026-07-07", damageReports: 2, rsaReports: 1 },
-    { date: "2026-07-08", damageReports: 4, rsaReports: 1 },
-    { date: "2026-07-09", damageReports: 6, rsaReports: 2 },
+    { date: "2026-07-07", totalReports: 3, damageReports: 2, noDamageReports: 1, rsaReports: 1 },
+    { date: "2026-07-08", totalReports: 5, damageReports: 4, noDamageReports: 1, rsaReports: 1 },
+    { date: "2026-07-09", totalReports: 7, damageReports: 6, noDamageReports: 1, rsaReports: 2 },
+  ],
+  byFacilityDaily: [
+    { date: "2026-07-07", label: "SHAP", totalReports: 2, damageReports: 1, noDamageReports: 1 },
+    { date: "2026-07-07", label: "JNAP", totalReports: 1, damageReports: 1, noDamageReports: 0 },
+    { date: "2026-07-08", label: "SHAP", totalReports: 3, damageReports: 2, noDamageReports: 1 },
+    { date: "2026-07-08", label: "JNAP", totalReports: 2, damageReports: 2, noDamageReports: 0 },
+    { date: "2026-07-09", label: "SHAP", totalReports: 4, damageReports: 3, noDamageReports: 1 },
+    { date: "2026-07-09", label: "JNAP", totalReports: 3, damageReports: 3, noDamageReports: 0 },
   ],
   byFacility: [
     { key: "it-9a6e0f-locawctshap", label: "SHAP", totalReports: 6, damageReports: 6, rsaReports: 1, reportsToday: 2, reportsLast7Days: 6, reportsThisMonth: 6, reportsThisYear: 6, vins: 4, entries: 6 },
@@ -58,11 +67,74 @@ export const homeDashboardAnalyticsFixture = {
     { name: "SCRATCHED", count: 4 },
   ],
   byInspector: [
-    { email: "inspector@example.com", label: "inspector@example.com", reportCount: 7 },
-    { email: "lead@example.com", label: "lead@example.com", reportCount: 5 },
+    { email: "inspector@example.com", label: "inspector@example.com", reportCount: 9, damageReports: 7, noDamageReports: 2 },
+    { email: "lead@example.com", label: "lead@example.com", reportCount: 6, damageReports: 5, noDamageReports: 1 },
+  ],
+  byInspectorDaily: [
+    { date: "2026-07-07", email: "inspector@example.com", label: "inspector@example.com", reportCount: 2, damageReports: 1, noDamageReports: 1 },
+    { date: "2026-07-07", email: "lead@example.com", label: "lead@example.com", reportCount: 1, damageReports: 1, noDamageReports: 0 },
+    { date: "2026-07-08", email: "inspector@example.com", label: "inspector@example.com", reportCount: 3, damageReports: 2, noDamageReports: 1 },
+    { date: "2026-07-08", email: "lead@example.com", label: "lead@example.com", reportCount: 2, damageReports: 2, noDamageReports: 0 },
+    { date: "2026-07-09", email: "inspector@example.com", label: "inspector@example.com", reportCount: 4, damageReports: 4, noDamageReports: 0 },
+    { date: "2026-07-09", email: "lead@example.com", label: "lead@example.com", reportCount: 3, damageReports: 2, noDamageReports: 1 },
   ],
   byInspectionType: [
     { number: "02", label: "Interchange Inspection", count: 12 },
+  ],
+};
+
+export const homeDashboardShapAnalyticsFixture = {
+  ...homeDashboardAnalyticsFixture,
+  totals: {
+    ...homeDashboardAnalyticsFixture.totals,
+    totalReports: 3,
+    damageReports: 2,
+    noDamageReports: 1,
+    rsaReports: 0,
+    damageReportsToday: 2,
+    noDamageReportsToday: 1,
+    rsaReportsToday: 0,
+    facilities: 1,
+    vins: 2,
+    entries: 2,
+  },
+  currentPeriod: {
+    ...homeDashboardAnalyticsFixture.currentPeriod,
+    damageToday: 2,
+    clearToday: 1,
+    rsaToday: 0,
+    damageLast7Days: 2,
+    rsaLast7Days: 0,
+    damageMonthToDate: 2,
+    damageYearToDate: 2,
+  },
+  severity: [
+    { level: "6", label: "6 - Missing / Major Damage", count: 2, percent: 100 },
+  ],
+  severityGroups: { low: 0, medium: 0, high: 2 },
+  dailyTrend: [
+    { date: "2026-07-09", totalReports: 3, damageReports: 2, noDamageReports: 1, rsaReports: 0 },
+  ],
+  byFacilityDaily: [
+    { date: "2026-07-09", label: "SHAP", totalReports: 3, damageReports: 2, noDamageReports: 1 },
+  ],
+  byFacility: [
+    { key: "it-9a6e0f-locawctshap", label: "SHAP", totalReports: 3, damageReports: 2, noDamageReports: 1, rsaReports: 0, reportsToday: 3, reportsLast7Days: 3, reportsThisMonth: 3, reportsThisYear: 3, vins: 2, entries: 2 },
+  ],
+  topAreas: [
+    { name: "Front Bumper", count: 2 },
+  ],
+  topTypes: [
+    { name: "DENTED - PAINT BROKEN", count: 2 },
+  ],
+  byInspector: [
+    { email: "inspector@example.com", label: "inspector@example.com", reportCount: 3, damageReports: 2, noDamageReports: 1 },
+  ],
+  byInspectorDaily: [
+    { date: "2026-07-09", email: "inspector@example.com", label: "inspector@example.com", reportCount: 3, damageReports: 2, noDamageReports: 1 },
+  ],
+  byInspectionType: [
+    { number: "02", label: "Interchange Inspection", count: 3 },
   ],
 };
 

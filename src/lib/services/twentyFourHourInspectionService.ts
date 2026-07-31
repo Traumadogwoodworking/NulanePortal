@@ -104,6 +104,7 @@ export type TwentyFourHourInspectionResponse = {
 export type TwentyFourHourInspectionParams = {
   signal?: AbortSignal;
   requestId?: string;
+  facility?: string;
 };
 
 export class TwentyFourHourContractError extends Error {
@@ -114,6 +115,20 @@ export class TwentyFourHourContractError extends Error {
     this.name = "TwentyFourHourContractError";
     this.requestId = requestId;
   }
+}
+
+export function buildTwentyFourHourDisplayEndpoint({
+  facility = "",
+  requestId,
+}: {
+  facility?: string;
+  requestId: string;
+}): string {
+  const search = new URLSearchParams({ refresh: requestId });
+  if (facility.trim()) {
+    search.set("facility", facility.trim());
+  }
+  return `${TWENTY_FOUR_HOUR_DISPLAY_ENDPOINT}?${search.toString()}`;
 }
 
 function createRequestId(): string {
@@ -332,6 +347,39 @@ export function filterTwentyFourHourRows(
   });
 }
 
+const TWENTY_FOUR_HOUR_WORK_PRIORITY: Record<TwentyFourHourStatus, number> = {
+  overdue: 0,
+  critical: 1,
+  due_12h: 2,
+  normal: 3,
+  inspected: 4,
+};
+
+export function orderTwentyFourHourRowsByPriority(
+  rows: TwentyFourHourInspectionRow[]
+): TwentyFourHourInspectionRow[] {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const severityDifference = TWENTY_FOUR_HOUR_WORK_PRIORITY[left.row.severity] - TWENTY_FOUR_HOUR_WORK_PRIORITY[right.row.severity];
+      if (severityDifference !== 0) return severityDifference;
+
+      if (left.row.severity === "overdue") {
+        const overdueDifference = right.row.overdue_seconds - left.row.overdue_seconds;
+        if (overdueDifference !== 0) return overdueDifference;
+      } else if (!left.row.inspected) {
+        const dueDifference = left.row.time_until_24h_seconds - right.row.time_until_24h_seconds;
+        if (dueDifference !== 0) return dueDifference;
+      }
+
+      const firstSeenDifference = Date.parse(left.row.first_seen_at) - Date.parse(right.row.first_seen_at);
+      if (Number.isFinite(firstSeenDifference) && firstSeenDifference !== 0) return firstSeenDifference;
+      const vinDifference = left.row.vin.localeCompare(right.row.vin);
+      return vinDifference || left.index - right.index;
+    })
+    .map(({ row }) => row);
+}
+
 export function getTwentyFourHourRequestId(error: unknown): string {
   return isRecord(error) ? text(error.requestId) : "";
 }
@@ -340,16 +388,18 @@ export async function fetchTwentyFourHourInspectionDisplay(
   params: TwentyFourHourInspectionParams = {}
 ): Promise<TwentyFourHourInspectionResponse> {
   const requestId = params.requestId || createRequestId();
+  const facility = params.facility?.trim() ?? "";
+  const endpoint = buildTwentyFourHourDisplayEndpoint({ facility, requestId });
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   if (process.env.NODE_ENV === "development") {
     console.info("[inspection-24-hour] inspection_24_hour_fetch_start", {
       request_id: requestId,
       endpoint: TWENTY_FOUR_HOUR_DISPLAY_ENDPOINT,
-      filters: {},
+      filters: { facility },
     });
   }
   try {
-    const raw = await apiFetch<unknown>(TWENTY_FOUR_HOUR_DISPLAY_ENDPOINT, {
+    const raw = await apiFetch<unknown>(endpoint, {
       signal: params.signal,
       headers: { "X-Request-Id": requestId },
       cache: "no-store",

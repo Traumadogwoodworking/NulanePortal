@@ -5,6 +5,9 @@ import TwentyFourHourInspectionPage from "@/app/inspection/24-hour/page";
 import type { TwentyFourHourInspectionResponse } from "@/lib/services/twentyFourHourInspectionService";
 
 const serviceMocks = vi.hoisted(() => ({ fetch: vi.fn() }));
+const fileSaverMocks = vi.hoisted(() => ({ saveAs: vi.fn() }));
+
+vi.mock("file-saver", () => ({ saveAs: fileSaverMocks.saveAs }));
 
 vi.mock("@/lib/services/twentyFourHourInspectionService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/services/twentyFourHourInspectionService")>();
@@ -12,7 +15,27 @@ vi.mock("@/lib/services/twentyFourHourInspectionService", async (importOriginal)
 });
 
 vi.mock("@/lib/portalSession", () => ({
-  usePortalSession: () => ({ isShap: true, status: "success" }),
+  usePortalSession: () => ({
+    status: "success",
+    selectedLocationId: "location-jnap",
+    twentyFourHourFacility: {
+      location_id: "location-shap",
+      location_label: "SHAP",
+      location_name: "Sterling Heights Assembly Plant",
+    },
+    locations: [
+      {
+        location_id: "location-shap",
+        location_label: "SHAP",
+        location_name: "Sterling Heights Assembly Plant",
+      },
+      {
+        location_id: "location-jnap",
+        location_label: "JNAP",
+        location_name: "Jefferson North Assembly Plant",
+      },
+    ],
+  }),
 }));
 
 function response(vin = "UNINSPECTEDVIN001", requestId = "request-1"): TwentyFourHourInspectionResponse {
@@ -60,7 +83,7 @@ function response(vin = "UNINSPECTEDVIN001", requestId = "request-1"): TwentyFou
         bucket: "inspected", inspected: true, severity: "inspected", display_label: "Inspected",
         first_seen_at: "2026-07-18T09:00:00.000Z", last_seen_at: "2026-07-19T10:55:00.000Z", current_server_time: "2026-07-19T11:00:00.000Z",
         time_in_inventory_seconds: 93_600, time_until_24h_seconds: 0, overdue_seconds: 0,
-        inspected_at: "2026-07-19T10:00:00.000Z", report_id: "report-inspected-1", facility: "SHAP", location: "SHAP/SHAP/B07",
+        inspected_at: "2026-07-19T10:00:00.000Z", report_id: "report-inspected-1", facility: "JNAP", location: "JNAP/JNAP/B07",
       },
     ],
     warnings: [],
@@ -68,18 +91,44 @@ function response(vin = "UNINSPECTEDVIN001", requestId = "request-1"): TwentyFou
 }
 
 describe("24-hour inspection page", () => {
-  beforeEach(() => serviceMocks.fetch.mockReset());
+  beforeEach(() => {
+    serviceMocks.fetch.mockReset();
+    fileSaverMocks.saveAs.mockReset();
+  });
 
-  it("renders snapshot metadata, Overdue, normalized bays, and pinned controls", async () => {
+  it("renders Overdue, normalized bays, and pinned controls without development diagnostics", async () => {
     serviceMocks.fetch.mockResolvedValue(response());
     render(<TwentyFourHourInspectionPage />);
     expect(await screen.findByText("Overdue · 1h 0m")).toHaveStyle({ backgroundColor: "#000000", color: "#ffffff" });
     expect(screen.getByText("A12")).toBeInTheDocument();
     expect(screen.queryByText("SHAP/SHAP/A12")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Development snapshot diagnostics")).toHaveTextContent("excluded: 1");
-    expect(screen.getByLabelText("Development snapshot diagnostics")).toHaveTextContent("request: request-1");
+    expect(screen.queryByLabelText("Development snapshot diagnostics")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Search inspected and uninspected records").parentElement?.parentElement).toHaveClass("sticky", "top-0", "z-30");
     expect(screen.getByRole("columnheader", { name: "VIN" }).closest("thead")).toHaveClass("sticky", "z-20");
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
+      "href",
+      "/reports/damage?focus=report-inspected-1"
+    );
+    expect(serviceMocks.fetch).toHaveBeenCalledWith(expect.not.objectContaining({ facility: expect.anything() }));
+  });
+
+  it("shows one facility selector sourced from the returned inventory and filters locally", async () => {
+    const user = userEvent.setup();
+    serviceMocks.fetch.mockResolvedValue(response());
+    render(<TwentyFourHourInspectionPage />);
+
+    const facility = await screen.findByLabelText("Filter returned inventory by facility");
+    expect(facility).toHaveValue("");
+    expect(screen.queryByLabelText("24-hour facility")).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "All returned facilities" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "SHAP (1 inventory)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "JNAP (1 inventory)" })).toBeInTheDocument();
+
+    await user.selectOptions(facility, "JNAP");
+
+    expect(screen.queryByText("UNINSPECTEDVIN001")).not.toBeInTheDocument();
+    expect(screen.getByText("INSPECTEDVIN00001")).toBeInTheDocument();
+    expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("searches both inspected and uninspected records", async () => {
@@ -106,6 +155,46 @@ describe("24-hour inspection page", () => {
     expect(screen.getByText("UNINSPECTEDVIN001")).toBeInTheDocument();
   });
 
+  it("uses the summary boxes as toggleable record filters", async () => {
+    const user = userEvent.setup();
+    serviceMocks.fetch.mockResolvedValue(response());
+    render(<TwentyFourHourInspectionPage />);
+
+    const overdue = await screen.findByRole("button", { name: "Filter records by Overdue" });
+    await user.click(overdue);
+    expect(overdue).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Filter records by inspection state or status")).toHaveValue("overdue");
+    expect(screen.getByText("UNINSPECTEDVIN001")).toBeInTheDocument();
+    expect(screen.queryByText("INSPECTEDVIN00001")).not.toBeInTheDocument();
+
+    await user.click(overdue);
+    expect(overdue).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByLabelText("Filter records by inspection state or status")).toHaveValue("all");
+    expect(screen.getByText("INSPECTEDVIN00001")).toBeInTheDocument();
+  });
+
+  it("exports only the currently visible rows in their displayed order", async () => {
+    const user = userEvent.setup();
+    serviceMocks.fetch.mockResolvedValue(response());
+    render(<TwentyFourHourInspectionPage />);
+
+    const search = await screen.findByLabelText("Search inspected and uninspected records");
+    await user.type(search, "INSPECTEDVIN00001");
+    await user.click(screen.getByRole("button", { name: "Export to Excel" }));
+
+    expect(fileSaverMocks.saveAs).toHaveBeenCalledOnce();
+    const [blob, filename] = fileSaverMocks.saveAs.mock.calls[0] as [Blob, string];
+    const csv = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    expect(filename).toMatch(/^24-hour-work-queue-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(csv).toContain('"1","INSPECTEDVIN00001","Inspected"');
+    expect(csv).not.toContain("UNINSPECTEDVIN001");
+  });
+
   it("prevents an older request from overwriting a newer successful refresh", async () => {
     let resolveFirst!: (value: TwentyFourHourInspectionResponse) => void;
     let resolveSecond!: (value: TwentyFourHourInspectionResponse) => void;
@@ -119,6 +208,20 @@ describe("24-hour inspection page", () => {
     expect(await screen.findByText("NEWERVIN000000001")).toBeInTheDocument();
     await act(async () => resolveFirst(response("OLDERVIN000000001", "request-old")));
     await waitFor(() => expect(screen.queryByText("OLDERVIN000000001")).not.toBeInTheDocument());
-    expect(screen.getByLabelText("Development snapshot diagnostics")).toHaveTextContent("request-new");
+    expect(screen.getByText("NEWERVIN000000001")).toBeInTheDocument();
+  });
+
+  it("re-hits the backend when a long-lived tab regains focus", async () => {
+    serviceMocks.fetch.mockResolvedValue(response());
+    render(<TwentyFourHourInspectionPage />);
+
+    await screen.findByText("UNINSPECTEDVIN001");
+    expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => expect(serviceMocks.fetch).toHaveBeenCalledTimes(2));
   });
 });

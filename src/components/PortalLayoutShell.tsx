@@ -7,7 +7,7 @@ import { AlertStack } from "@/components/AlertStack";
 import { PortalStatusScreen } from "@/components/PortalStatusScreen";
 import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
-import { AuthRedirectError, clearPortalAuthStorage, startAuth0Login } from "@/lib/portalAuth";
+import { AuthRedirectError, logoutRejectedPortalSession, startAuth0Login } from "@/lib/portalAuth";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
@@ -60,23 +60,24 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   }, [branding, themeMode]);
 
   useEffect(() => {
-    const shouldRedirectToUniversalLogin =
-      status === "unauthenticated" ||
+    const backendRejectedSession =
       status === "session_error" ||
       status === "forbidden" ||
       (status === "success" && session?.portal_access === false);
+    const shouldRedirectToUniversalLogin = status === "unauthenticated" || backendRejectedSession;
     if (!shouldRedirectToUniversalLogin) {
       autoLoginKeyRef.current = null;
       return;
     }
-    if (autoLoginKeyRef.current === safePathname) {
+    const redirectKey = `${backendRejectedSession ? "logout" : "login"}:${safePathname}`;
+    if (autoLoginKeyRef.current === redirectKey) {
       return;
     }
-    autoLoginKeyRef.current = safePathname;
-    if (status === "session_error" || status === "forbidden" || session?.portal_access === false) {
-      clearPortalAuthStorage({ includeAuth0Sdk: true });
-    }
-    void startAuth0Login(safePathname).catch((redirectError) => {
+    autoLoginKeyRef.current = redirectKey;
+    const redirect = backendRejectedSession
+      ? logoutRejectedPortalSession(safePathname)
+      : startAuth0Login(safePathname);
+    void redirect.catch((redirectError) => {
       if (redirectError instanceof AuthRedirectError) {
         return;
       }

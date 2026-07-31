@@ -32,6 +32,13 @@ import {
   persistPortalUser,
 } from "@/lib/portalAuth";
 import { publicBranding } from "@/lib/publicBranding";
+import {
+  getPortalOrganizationScope,
+  normalizePortalOrganizationScope,
+  PORTAL_ORGANIZATION_SCOPES,
+  type PortalOrganizationScope,
+  type PortalOrganizationScopeKey,
+} from "@/lib/portalOrganizations";
 
 type PortalSessionStatus =
   | "loading"
@@ -206,6 +213,7 @@ interface PortalSessionContextValue {
   portalAccess: boolean;
   isAwct: boolean;
   isShap: boolean;
+  twentyFourHourFacility: PortalSessionLocation | null;
   isSvl: boolean;
   planTier: string | null;
   requiresAds: boolean;
@@ -215,12 +223,18 @@ interface PortalSessionContextValue {
   selectedLocationLabel: string | null;
   locationLocked: boolean;
   switchOrganization: (orgId: string, orgName: string) => void;
+  organizationScopes: readonly PortalOrganizationScope[];
+  selectedOrganizationScopeKey: PortalOrganizationScopeKey;
+  selectedOrganizationScope: PortalOrganizationScope;
+  switchOrganizationScope: (key: PortalOrganizationScopeKey) => void;
 }
 
 export function PortalSessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<PortalSessionStatus>("loading");
   const [session, setSession] = useState<PortalSessionResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [selectedOrganizationScopeKey, setSelectedOrganizationScopeKey] =
+    useState<PortalOrganizationScopeKey>("all");
   const freshCallbackRetryCountRef = useRef(0);
   const pathname = usePathname() ?? "/";
 
@@ -392,6 +406,24 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const sessionScope = normalizePortalOrganizationScope(session?.organization?.suborg);
+    const storedScope =
+      typeof window === "undefined"
+        ? null
+        : normalizePortalOrganizationScope(window.sessionStorage.getItem("portalOrganizationScopeV2"));
+    setSelectedOrganizationScopeKey(sessionScope ?? storedScope ?? "all");
+  }, [session?.organization?.suborg]);
+
+  const switchOrganizationScope = useCallback((key: PortalOrganizationScopeKey) => {
+    const normalized = normalizePortalOrganizationScope(key);
+    if (!normalized) return;
+    setSelectedOrganizationScopeKey(normalized);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("portalOrganizationScopeV2", normalized);
+    }
+  }, []);
+
+  useEffect(() => {
     const t = setTimeout(() => {
       void loadSession();
     }, 0);
@@ -415,7 +447,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       session?.organization?.organization_id ||
       session?.user?.organization_id ||
       null;
-    const sessionLocations = Array.isArray(session?.locations) ? session.locations : [];
     const assignedLocations = [
       session?.locations,
       session?.facilities,
@@ -424,6 +455,13 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       session?.available_facilities,
       session?.availableFacilities,
     ].flatMap((locations) => (Array.isArray(locations) ? locations : []));
+    const accessibleLocations = Array.from(
+      new Map(
+        assignedLocations
+          .filter((location) => location.location_id && location.is_active !== false)
+          .map((location) => [location.location_id, location])
+      ).values()
+    );
     const selectedLocation = session?.selected_location ?? null;
     const selectedLocationId = selectedLocation?.location_id
       ? selectedLocation.location_id.toString()
@@ -437,6 +475,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     const planTier = session?.plan_tier ?? null;
     const requiresAds = Boolean(session?.requires_ads);
     const portalAccess = session?.portal_access ?? true;
+    const selectedOrganizationScope = getPortalOrganizationScope(selectedOrganizationScopeKey);
 
     const normalizedOrganizationName = normalizeOrganizationKey(session?.organization?.name ?? null);
     const isAwct =
@@ -448,20 +487,18 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       normalizedOrganizationName === "inspection_trac" ||
       normalizedOrganizationName === "inspection-track" ||
       normalizedOrganizationName === "signature vehicle logistics";
-    const locationLabels = [
-      selectedLocationLabel,
-      ...assignedLocations.flatMap((location) => [
-        location.location_label,
-        location.display_name,
-        location.location_name,
-      ]),
-    ]
-      .filter(Boolean)
-      .map((value) => normalizeOrganizationKey(value?.toString() ?? ""));
-    const isShap =
-      normalizedOrganizationName === "shap" ||
-      normalizedOrganizationName.includes("shap") ||
-      locationLabels.some((label) => label === "shap" || label.includes("shap"));
+    const normalizedLocationLabels = (location: PortalSessionLocation) =>
+      [location.location_label, location.display_name, location.location_name]
+        .filter(Boolean)
+        .map((value) => normalizeOrganizationKey(value?.toString() ?? ""));
+    const twentyFourHourFacility =
+      assignedLocations.find((location) =>
+        normalizedLocationLabels(location).some(
+          (label) => label === "shap" || /(^|\s)shap($|\s)/.test(label)
+        )
+      ) ?? null;
+    const locationLabels = assignedLocations.flatMap(normalizedLocationLabels);
+    const isShap = Boolean(twentyFourHourFacility);
     const isSvl =
       normalizedOrganizationName === "signature vehicle logistics" ||
       normalizedOrganizationName === "svl" ||
@@ -496,17 +533,30 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       portalAccess,
       isAwct,
       isShap,
+      twentyFourHourFacility,
       isSvl,
       planTier,
       requiresAds,
-      locations: sessionLocations,
+      locations: accessibleLocations,
       selectedLocation,
       selectedLocationId,
       selectedLocationLabel,
       locationLocked,
       switchOrganization,
+      organizationScopes: PORTAL_ORGANIZATION_SCOPES,
+      selectedOrganizationScopeKey,
+      selectedOrganizationScope,
+      switchOrganizationScope,
     };
-  }, [status, session, error, loadSession, switchOrganization]);
+  }, [
+    status,
+    session,
+    error,
+    loadSession,
+    switchOrganization,
+    selectedOrganizationScopeKey,
+    switchOrganizationScope,
+  ]);
 
   return (
     <PortalSessionContext.Provider value={value}>

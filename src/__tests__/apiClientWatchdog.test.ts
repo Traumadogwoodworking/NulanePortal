@@ -4,6 +4,7 @@ const authMocks = vi.hoisted(() => ({
   getPortalAccessToken: vi.fn(),
   clearStalePortalSession: vi.fn(),
   logAuthFlow: vi.fn(),
+  logoutRejectedPortalSession: vi.fn(),
 }));
 
 vi.mock("@/lib/config", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/lib/portalAuth", () => ({
   getPortalAccessToken: authMocks.getPortalAccessToken,
   clearStalePortalSession: authMocks.clearStalePortalSession,
   logAuthFlow: authMocks.logAuthFlow,
+  logoutRejectedPortalSession: authMocks.logoutRejectedPortalSession,
 }));
 
 describe("api client watchdog", () => {
@@ -29,6 +31,8 @@ describe("api client watchdog", () => {
     authMocks.getPortalAccessToken.mockReset();
     authMocks.clearStalePortalSession.mockReset();
     authMocks.logAuthFlow.mockReset();
+    authMocks.logoutRejectedPortalSession.mockReset();
+    authMocks.logoutRejectedPortalSession.mockResolvedValue(undefined);
     window.localStorage.setItem("portalApiTrace", "1");
     window.__portalFetchDebug?.clear();
   });
@@ -82,6 +86,40 @@ describe("api client watchdog", () => {
     ).rejects.toBeInstanceOf(PortalApiAuthExpiredError);
 
     expect(authMocks.clearStalePortalSession).not.toHaveBeenCalled();
+    expect(authMocks.logoutRejectedPortalSession).not.toHaveBeenCalled();
+    expect(window.__portalFetchDebug?.lastErrors()[0]?.phase).toBe("auth_expired");
+  });
+
+  it("fully logs out and redirects when the backend returns 401", async () => {
+    const { apiFetch, PortalApiAuthExpiredError } = await import("@/lib/apiClient");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    window.history.replaceState({}, "", "/reports/damage/?page=2#latest");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
+
+    await expect(
+      apiFetch("/reports/list", {
+        portal: { callerLabel: "test.backendRejected", timeoutMs: 1000 },
+      })
+    ).rejects.toBeInstanceOf(PortalApiAuthExpiredError);
+
+    expect(authMocks.logoutRejectedPortalSession).toHaveBeenCalledWith(
+      "/reports/damage/?page=2#latest"
+    );
+    expect(window.__portalFetchDebug?.lastErrors()[0]?.phase).toBe("auth_expired");
+  });
+
+  it("does not log out a valid session for an endpoint-level 403", async () => {
+    const { apiFetch, PortalApiAuthExpiredError } = await import("@/lib/apiClient");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 403 })));
+
+    await expect(
+      apiFetch("/users", {
+        portal: { callerLabel: "test.endpointForbidden", timeoutMs: 1000 },
+      })
+    ).rejects.toBeInstanceOf(PortalApiAuthExpiredError);
+
+    expect(authMocks.logoutRejectedPortalSession).not.toHaveBeenCalled();
     expect(window.__portalFetchDebug?.lastErrors()[0]?.phase).toBe("auth_expired");
   });
 });

@@ -111,8 +111,8 @@ export function DataTableShell({
           <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
             {(title || description) && (
               <div className="space-y-1">
-                {title && <h3 className="text-base font-semibold tracking-tight text-slate-800">{title}</h3>}
-                {description ? <p className="mt-0.5 text-sm font-medium uppercase tracking-tight text-slate-500">{description}</p> : null}
+                {title && <h3 className="text-lg font-bold tracking-tight text-slate-950">{title}</h3>}
+                {description ? <p className="mt-0.5 text-sm font-medium leading-5 text-slate-600">{description}</p> : null}
               </div>
             )}
             {actions && <div className="mt-2 flex shrink-0 items-center gap-2 md:mt-0">{actions}</div>}

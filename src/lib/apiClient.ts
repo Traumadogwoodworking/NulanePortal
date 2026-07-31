@@ -1,6 +1,6 @@
 import { buildApiUrl, buildDocuFitUrl, portalConfig } from "./config";
 import { resolveDevMockResponse, isDevMockEnabled } from "./devMockApi";
-import { getPortalAccessToken, logAuthFlow } from "./portalAuth";
+import { getPortalAccessToken, logAuthFlow, logoutRejectedPortalSession } from "./portalAuth";
 
 export type PortalApiPhase =
   | "session_start"
@@ -425,11 +425,13 @@ async function runRequest<T>(
 
       if (response.status === 401 || response.status === 403) {
         entry.update({ phase: "auth_expired" });
-        if (typeof window !== "undefined" && !portalOptions.skipAuthRedirect) {
+        if (response.status === 401 && typeof window !== "undefined" && !portalOptions.skipAuthRedirect) {
+          const returnTo = `${window.location.pathname || "/home"}${window.location.search}${window.location.hash}`;
           logAuthFlow("apiFetch.authExpired", {
             reason: `api_${response.status}`,
-            redirectTarget: window.location.pathname || "/home",
+            redirectTarget: returnTo,
           });
+          void logoutRejectedPortalSession(returnTo);
         }
         throw new PortalApiAuthExpiredError({ requestId, path, status: response.status });
       }

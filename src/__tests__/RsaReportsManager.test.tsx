@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { saveAs } from "file-saver";
 import { RsaReportsManager } from "@/components/reports/RsaReportsManager";
 import type { RsaReportApiRow } from "@/lib/types";
 
@@ -122,6 +123,7 @@ describe("RsaReportsManager", () => {
               decks: {
                 A: [{ vin: "VIN-E" }],
                 B: [],
+                C: [{ vin: "VIN-C-DECK" }, { vin: "   " }],
               },
             },
           ],
@@ -177,7 +179,8 @@ describe("RsaReportsManager", () => {
     expect(screen.getAllByText("RC-1001")).toHaveLength(1);
     expect(screen.getByText("Deck A")).toBeInTheDocument();
     expect(screen.getByText("Deck B")).toBeInTheDocument();
-    expect(screen.getAllByText("Deck A+B")).toHaveLength(2);
+    expect(screen.getByText("Deck A+B")).toBeInTheDocument();
+    expect(screen.getByText("Deck A+B+C")).toBeInTheDocument();
     expect(screen.queryByText("RC-HIDDEN-TRACK")).not.toBeInTheDocument();
     expect(screen.queryByText("RC-HIDDEN-SPOT")).not.toBeInTheDocument();
     expect(screen.queryByText(/submissions/i)).not.toBeInTheDocument();
@@ -202,7 +205,26 @@ describe("RsaReportsManager", () => {
 
     expect(await screen.findByText("Railcar RC-4004")).toBeInTheDocument();
     expect(screen.getByText("VIN-E")).toBeInTheDocument();
+    expect(screen.getByText("VIN-C-DECK")).toBeInTheDocument();
     expect(screen.getByText("No VINs on this deck.")).toBeInTheDocument();
     expect(screen.queryByText(/submissions/i)).not.toBeInTheDocument();
+  });
+
+  it("omits only empty decks and blank VINs from the RSA date-row export", async () => {
+    const user = userEvent.setup();
+    render(<RsaReportsManager />);
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    expect(saveAs).toHaveBeenCalledOnce();
+    const [csvBlob] = vi.mocked(saveAs).mock.calls[0];
+    const csv = await (csvBlob as Blob).text();
+    const railcarLines = csv.split("\n").filter((line) => line.includes('"RC-4004"'));
+
+    expect(railcarLines).toHaveLength(2);
+    expect(csv).toContain('"RC-4004","A"');
+    expect(csv).toContain('"RC-4004","C"');
+    expect(csv).toContain('"VIN-C-DECK"');
+    expect(csv).not.toContain('"RC-4004","B"');
   });
 });

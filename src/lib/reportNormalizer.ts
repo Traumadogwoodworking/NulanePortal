@@ -8,6 +8,9 @@ export type NormalizedReportListRow = {
   reportId: string;
   sourceType: string;
   vin: string;
+  make: string;
+  model: string;
+  year: string;
   inspectionTypeNumber: string;
   inspectionTypeLabel: string;
   moduleKey: string;
@@ -24,6 +27,11 @@ export type NormalizedReportListRow = {
   submittedAt: string;
   createdAt: string;
   updatedAt: string;
+  comments: string;
+  bayLocation: string;
+  inventoryBay: string;
+  confirmedBay: string;
+  sector: string;
   photoCount: number;
   hasPhotos: boolean;
   hasPdf: boolean;
@@ -144,8 +152,35 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
   const payloadMetadata = asRecord(payload?.metadata);
   const nestedReportMetadata = asRecord(nestedReport?.metadata);
   const location = firstRecord(row.location, payload?.location, nestedReport?.location, metadata?.location, payloadMetadata?.location, nestedReportMetadata?.location);
+  const vehicle = firstRecord(
+    row.vehicle,
+    payload?.vehicle,
+    nestedReport?.vehicle,
+    metadata?.vehicle,
+    payloadMetadata?.vehicle,
+    nestedReportMetadata?.vehicle
+  );
+  const overview = firstRecord(
+    row.overview,
+    payload?.overview,
+    nestedReport?.overview,
+    metadata?.overview,
+    payloadMetadata?.overview,
+    nestedReportMetadata?.overview
+  );
   const { media, mediaPayload } = readNestedMedia(row);
-  const damageEntries = asArray(row.damageEntries).length ? asArray(row.damageEntries) : asArray(row.damage_entries);
+  const damageEntries =
+    asArray(row.damageEntries).length
+      ? asArray(row.damageEntries)
+      : asArray(row.damage_entries).length
+        ? asArray(row.damage_entries)
+        : asArray(payload?.damageEntries).length
+          ? asArray(payload?.damageEntries)
+          : asArray(payload?.damage_entries).length
+            ? asArray(payload?.damage_entries)
+            : asArray(nestedReport?.damageEntries).length
+              ? asArray(nestedReport?.damageEntries)
+              : asArray(nestedReport?.damage_entries);
   const reportId = firstString(row.reportId, row.report_id, row.id, nestedReport?.reportId, nestedReport?.report_id);
   const submittedAt = firstString(
     row.submittedAt,
@@ -153,10 +188,34 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
     row.createdAt,
     row.created_at,
     payload?.submittedAt,
-    payload?.submitted_at
+    payload?.submitted_at,
+    nestedReport?.submittedAt,
+    nestedReport?.submitted_at,
+    metadata?.submittedAt,
+    metadata?.submitted_at
   );
-  const createdAt = firstString(row.createdAt, row.created_at, row.submittedAt, row.submitted_at, row.updatedAt, row.updated_at);
-  const updatedAt = firstString(row.updatedAt, row.updated_at, row.createdAt, row.created_at);
+  const createdAt = firstString(
+    row.createdAt,
+    row.created_at,
+    row.submittedAt,
+    row.submitted_at,
+    payload?.createdAt,
+    payload?.created_at,
+    nestedReport?.createdAt,
+    nestedReport?.created_at,
+    row.updatedAt,
+    row.updated_at
+  );
+  const updatedAt = firstString(
+    row.updatedAt,
+    row.updated_at,
+    payload?.updatedAt,
+    payload?.updated_at,
+    nestedReport?.updatedAt,
+    nestedReport?.updated_at,
+    row.createdAt,
+    row.created_at
+  );
   const photoUrls = Array.from(
     new Set([
       ...collectUrls(row.photoUrls, row.photo_urls, row.photos, media?.photoUrls, media?.photo_urls, mediaPayload?.photoUrls, mediaPayload?.photo_urls),
@@ -183,6 +242,102 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
     row.inspectionLabel,
     row.inspection_label,
     inspectionTypeNumber ? getInspectionTypeLabel(inspectionTypeNumber) : ""
+  );
+  const make = firstString(
+    row.make,
+    row.vehicleMake,
+    row.vehicle_make,
+    payload?.make,
+    payload?.vehicleMake,
+    payload?.vehicle_make,
+    nestedReport?.make,
+    nestedReport?.vehicleMake,
+    nestedReport?.vehicle_make,
+    metadata?.make,
+    metadata?.vehicleMake,
+    metadata?.vehicle_make,
+    vehicle?.make,
+    vehicle?.manufacturer
+  );
+  const model = firstString(
+    row.model,
+    row.vehicleModel,
+    row.vehicle_model,
+    payload?.model,
+    payload?.vehicleModel,
+    payload?.vehicle_model,
+    nestedReport?.model,
+    nestedReport?.vehicleModel,
+    nestedReport?.vehicle_model,
+    metadata?.model,
+    metadata?.vehicleModel,
+    metadata?.vehicle_model,
+    vehicle?.model
+  );
+  const year = firstString(
+    row.year,
+    row.modelYear,
+    row.model_year,
+    payload?.year,
+    payload?.modelYear,
+    payload?.model_year,
+    nestedReport?.year,
+    nestedReport?.modelYear,
+    nestedReport?.model_year,
+    metadata?.year,
+    vehicle?.year,
+    vehicle?.modelYear,
+    vehicle?.model_year
+  );
+  const inventoryBay = firstString(
+    row.inventoryBay,
+    row.inventory_bay,
+    payload?.inventoryBay,
+    payload?.inventory_bay,
+    nestedReport?.inventoryBay,
+    nestedReport?.inventory_bay,
+    metadata?.inventoryBay,
+    metadata?.inventory_bay,
+    overview?.inventoryBay,
+    overview?.inventory_bay
+  );
+  const confirmedBay = firstString(
+    row.confirmedBay,
+    row.confirmed_bay,
+    payload?.confirmedBay,
+    payload?.confirmed_bay,
+    nestedReport?.confirmedBay,
+    nestedReport?.confirmed_bay,
+    metadata?.confirmedBay,
+    metadata?.confirmed_bay,
+    overview?.confirmedBay,
+    overview?.confirmed_bay
+  );
+  const bayLocation = firstString(
+    row.bayLocation,
+    row.bay_location,
+    overview?.bayLocation,
+    overview?.bay_location,
+    payload?.bayLocation,
+    payload?.bay_location,
+    nestedReport?.bayLocation,
+    nestedReport?.bay_location,
+    confirmedBay,
+    inventoryBay
+  );
+  const sector = firstString(
+    row.sector,
+    payload?.sector,
+    nestedReport?.sector,
+    metadata?.sector,
+    overview?.sector
+  );
+  const comments = firstString(
+    row.comments,
+    payload?.comments,
+    nestedReport?.comments,
+    overview?.comments,
+    metadata?.comments
   );
   const facilityName = firstString(
     row.facilityName,
@@ -275,7 +430,19 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
     location?.yardLabel,
     location?.yard_label
   );
-  const rawSourceType = firstString(row.sourceType, row.source_type, row.entry_kind, row.source, row.type);
+  const rawSourceType = firstString(
+    row.sourceType,
+    row.source_type,
+    row.entry_kind,
+    row.source,
+    row.type,
+    payload?.sourceType,
+    payload?.source_type,
+    payload?.entry_kind,
+    nestedReport?.sourceType,
+    nestedReport?.source_type,
+    nestedReport?.entry_kind
+  );
   const isInspectionScan =
     inspectionTypeNumber === "02" ||
     rawSourceType === "inspection_scan" ||
@@ -283,19 +450,45 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
     row.entry_kind === "inspection_scan";
   const hasExplicitClearSignal =
     isTrueValue(row.clean) ||
+    isTrueValue(payload?.clean) ||
+    isTrueValue(nestedReport?.clean) ||
     isFalseValue(row.damage_found) ||
     isFalseValue(row.damageFound) ||
-    firstString(row.damage_status, row.damageStatus) === "no_damage";
+    isFalseValue(payload?.damage_found) ||
+    isFalseValue(payload?.damageFound) ||
+    isFalseValue(nestedReport?.damage_found) ||
+    isFalseValue(nestedReport?.damageFound) ||
+    firstString(
+      row.damage_status,
+      row.damageStatus,
+      payload?.damage_status,
+      payload?.damageStatus,
+      nestedReport?.damage_status,
+      nestedReport?.damageStatus
+    ) === "no_damage";
   const isClearInspectionScan = isInspectionScan && !damageEntries.length && hasExplicitClearSignal;
   const damageStatus = firstString(
     row.damageStatus,
     row.damage_status,
     row.damageResult,
     row.damage_result,
+    payload?.damageStatus,
+    payload?.damage_status,
+    nestedReport?.damageStatus,
+    nestedReport?.damage_status,
     damageEntries.length ? "damage" : "",
     isClearInspectionScan ? "no_damage" : ""
   );
-  const scanStatus = firstString(row.scanStatus, row.scan_status, row.status, isClearInspectionScan ? "completed" : "");
+  const scanStatus = firstString(
+    row.scanStatus,
+    row.scan_status,
+    row.status,
+    payload?.scanStatus,
+    payload?.scan_status,
+    nestedReport?.scanStatus,
+    nestedReport?.scan_status,
+    isClearInspectionScan ? "completed" : ""
+  );
   const sourceType = firstString(rawSourceType, isInspectionScan ? "inspection_scan_submission" : "damage_report");
   const photoCountValue = Number(firstString(row.photoCount, row.photo_count, row.mediaPhotoCount, row.media_photo_count));
   const photoCount = Number.isFinite(photoCountValue) && photoCountValue > 0 ? photoCountValue : photoUrls.length;
@@ -309,7 +502,10 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
     id: reportId || firstString(row.id),
     reportId,
     sourceType,
-    vin: firstString(row.vin, row.vehicleVin, row.vehicle_vin, payload?.vin, nestedReport?.vin),
+    vin: firstString(row.vin, row.vehicleVin, row.vehicle_vin, payload?.vin, nestedReport?.vin, vehicle?.vin),
+    make,
+    model,
+    year,
     inspectionTypeNumber,
     inspectionTypeLabel,
     moduleKey: firstString(row.moduleKey, row.module_key, payload?.moduleKey, payload?.module_key),
@@ -318,14 +514,55 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
     yardId: firstString(row.yardId, row.yard_id, metadata?.yardId, metadata?.yard_id, payloadMetadata?.yardId, payloadMetadata?.yard_id, nestedReportMetadata?.yardId, nestedReportMetadata?.yard_id, location?.yardId, location?.yard_id),
     yardName,
     locationLabel,
-    status: firstString(row.status, row.scan_status, row.scanStatus, isClearInspectionScan ? "complete" : "open"),
+    status: firstString(
+      row.status,
+      row.scan_status,
+      row.scanStatus,
+      payload?.status,
+      nestedReport?.status,
+      isClearInspectionScan ? "complete" : "open"
+    ),
     damageStatus,
     scanStatus,
-    inspectorName: firstString(row.inspectorName, row.inspector_name, row.inspector, row.userName, row.user_name),
-    inspectorEmail: firstString(row.inspectorEmail, row.inspector_email, row.userEmail, row.user_email),
+    inspectorName: firstString(
+      row.inspectorName,
+      row.inspector_name,
+      row.inspector,
+      row.userName,
+      row.user_name,
+      payload?.inspectorName,
+      payload?.inspector_name,
+      nestedReport?.inspectorName,
+      nestedReport?.inspector_name,
+      metadata?.inspectorName,
+      metadata?.inspector_name
+    ),
+    inspectorEmail: firstString(
+      row.inspectorEmail,
+      row.inspector_email,
+      row.userEmail,
+      row.user_email,
+      row.submittedByEmail,
+      row.submitted_by_email,
+      payload?.inspectorEmail,
+      payload?.inspector_email,
+      payload?.submittedByEmail,
+      payload?.submitted_by_email,
+      nestedReport?.inspectorEmail,
+      nestedReport?.inspector_email,
+      nestedReport?.submittedByEmail,
+      nestedReport?.submitted_by_email,
+      metadata?.inspectorEmail,
+      metadata?.inspector_email
+    ),
     submittedAt,
     createdAt,
     updatedAt,
+    comments,
+    bayLocation,
+    inventoryBay,
+    confirmedBay,
+    sector,
     photoCount,
     hasPhotos: photoCount > 0,
     hasPdf: Boolean(pdfUrl),

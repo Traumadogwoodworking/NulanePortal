@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types";
 
 export type DashboardAnalyticsParams = {
+  suborg?: string;
   from?: string;
   to?: string;
   facility_id?: string;
@@ -134,6 +135,7 @@ export type DashboardAnalyticsResponse = {
 };
 
 export type ReportListParams = {
+  suborg?: string;
   page?: number;
   pageSize?: number;
   limit?: number;
@@ -156,6 +158,8 @@ export type ReportListParams = {
   damage_area?: string;
   damage_type?: string;
 };
+
+export type ReportFilterOptionsResponse = Record<string, unknown>;
 
 export type ReportListRow = {
   report_id: string;
@@ -210,7 +214,7 @@ export type ReportListRow = {
   yardLabel?: string | null;
   yard_label?: string | null;
   location?: unknown;
-  damage_summary?: unknown[];
+  damage_summary?: unknown[] | { count?: number; max_severity?: string | number | null; maxSeverity?: string | number | null };
   damage_entries?: unknown[];
   photoUrls?: unknown[];
   photo_urls?: unknown[];
@@ -236,8 +240,37 @@ export type ReportListResponse = {
   filters?: Record<string, unknown>;
 };
 
+function readStableDamageReportId(row: Record<string, unknown>): string {
+  const nestedReport = row.report && typeof row.report === "object" && !Array.isArray(row.report)
+    ? (row.report as Record<string, unknown>)
+    : null;
+  const candidates = [row.report_id, row.reportId, nestedReport?.report_id, nestedReport?.reportId];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
+  }
+  return "";
+}
+
+export function sanitizeDamageReportListRows(rows: unknown[] | undefined): ReportListRow[] {
+  const sanitized: ReportListRow[] = [];
+  const seenReportIds = new Set<string>();
+
+  for (const value of rows ?? []) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const row = value as Record<string, unknown>;
+    const reportId = readStableDamageReportId(row);
+    if (!reportId || seenReportIds.has(reportId)) continue;
+    seenReportIds.add(reportId);
+    sanitized.push({ ...row, report_id: reportId } as ReportListRow);
+  }
+
+  return sanitized;
+}
+
 const REPORTS_ENDPOINT = "/report/pull";
 const REPORTS_LIST_ENDPOINT = "/reports/list";
+const REPORTS_FILTER_OPTIONS_ENDPOINT = "/reports/filter-options";
 const REPORT_MUTATIONS_ENDPOINT = "/reports";
 const RSA_REPORTS_ENDPOINT = "/railcar-scans/report/pull";
 const RSA_REPORTS_PAGE_SIZE = 200;
@@ -680,9 +713,24 @@ export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams =
   });
 }
 
+export async function fetchReportFilterOptions(
+  suborg?: string
+): Promise<ReportFilterOptionsResponse> {
+  return apiFetch<ReportFilterOptionsResponse>(
+    `${REPORTS_FILTER_OPTIONS_ENDPOINT}${buildNamedQueryString({ suborg })}`,
+    {
+      portal: {
+        callerLabel: "damageReports.filterOptions",
+        timeoutMs: REPORT_LIST_TIMEOUT_MS,
+      },
+    }
+  );
+}
+
 export async function fetchReportList(params: ReportListParams = {}): Promise<ReportListResponse> {
   const resolvedPageSize = params.limit ?? params.pageSize ?? 50;
   const queryParams = {
+    suborg: params.suborg,
     page: params.page ?? 1,
     pageSize: resolvedPageSize,
     limit: params.limit,
@@ -706,26 +754,30 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
     damage_type: params.damage_type,
   };
   const response = await apiFetchReport<unknown>(
-    `${REPORTS_LIST_ENDPOINT}${buildNamedQueryString(queryParams, { preserveDateOnly: true })}`,
+    `${REPORTS_LIST_ENDPOINT}${buildNamedQueryString(queryParams)}`,
     {},
     REPORT_LIST_TIMEOUT_MS,
     "damageReports.list"
   );
   if (Array.isArray(response)) {
+    const rows = sanitizeDamageReportListRows(response);
+    if (response.length > 0 && rows.length === 0) {
+      throw new Error("Reports response contained rows without stable report IDs.");
+    }
     return {
-      rows: response as ReportListRow[],
+      rows,
       page: params.page ?? 1,
       pageSize: resolvedPageSize,
       limit: resolvedPageSize,
-      total: response.length,
-      hasNextPage: response.length >= resolvedPageSize,
+      total: rows.length,
+      hasNextPage: rows.length >= resolvedPageSize,
       sort: queryParams.sort,
       filters: queryParams,
     };
   }
   const record = response && typeof response === "object" ? (response as Record<string, unknown>) : {};
   const data = record.data && typeof record.data === "object" && !Array.isArray(record.data) ? (record.data as Record<string, unknown>) : null;
-  const rows =
+  const rawRows =
     (Array.isArray(record.rows) ? record.rows : null) ??
     (Array.isArray(record.reports) ? record.reports : null) ??
     (Array.isArray(record.items) ? record.items : null) ??
@@ -734,6 +786,10 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
     (data && Array.isArray(data.rows) ? data.rows : null) ??
     (data && Array.isArray(data.reports) ? data.reports : null) ??
     [];
+  const rows = sanitizeDamageReportListRows(rawRows);
+  if (rawRows.length > 0 && rows.length === 0) {
+    throw new Error("Reports response contained rows without stable report IDs.");
+  }
   const page = Number(record.page ?? data?.page ?? params.page ?? 1);
   const pageSize = Number(record.pageSize ?? record.limit ?? data?.pageSize ?? data?.limit ?? resolvedPageSize);
   const total = Number(record.total ?? data?.total ?? rows.length);
@@ -878,7 +934,7 @@ export async function fetchDamageReportDetail(reportId: string): Promise<ReportD
   );
   const parsedReports = extractDamageReportsArray(response);
   const normalizedReports = parsedReports.map((report) => normalizeDamageReportRow(report));
-  return normalizedReports.find((report) => report.report_id === normalizedReportId) ?? normalizedReports[0] ?? null;
+  return normalizedReports.find((report) => report.report_id === normalizedReportId) ?? null;
 }
 
 function getDamageReportOrganizationId(filters: ReportFilters = {}): string | null {

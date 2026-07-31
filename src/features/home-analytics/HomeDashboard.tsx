@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect, react-hooks/preserve-manual-memoization */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import JSZip from "jszip";
 import {
   Download,
   Filter,
@@ -17,6 +16,7 @@ import {
   Legend,
   Pie,
   PieChart,
+  type PieLabelRenderProps,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { PageLoadingScreen } from "@/components/ui/PageLoadingScreen";
 import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
 import { Separator } from "@/components/ui/Separator";
 import {
@@ -37,14 +38,15 @@ import {
 import {
   usePortalDirectorySnapshot,
   useDashboardAnalyticsSnapshot,
-  useReportListSnapshot,
+  useHomeAnalyticsSnapshot,
 } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
+import { getPortalSuborgValue } from "@/lib/portalOrganizations";
 import { buildFacilityDamageStats } from "@/lib/facilityDamageStats";
 import { chartTheme } from "@/lib/chartTheme";
 import { DAMAGE_SEVERITIES } from "@/lib/docudent/damageTaxonomy";
 import { resolveDamageReportLocationName, resolveRsaFacilityLabel, stripFacilitySuffix } from "@/lib/reportUtils";
-import { fetchDamageReportListSnapshot, type ReportListParams } from "@/lib/services/reportService";
+import { fetchDashboardAnalytics, type DashboardAnalyticsParams } from "@/lib/services/reportService";
 import {
   normalizeLabel,
   normalizeSearchText,
@@ -64,8 +66,6 @@ import {
   HOME_VISIBLE_FACILITIES,
 } from "@/features/home-analytics/constants";
 import {
-  buildDashboardDailySplitCoverage,
-  buildTrendBreakdownForPair,
   readAnalyticsNumber,
   readAnalyticsSplitPair,
   readAnalyticsString,
@@ -78,12 +78,10 @@ import {
   parseHomeAnalyticsFilters,
   serializeHomeAnalyticsFilters,
 } from "@/features/home-analytics/filter-state";
-import { AnalyticsCoverageAlert } from "@/features/home-analytics/components/AnalyticsCoverageAlert";
 import { DamageClearMetricValue } from "@/features/home-analytics/components/DamageClearMetricValue";
 import { MetricCard } from "@/features/home-analytics/components/MetricCard";
-import { HOME_DASHBOARD_VISUALS } from "@/features/home-analytics/dashboard-config";
-import { buildFilterExportRows } from "@/features/home-analytics/export-adapters";
 import type { HomeAnalyticsFilters, HomeCountMode, HomeFilterKey } from "@/features/home-analytics/types";
+import { getPortalAnalyticsFilterOptions } from "@/lib/analyticsFilterOptions";
 
 type DashboardSeverityItem = {
   level: string;
@@ -125,16 +123,18 @@ type PieAreaDatum = {
   name: string;
   count: number;
   fill: string;
-  breakdown?: PieBreakdownItem[];
-  inspectionCount?: number;
-  damageCount?: number;
-  clearCount?: number;
   vinSamples?: string[];
 };
 
 type PieBreakdownItem = {
   label: string;
   count: number;
+};
+
+type PieFacilityBreakdownState = {
+  key: string;
+  status: "idle" | "loading" | "ready" | "error";
+  items: PieBreakdownItem[];
 };
 
 type DamageBreakdownItem = {
@@ -158,11 +158,7 @@ type ChartTooltipItem = {
   dataKey?: string | number;
   payload?: {
     name?: string | number;
-    breakdown?: PieBreakdownItem[];
     __breakdown?: TrendBreakdownMap;
-    inspectionCount?: number;
-    damageCount?: number;
-    clearCount?: number;
     vinSamples?: string[];
   };
 };
@@ -250,22 +246,8 @@ type ReportTrendView = {
 type InspectionOutcome = "damage" | "clear" | "unknown";
 type ExportCardContext = {
   filenamePrefix: string;
-  title: string;
-  cardFilters?: Array<[string, unknown]>;
-  cardRows?: unknown[][];
-  cardFiles?: Array<{ filename: string; rows: unknown[][] }>;
-  filterReport?: (report: ReportDamageApiRow) => boolean;
+  cardRows: unknown[][];
 };
-type PieSliceLabelProps = {
-  cx?: unknown;
-  cy?: unknown;
-  midAngle?: unknown;
-  innerRadius?: unknown;
-  outerRadius?: unknown;
-  percent?: unknown;
-  value?: unknown;
-};
-
 const SEVERITY_LABELS: Record<number, string> = {
   1: "≤1\" (≤3 cm)",
   2: ">1\" to ≤3\" (3–8 cm)",
@@ -274,6 +256,8 @@ const SEVERITY_LABELS: Record<number, string> = {
   5: ">12\" (≥30 cm)",
   6: "Missing / Major Damage",
 };
+
+const INSPECTION_SUBMISSIONS_SERIES = "Inspection Submissions";
 
 const REQUIRED_STATS_TOTAL_KEYS = [
   "totalReports",
@@ -352,24 +336,9 @@ function exportTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-function sanitizeFileNameSegment(value: unknown, fallback = "item"): string {
-  const normalized = String(value ?? "")
-    .trim()
-    .replace(/[^a-z0-9._-]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-  return normalized || fallback;
-}
-
-function downloadBlob(filename: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+function exportVisualizedCardCsv(context: ExportCardContext): void {
+  if (!context.cardRows.length) return;
+  downloadCsv(`${context.filenamePrefix}-${exportTimestamp()}.csv`, context.cardRows);
 }
 
 function downloadJson(filename: string, value: unknown): void {
@@ -386,6 +355,12 @@ function downloadJson(filename: string, value: unknown): void {
 
 function safeDate(value?: string | null): Date | null {
   if (!value) return null;
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -688,25 +663,38 @@ function normalizedRowHasDamage(row: NormalizedReportListRow): boolean {
   return status === "damage" || row.photoCount > 0 || row.hasPhotos || row.hasSplat || row.hasPdf;
 }
 
-function stableStringHash(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
-}
-
-function colorForFacility(label: string, index: number): string {
-  const hue = (index * 137.508 + stableStringHash(label) * 0.017) % 360;
-  return `hsl(${Math.round(hue)} 74% 45%)`;
-}
+const HOME_CHART_PALETTE = [
+  "#0072b2",
+  "#e69f00",
+  "#009e73",
+  "#cc79a7",
+  "#d55e00",
+  "#56b4e9",
+  "#7c3aed",
+  "#65a30d",
+  "#be123c",
+  "#0f766e",
+  "#a855f7",
+  "#4b5563",
+] as const;
 
 function buildFacilityColorMap(labels: string[]): Record<string, string> {
-  return [...labels]
+  return [...new Set(labels)]
     .sort((left, right) => left.localeCompare(right))
     .reduce<Record<string, string>>((acc, label, index) => {
-      acc[label] = colorForFacility(label, index);
+      acc[label] = HOME_CHART_PALETTE[index % HOME_CHART_PALETTE.length];
       return acc;
+    }, {});
+}
+
+const INSPECTOR_CHART_PALETTE = HOME_CHART_PALETTE;
+
+function buildInspectorColorMap(labels: string[]): Record<string, string> {
+  return [...new Set(labels)]
+    .sort((left, right) => left.localeCompare(right))
+    .reduce<Record<string, string>>((colors, label, index) => {
+      colors[label] = INSPECTOR_CHART_PALETTE[index % INSPECTOR_CHART_PALETTE.length];
+      return colors;
     }, {});
 }
 
@@ -1034,33 +1022,20 @@ const SEVERITY_PIE_COLORS: Record<string, string> = {
 };
 
 function buildPieData(items: { name: string; count: number }[]) {
-  const palette = ["#1d4ed8", "#0f766e", "#7c3aed", "#dc2626", "#059669", "#ea580c", "#0ea5e9", "#4338ca"];
   return items.map((item, index) => ({
     ...item,
-    fill: palette[index % palette.length],
+    fill: HOME_CHART_PALETTE[index % HOME_CHART_PALETTE.length],
   }));
 }
 
 function buildAllAreaPieData(items: { name: string; count: number }[]): PieAreaDatum[] {
-  const palette = [
-    "#2563eb",
-    "#0f766e",
-    "#7c3aed",
-    "#dc2626",
-    "#ea580c",
-    "#16a34a",
-    "#db2777",
-    "#0ea5e9",
-    "#9333ea",
-    "#0891b2",
-  ];
   return items
     .filter((item) => item.count > 0)
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     .slice(0, 5)
     .map((item, index) => ({
       ...item,
-      fill: palette[index % palette.length],
+      fill: HOME_CHART_PALETTE[index % HOME_CHART_PALETTE.length],
     }));
 }
 
@@ -1072,73 +1047,220 @@ function buildSelectedAreaPieData(items: { name: string; count: number }[], sele
   }));
 }
 
-function getPieSliceLabel(name: string, percent: number, index: number): string {
-  if (!percent || percent <= 0) {
-    return "";
-  }
-  if (index < 5) {
-    return `${name} ${(percent * 100).toFixed(0)}%`;
-  }
-  return "";
-}
-
-function renderPieSliceLabel(props: PieSliceLabelProps) {
-  const cx = Number(props.cx);
-  const cy = Number(props.cy);
-  const midAngle = Number(props.midAngle);
-  const innerRadius = Number(props.innerRadius);
-  const outerRadius = Number(props.outerRadius);
-  const percent = Number(props.percent ?? 0);
-  const value = Number(props.value ?? 0);
-
-  if (
-    !Number.isFinite(cx) ||
-    !Number.isFinite(cy) ||
-    !Number.isFinite(midAngle) ||
-    !Number.isFinite(innerRadius) ||
-    !Number.isFinite(outerRadius) ||
-    !Number.isFinite(percent) ||
-    !Number.isFinite(value) ||
-    value <= 0 ||
-    percent < 0.08
-  ) {
-    return null;
-  }
-
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.62;
-  const radians = (Math.PI / 180) * -midAngle;
-  const x = cx + radius * Math.cos(radians);
-  const y = cy + radius * Math.sin(radians);
-  const label = percent >= 0.14 ? `${formatNumber(value)} (${Math.round(percent * 100)}%)` : `${Math.round(percent * 100)}%`;
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="#ffffff"
-      textAnchor="middle"
-      dominantBaseline="central"
-      className="pointer-events-none text-[11px] font-black"
-    >
-      {label}
-    </text>
-  );
-}
-
 function buildSeverityPieData(items: DashboardSeverityItem[]) {
   return items.map((item) => ({
-    name: `${item.level} - ${item.label}`,
+    name: item.label.startsWith(`${item.level} -`) ? item.label : `${item.level} - ${item.label}`,
     count: item.count,
     fill: SEVERITY_PIE_COLORS[item.level] ?? "#cbd5e1",
   }));
 }
 
+function normalizeSeverityFilterValue(value: string | null | undefined): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized === "all") return "all";
+  const leadingLevel = normalized.match(/^[1-6](?=\D|$)/)?.[0];
+  return leadingLevel ?? "all";
+}
+
 function buildSelectedSeverityPieData(items: DashboardSeverityItem[], selectedLevel: string): Array<{ name: string; count: number; fill: string }> {
-  const normalizedSelected = selectedLevel === "all" ? "" : selectedLevel;
+  const normalizedSelected = normalizeSeverityFilterValue(selectedLevel);
   return buildSeverityPieData(items).map((item) => ({
     ...item,
-    count: !normalizedSelected || String(item.name).startsWith(`${normalizedSelected} `) ? item.count : 0,
+    count: normalizedSelected === "all" || String(item.name).startsWith(`${normalizedSelected} `) ? item.count : 0,
   }));
+}
+
+const PIE_LABEL_RADIAN = Math.PI / 180;
+
+function wrapPieCalloutLabel(label: string): string[] {
+  const maxLineLength = label.length > 28 ? 11 : 14;
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+
+  words.forEach((word) => {
+    const current = lines[lines.length - 1];
+    if (!current || `${current} ${word}`.length > maxLineLength) {
+      lines.push(word);
+    } else {
+      lines[lines.length - 1] = `${current} ${word}`;
+    }
+  });
+
+  return lines;
+}
+
+type PieCalloutDatum = {
+  name: string;
+  count: number;
+};
+
+function getPieCalloutFontSize(name: string, lineCount: number): number {
+  const preferredFontSize = name.length > 28 ? 9 : name.length > 18 ? 10 : 11;
+  const longestWordLength = Math.max(...name.trim().split(/\s+/).map((word) => word.length), 1);
+  const widthConstrainedFontSize = Math.floor(96 / (longestWordLength * 0.62));
+  return Math.max(
+    7,
+    Math.min(
+      preferredFontSize,
+      widthConstrainedFontSize,
+      Math.floor(44 / Math.max(lineCount, 1)) - 2
+    )
+  );
+}
+
+function buildPieCalloutPositions(data: PieCalloutDatum[], cx: number, cy: number, outerRadius: number) {
+  const total = data.reduce((sum, item) => sum + Math.max(Number(item.count) || 0, 0), 0);
+  const positions = new Map<number, { labelY: number }>();
+  if (!total) return positions;
+
+  let cumulative = 0;
+  const candidates = data.map((item, index) => {
+    const count = Math.max(Number(item.count) || 0, 0);
+    const midAngle = 90 - ((cumulative + count / 2) / total) * 360;
+    cumulative += count;
+    const cosine = Math.cos(-midAngle * PIE_LABEL_RADIAN);
+    const sine = Math.sin(-midAngle * PIE_LABEL_RADIAN);
+    const lines = wrapPieCalloutLabel(item.name);
+    const fontSize = getPieCalloutFontSize(item.name, lines.length);
+    return {
+      index,
+      isRightSide: cosine >= 0,
+      naturalY: cy + (outerRadius + 26) * sine,
+      height: (lines.length + 1) * (fontSize + 2),
+    };
+  });
+
+  [false, true].forEach((isRightSide) => {
+    const side = candidates
+      .filter((candidate) => candidate.isRightSide === isRightSide)
+      .sort((left, right) => left.naturalY - right.naturalY);
+    if (!side.length) return;
+
+    const minimumY = cy - outerRadius * 1.08;
+    const maximumY = cy + outerRadius * 1.08;
+    const gap = 7;
+    const adjusted: Array<(typeof side)[number] & { labelY: number }> = [];
+    side.forEach((candidate) => {
+      const previousAdjusted = adjusted[adjusted.length - 1];
+      const minimumNextY = previousAdjusted
+        ? previousAdjusted.labelY + previousAdjusted.height / 2 + candidate.height / 2 + gap
+        : minimumY + candidate.height / 2;
+      adjusted.push({
+        ...candidate,
+        labelY: Math.max(candidate.naturalY, minimumNextY),
+      });
+    });
+
+    const overflow = adjusted[adjusted.length - 1].labelY +
+      adjusted[adjusted.length - 1].height / 2 -
+      maximumY;
+    if (overflow > 0) {
+      adjusted.forEach((candidate) => {
+        candidate.labelY -= overflow;
+      });
+    }
+
+    for (let index = adjusted.length - 2; index >= 0; index -= 1) {
+      const current = adjusted[index];
+      const next = adjusted[index + 1];
+      const maximumCurrentY = next.labelY - next.height / 2 - current.height / 2 - gap;
+      current.labelY = Math.min(current.labelY, maximumCurrentY);
+    }
+
+    const topOverflow = minimumY - (adjusted[0].labelY - adjusted[0].height / 2);
+    if (topOverflow > 0) {
+      adjusted.forEach((candidate) => {
+        candidate.labelY += topOverflow;
+      });
+    }
+
+    adjusted.forEach((candidate) => {
+      positions.set(candidate.index, {
+        labelY: candidate.labelY,
+      });
+    });
+  });
+
+  return positions;
+}
+
+function PieSliceCalloutLabel(props: PieLabelRenderProps & { data: PieCalloutDatum[] }) {
+  const cx = Number(props.cx);
+  const cy = Number(props.cy);
+  const innerRadius = Number(props.innerRadius ?? 0);
+  const outerRadius = Number(props.outerRadius ?? 0);
+  const midAngle = Number(props.midAngle ?? 0);
+  const percent = Number(props.percent ?? 0);
+  const index = Number(props.index ?? -1);
+  const name = String(props.name ?? props.payload?.name ?? "");
+  if (![cx, cy, innerRadius, outerRadius, midAngle, percent].every(Number.isFinite) || !name) {
+    return null;
+  }
+
+  const cosine = Math.cos(-midAngle * PIE_LABEL_RADIAN);
+  const sine = Math.sin(-midAngle * PIE_LABEL_RADIAN);
+  const sliceCenterRadius = innerRadius + (outerRadius - innerRadius) * 0.62;
+  const startX = cx + sliceCenterRadius * cosine;
+  const startY = cy + sliceCenterRadius * sine;
+  const layout = buildPieCalloutPositions(props.data, cx, cy, outerRadius);
+  const position = layout.get(index);
+  // The rendered slice angle is the source of truth for its side. The collision
+  // layout may move a label vertically, but it must never move it across the pie.
+  const isRightSide = cosine >= 0;
+  const labelX = cx + (outerRadius + 32) * (isRightSide ? 1 : -1);
+  const labelY = position?.labelY ?? cy + (outerRadius + 26) * sine;
+  const lineEndX = labelX + (isRightSide ? -5 : 5);
+  const textAnchor = isRightSide ? "start" : "end";
+  const labelLines = wrapPieCalloutLabel(name);
+  const fontSize = getPieCalloutFontSize(name, labelLines.length);
+  const percentage = `${percent < 0.1 ? (percent * 100).toFixed(1) : Math.round(percent * 100)}%`;
+  const textStartY = labelY - (labelLines.length * (fontSize + 2)) / 2;
+  const labelWidth = Math.max(
+    percentage.length * (fontSize + 1) * 0.62,
+    ...labelLines.map((line) => line.length * fontSize * 0.62)
+  ) + 12;
+  const labelHeight = fontSize + labelLines.length * (fontSize + 2) + 8;
+  const labelBoxX = isRightSide ? labelX - 5 : labelX - labelWidth + 5;
+  const labelBoxY = textStartY - fontSize + 1;
+
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      <path
+        d={`M${startX},${startY} L${lineEndX},${labelY}`}
+        fill="none"
+        stroke="#64748b"
+        strokeWidth={1.25}
+      />
+      <circle cx={startX} cy={startY} r={2.25} fill="#475569" />
+      <rect
+        x={labelBoxX}
+        y={labelBoxY}
+        width={labelWidth}
+        height={labelHeight}
+        rx={4}
+        fill="#ffffff"
+        stroke="#64748b"
+        strokeWidth={1.25}
+      />
+      <text
+        x={labelX}
+        y={textStartY}
+        textAnchor={textAnchor}
+        fill="#0f172a"
+        fontSize={fontSize}
+        fontWeight={700}
+      >
+        <tspan x={labelX} dy="0" fontSize={fontSize + 1} fontWeight={800}>
+          {percentage}
+        </tspan>
+        {labelLines.map((line, lineIndex) => (
+          <tspan key={`${line}-${lineIndex}`} x={labelX} dy={fontSize + 2}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
 }
 
 function buildModelOptions(reports: ReportDamageApiRow[]): { value: string; label: string; count: number }[] {
@@ -1247,49 +1369,6 @@ function facilityDisplayKey(label: string): string {
 
 function normalizeOrganizationName(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
-}
-
-function isClearDamageBreakdown(entries: PieBreakdownItem[] | undefined): boolean {
-  if (!entries || entries.length === 0) {
-    return false;
-  }
-  if (entries.length > 2) return false;
-  const labels = new Set(entries.map((entry) => String(entry.label).trim().toLowerCase()));
-  return labels.has("damage") && labels.has("clear");
-}
-
-function formatClearDamagePair(entries: PieBreakdownItem[]): {
-  damageCount: number;
-  clearCount: number;
-} {
-  let damageCount = 0;
-  let clearCount = 0;
-  for (const entry of entries) {
-    const label = String(entry.label).trim().toLowerCase();
-    if (label === "damage") {
-      damageCount = Number(entry.count);
-    } else if (label === "clear") {
-      clearCount = Number(entry.count);
-    }
-  }
-  return {
-    damageCount: Number.isFinite(damageCount) ? damageCount : 0,
-    clearCount: Number.isFinite(clearCount) ? clearCount : 0,
-  };
-}
-
-function mergeClearDamageBreakdown(
-  existing: PieBreakdownItem[] | undefined,
-  damageCount: number,
-  clearCount: number
-): PieBreakdownItem[] {
-  const currentPair = existing && isClearDamageBreakdown(existing)
-    ? formatClearDamagePair(existing)
-    : { damageCount: 0, clearCount: 0 };
-  return buildTrendBreakdownForPair(
-    currentPair.damageCount + damageCount,
-    currentPair.clearCount + clearCount
-  );
 }
 
 function normalizeAnalyticsFacility(item: Record<string, unknown>): AnalyticsFacilityStat {
@@ -1538,7 +1617,7 @@ function ChartFooterTable({
   showRowCount = true,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   items: ChartSectionGroup[];
   showSeverityPills?: boolean;
   showRowCount?: boolean;
@@ -1547,11 +1626,11 @@ function ChartFooterTable({
     <div className="shrink-0 border-t border-slate-200 bg-slate-50/70">
       <div className="flex items-end justify-between gap-4 px-6 py-4">
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{title}</p>
-          <p className="text-xs text-slate-600">{subtitle}</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{title}</p>
+          {subtitle ? <p className="text-xs text-slate-600">{subtitle}</p> : null}
         </div>
         {showRowCount ? (
-          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{formatNumber(items.length)} rows</span>
+          <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{formatNumber(items.length)} rows</span>
         ) : null}
       </div>
       <div className="max-h-[260px] overflow-y-auto border-t border-slate-200">
@@ -1559,21 +1638,21 @@ function ChartFooterTable({
           <table className="w-full border-collapse text-left">
             <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
               <tr className="border-b border-slate-200">
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                <th className="px-6 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-500">
                   {showSeverityPills ? "Severity" : "Section"}
                 </th>
-                <th className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Model</th>
-                <th className="px-6 py-3 text-right text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Count</th>
+                <th className="px-6 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-500">Model</th>
+                <th className="px-6 py-3 text-right text-xs font-black uppercase tracking-[0.22em] text-slate-500">Count</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="bg-white">
               {items.map((item) =>
                 item.rows.map((row, rowIndex) => (
                   <tr key={`${item.section}-${row.car}`} className="align-top">
-                    <td className="px-6 py-3 text-sm font-semibold text-slate-900">
+                    <td className="border-y border-l border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900">
                       {showSeverityPills && row.severity ? (
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${severityPillClass(row.severity)}`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${severityPillClass(row.severity)}`}
                         >
                           {resolveSeverityLabel(row.severity)}
                         </span>
@@ -1581,10 +1660,10 @@ function ChartFooterTable({
                         <span className="block text-xs font-black uppercase tracking-[0.18em] text-slate-500">{item.section}</span>
                       ) : null}
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="border-y border-slate-300 px-6 py-3">
                       <p className="truncate text-sm font-semibold text-slate-900">{row.car}</p>
                     </td>
-                    <td className="px-6 py-3 text-right text-sm font-black tracking-tight text-slate-950">{formatNumber(row.count)}</td>
+                    <td className="border-y border-r border-slate-300 px-6 py-3 text-right text-sm font-black tracking-tight text-slate-950">{formatNumber(row.count)}</td>
                   </tr>
                 ))
               )}
@@ -1630,60 +1709,156 @@ function formatTooltipLabel(label: string | number | undefined): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(label) ? formatDateKeyLabel(label) : label;
 }
 
+function readDamageClearBreakdown(entries: DamageBreakdownItem[] | undefined): {
+  damageCount: number;
+  clearCount: number;
+} | null {
+  if (!entries?.length) return null;
+
+  let damageCount: number | null = null;
+  let clearCount: number | null = null;
+  entries.forEach((entry) => {
+    const label = entry.label.trim().toLowerCase();
+    if (label === "damage" || label === "damaged") damageCount = Number(entry.count);
+    if (label === "clear" || label === "cleared") clearCount = Number(entry.count);
+  });
+
+  return damageCount !== null && clearCount !== null
+    ? {
+        damageCount: Number.isFinite(damageCount) ? damageCount : 0,
+        clearCount: Number.isFinite(clearCount) ? clearCount : 0,
+      }
+    : null;
+}
+
+function mergeDamageClearBreakdown(
+  existing: DamageBreakdownItem[] | undefined,
+  damageCount: number,
+  clearCount: number
+): DamageBreakdownItem[] {
+  const current = readDamageClearBreakdown(existing) ?? { damageCount: 0, clearCount: 0 };
+  return buildDamageClearBreakdown(current.damageCount + damageCount, current.clearCount + clearCount);
+}
+
+function buildDamageClearBreakdown(damageCount: number, clearCount: number): DamageBreakdownItem[] {
+  return [
+    { label: "Damage", count: Number.isFinite(damageCount) ? damageCount : 0 },
+    { label: "Clear", count: Number.isFinite(clearCount) ? clearCount : 0 },
+  ];
+}
+
+function buildCategoryTrendExportRows(
+  categoryHeader: string,
+  rows: TrendRow[],
+  series: string[]
+): unknown[][] {
+  return [
+    [
+      categoryHeader,
+      "Damage",
+      "Clear",
+      "Total",
+      ...rows.flatMap((row) => [
+        `${String(row.date)} Damage`,
+        `${String(row.date)} Clear`,
+        `${String(row.date)} Total`,
+      ]),
+    ],
+    ...series.map((name) => {
+      let damaged = 0;
+      let clear = 0;
+      let hasDamageClearBreakdown = false;
+      const dailyValues = rows.flatMap((row) => {
+        const split = readDamageClearBreakdown(row.__breakdown?.[name]);
+        if (split) {
+          hasDamageClearBreakdown = true;
+          damaged += split.damageCount;
+          clear += split.clearCount;
+        }
+        return [
+          split?.damageCount ?? "",
+          split?.clearCount ?? "",
+          Number(row[name] ?? 0),
+        ];
+      });
+      const total = rows.reduce((sum, row) => sum + Number(row[name] ?? 0), 0);
+      return [
+        name,
+        hasDamageClearBreakdown ? damaged : "",
+        hasDamageClearBreakdown ? clear : "",
+        total,
+        ...dailyValues,
+      ];
+    }),
+  ];
+}
+
+function formatPieExportPercentage(count: number, total: number): string {
+  if (total <= 0) return "0%";
+  const percentage = (count / total) * 100;
+  return `${percentage < 10 ? percentage.toFixed(1) : Math.round(percentage)}%`;
+}
+
 function NonZeroBarTooltip({ active, label, payload, hideSeriesNames = false }: ChartTooltipProps & { hideSeriesNames?: boolean }) {
   if (!active || !payload?.length) {
     return null;
   }
 
-  const visibleItems = payload.filter((item) => {
-    const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
-    return value > 0;
-  });
+  const visibleItems = payload
+    .filter((item) => {
+      const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
+      return value > 0;
+    })
+    .sort((left, right) => Number(right.value ?? 0) - Number(left.value ?? 0));
 
   if (!visibleItems.length) {
     return null;
   }
 
   return (
-    <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-white p-3 shadow-lg">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+    <div className="w-[min(34rem,calc(100vw-2rem))] rounded-2xl border border-slate-300 bg-white p-4 text-[13px] shadow-[0_20px_50px_-18px_rgba(15,23,42,0.45)]">
+      <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-600">
         {formatTooltipLabel(label)}
       </p>
-      <div className="mt-2 space-y-2">
+      <div className={visibleItems.length > 4 ? "mt-3 grid grid-cols-1 gap-2.5 lg:grid-cols-2" : "mt-3 space-y-2.5"}>
         {visibleItems.map((item) => {
           const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
           const seriesKey = String(item.dataKey ?? item.name ?? "");
           const breakdown = seriesKey ? item.payload?.__breakdown?.[seriesKey] ?? [] : [];
-          const clearDamagePair = breakdown && isClearDamageBreakdown(breakdown) ? formatClearDamagePair(breakdown) : null;
+          const damageClearBreakdown = readDamageClearBreakdown(breakdown);
           return (
-            <div key={`${String(item.name)}-${item.dataKey ?? item.color ?? value}`} className="space-y-1.5 text-sm">
+            <div key={`${String(item.name)}-${item.dataKey ?? item.color ?? value}`} className="min-w-0 space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
               <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color || item.fill || chartTheme.colors.text }} />
-                  <span className="text-slate-700">{hideSeriesNames ? "" : String(item.name)}</span>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="h-3 w-3 shrink-0 rounded-sm border border-black/10" style={{ backgroundColor: item.color || item.fill || chartTheme.colors.text }} />
+                  <span className="truncate text-sm font-bold text-slate-800">{hideSeriesNames ? "Inspection total" : String(item.name)}</span>
                 </div>
-                <span className="font-bold text-slate-950">{formatNumber(value)}</span>
+                <span className="text-base font-black tabular-nums text-slate-950">{formatNumber(value)}</span>
               </div>
-              {clearDamagePair ? (
-                <div className="ml-4 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="font-semibold text-rose-700">Damaged</span>
-                    <span className="font-black text-rose-950">{formatNumber(clearDamagePair.damageCount)}</span>
+              {damageClearBreakdown ? (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                    <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-rose-700">Damaged</p>
+                    <p className="mt-0.5 text-base font-black tabular-nums text-rose-950">
+                      {formatNumber(damageClearBreakdown.damageCount)}
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="font-semibold text-emerald-700">Clear</span>
-                    <span className="font-black text-emerald-950">{formatNumber(clearDamagePair.clearCount)}</span>
+                  <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">
+                    <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-teal-700">Clear</p>
+                    <p className="mt-0.5 text-base font-black tabular-nums text-teal-950">
+                      {formatNumber(damageClearBreakdown.clearCount)}
+                    </p>
                   </div>
                 </div>
-              ) : null}
-              {!clearDamagePair && breakdown.length ? (
-                <div className="ml-4 space-y-1 border-l border-slate-200 pl-3 text-[11px] leading-4 text-slate-500">
-                  {breakdown.map((entry) => (
+              ) : breakdown.length ? (
+                <div className="ml-5 space-y-1.5 border-l-2 border-slate-200 pl-3 text-xs leading-5 text-slate-600">
+                  {breakdown.slice(0, 3).map((entry) => (
                     <div key={entry.label} className="flex justify-between gap-3">
-                      <span className="max-w-[220px] truncate">{entry.label}</span>
-                      <span className="font-semibold text-slate-700">{formatNumber(entry.count)}</span>
+                      <span className="min-w-0 truncate">{entry.label}</span>
+                      <span className="font-bold tabular-nums text-slate-800">{formatNumber(entry.count)}</span>
                     </div>
                   ))}
+                  {breakdown.length > 3 ? <p className="font-bold text-slate-500">+{breakdown.length - 3} more</p> : null}
                 </div>
               ) : null}
             </div>
@@ -1694,87 +1869,54 @@ function NonZeroBarTooltip({ active, label, payload, hideSeriesNames = false }: 
   );
 }
 
-function PieSummaryTooltip({ active, payload }: ChartTooltipProps) {
-  if (!active || !payload?.length) {
-    return null;
-  }
+function PieSummaryTooltip({
+  active,
+  payload,
+  sectionLabel,
+  facilityBreakdown,
+}: ChartTooltipProps & { sectionLabel: string; facilityBreakdown: PieFacilityBreakdownState }) {
+  if (!active || !payload?.length) return null;
 
   const item = payload[0];
   const value = typeof item.value === "number" ? item.value : Number(item.value ?? 0);
-  if (!Number.isFinite(value) || value <= 0) {
-    return null;
-  }
+  if (!Number.isFinite(value) || value <= 0) return null;
+
   const datum = item.payload ?? {};
-  const sliceName = typeof datum.name === "string" || typeof datum.name === "number" ? String(datum.name) : "Summary";
-  const breakdown = Array.isArray(datum.breakdown) ? datum.breakdown : [];
-  const rawInspectionCount = Number(datum.inspectionCount ?? value);
-  const rawDamageCount = Number(datum.damageCount ?? value);
-  const rawClearCount = Number(datum.clearCount ?? 0);
-  const inspectionCount = Number.isFinite(rawInspectionCount) ? rawInspectionCount : value;
-  const damageCount = Number.isFinite(rawDamageCount) ? rawDamageCount : value;
-  const clearCount = Number.isFinite(rawClearCount) ? rawClearCount : 0;
-  const vinSamples = Array.isArray(datum.vinSamples) ? datum.vinSamples.filter(Boolean).slice(0, 8) : [];
+  const name = String(datum.name ?? item.name ?? "Damage section");
 
   return (
-    <div className="min-w-[260px] rounded-2xl border border-[color:var(--border-subtle)] bg-white p-3 shadow-lg">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{sliceName}</p>
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Submissions</p>
-          <p className="mt-1 text-lg font-black tracking-tight text-slate-950">{formatNumber(inspectionCount)}</p>
+    <div className="w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_45px_-16px_rgba(15,23,42,0.4)]">
+      <div className="flex items-start justify-between gap-5">
+        <div className="min-w-0 px-4 py-3">
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">{sectionLabel}</p>
+          <p className="mt-1 truncate text-sm font-extrabold text-slate-950">{name}</p>
         </div>
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-2">
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-rose-700">Damage</p>
-          <p className="mt-1 text-lg font-black tracking-tight text-rose-950">{formatNumber(damageCount)}</p>
-        </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2">
-          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700">Clear</p>
-          <p className="mt-1 text-lg font-black tracking-tight text-emerald-950">{formatNumber(clearCount)}</p>
+        <div data-testid="pie-tooltip-count" className="m-3 shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-right text-slate-950 shadow-sm">
+          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Count</p>
+          <p className="text-lg font-black tabular-nums text-slate-950">{formatNumber(value)}</p>
         </div>
       </div>
-      {vinSamples.length ? (
-        <div className="mt-3 rounded-xl border border-slate-200 bg-white p-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">VIN samples</p>
-          <p className="mt-1 max-w-[280px] break-words font-mono text-[11px] font-semibold text-slate-700">
-            {vinSamples.join("  ")}
-          </p>
-        </div>
-      ) : null}
-      {breakdown.length ? (
-        <>
-          <Separator className="my-3" />
-          <div className="space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Facility breakdown</p>
-            {breakdown.map((entry) => (
-              <div key={entry.label} className="flex items-center justify-between gap-4 text-xs font-semibold text-slate-700">
-                <span className="truncate">{entry.label}</span>
-                <span className="text-slate-950">{formatNumber(entry.count)}</span>
+      <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3">
+        <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">Facility breakdown</p>
+        {facilityBreakdown.status === "loading" || facilityBreakdown.status === "idle" ? (
+          <p className="mt-2 text-xs font-semibold text-slate-500">Loading facility counts…</p>
+        ) : facilityBreakdown.status === "error" ? (
+          <p className="mt-2 text-xs font-semibold text-rose-700">Facility breakdown unavailable.</p>
+        ) : facilityBreakdown.items.length ? (
+          <div className="mt-2 max-h-44 space-y-1.5 overflow-y-auto pr-1">
+            {facilityBreakdown.items.map((facility) => (
+              <div data-testid="pie-facility-row" key={facility.label} className="flex items-center justify-between gap-4 rounded-md bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200/80">
+                <span className="min-w-0 truncate text-xs font-semibold text-slate-700">{facility.label}</span>
+                <span className="font-mono text-sm font-black tabular-nums text-slate-950">{formatNumber(facility.count)}</span>
               </div>
             ))}
           </div>
-        </>
-      ) : null}
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-slate-500">No facility counts returned for this section.</p>
+        )}
+      </div>
     </div>
   );
-}
-
-function buildFacilityBreakdownFromReports(
-  reports: ReportDamageApiRow[],
-  predicate: (report: ReportDamageApiRow) => boolean,
-  limit = 3
-): PieBreakdownItem[] {
-  const counts = new Map<string, number>();
-  for (const report of reports) {
-    if (!predicate(report)) {
-      continue;
-    }
-    const facility = stripFacilitySuffix(getReportFacilityLabel(report));
-    counts.set(facility, (counts.get(facility) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, limit);
 }
 
 function getReportDateBounds(reports: ReportDamageApiRow[]): { minDate: string | null; maxDate: string | null } {
@@ -1839,14 +1981,16 @@ function buildInspectorDailyTrendData(
   fallbackReports: ReportDamageApiRow[],
   days = 30,
   countMode: HomeCountMode = "reports",
-  range?: { start: Date; end: Date }
-): { data: TrendRow[]; keys: string[]; hasClearDamageSplit: boolean } {
+  range?: { start: Date; end: Date },
+  inspectorFilter = ""
+): { data: TrendRow[]; keys: string[] } {
+  const normalizedInspectorFilter = normalizeSearchText(inspectorFilter);
   const analyticsRows = ((analytics as { byInspectorDaily?: Array<Record<string, unknown>> } | undefined)?.byInspectorDaily ?? [])
     .map((row) => {
       const splitCounts = readAnalyticsSplitPair(row, countMode);
       const fallbackCount = countMode === "damages"
         ? readRecordNumber(row, ["damageEntries", "totalDamages", "entries", "reportCount", "reports", "damageReports", "count"])
-        : readRecordNumber(row, ["reportCount", "reports", "damageReports", "totalReports", "count"]);
+        : readRecordNumber(row, ["reportCount", "reports", "totalReports", "submissions", "count", "damageReports"]);
       return {
         date: normalizeAnalyticsDateKey(row.date ?? row.day ?? row.created_date),
         label: String(row.label ?? row.email ?? "Unassigned").trim() || "Unassigned",
@@ -1854,10 +1998,14 @@ function buildInspectorDailyTrendData(
         reportCount: splitCounts.hasSplitData ? splitCounts.damageCount + splitCounts.clearCount : fallbackCount,
       };
     })
-    .filter((row) => row.date && row.reportCount > 0);
+    .filter(
+      (row) =>
+        row.date &&
+        row.reportCount > 0 &&
+        (!normalizedInspectorFilter || normalizeSearchText(row.label) === normalizedInspectorFilter)
+    );
 
   if (analyticsRows.length > 0) {
-    const hasClearDamageSplit = analyticsRows.some((row) => row.splitCounts.hasSplitData);
     const totalsByInspector = analyticsRows.reduce<Map<string, number>>((acc, row) => {
       acc.set(row.label, (acc.get(row.label) ?? 0) + row.reportCount);
       return acc;
@@ -1881,7 +2029,7 @@ function buildInspectorDailyTrendData(
       if (bucket) {
         if (row.splitCounts.hasSplitData) {
           const breakdown = bucket.__breakdown ?? {};
-          breakdown[row.label] = mergeClearDamageBreakdown(
+          breakdown[row.label] = mergeDamageClearBreakdown(
             breakdown[row.label],
             row.splitCounts.damageCount,
             row.splitCounts.clearCount
@@ -1891,10 +2039,10 @@ function buildInspectorDailyTrendData(
         bucket[row.label] = Number(bucket[row.label] ?? 0) + row.reportCount;
       }
     });
-    return { data: rows, keys, hasClearDamageSplit };
+    return { data: rows, keys };
   }
 
-  return { ...buildInspectorTrendData(fallbackReports, days, range ? toDateInputValue(range.end) : undefined, countMode), hasClearDamageSplit: false };
+  return buildInspectorTrendData(fallbackReports, days, range ? toDateInputValue(range.end) : undefined, countMode);
 }
 
 function normalizeInspectorSeverityItems(value: unknown, total: number): DashboardSeverityItem[] {
@@ -1999,7 +2147,7 @@ function buildAnalyticsInspectorSummaries(
       const splitCounts = readAnalyticsSplitPair(record, countMode);
       const fallbackCount = countMode === "damages"
         ? readRecordNumber(record, ["damageEntries", "totalDamages", "entries", "reportCount"])
-        : readRecordNumber(record, ["reportCount", "damageReports", "reports", "totalReports"]);
+        : readRecordNumber(record, ["reportCount", "reports", "totalReports", "submissions", "count", "damageReports"]);
       const reportCount = splitCounts.hasSplitData ? splitCounts.damageCount + splitCounts.clearCount : fallbackCount;
       if (!email && reportCount <= 0) return [];
       return [
@@ -2026,7 +2174,7 @@ function buildDailyAnalyticsTrend(
   analytics: DashboardAnalyticsPayload | undefined,
   range: { start: Date; end: Date },
   countMode: HomeCountMode
-): { source: string; rows: TrendRow[]; keys: string[]; hasClearDamageSplit: boolean } {
+): { source: string; rows: TrendRow[]; keys: string[] } {
   const dayCount = daysBetween(range.start, range.end) + 1;
   const rows = new Map<string, TrendRow>();
   for (let offset = 0; offset < dayCount; offset += 1) {
@@ -2039,7 +2187,6 @@ function buildDailyAnalyticsTrend(
     ...(((analytics as { facilityDaily?: Array<Record<string, unknown>> } | undefined)?.facilityDaily ?? [])),
   ];
   const facilityKeys = new Set<string>();
-  let hasClearDamageSplit = false;
 
   for (const item of facilityDailyRows) {
     const date = normalizeAnalyticsDateKey(item.date ?? item.day ?? item.created_date);
@@ -2053,12 +2200,11 @@ function buildDailyAnalyticsTrend(
       ? splitCounts.damageCount + splitCounts.clearCount
       : countMode === "damages"
         ? readAnalyticsNumber(item, ["entries", "damageEntries", "totalDamages"])
-        : readAnalyticsNumber(item, ["damageReports", "damage_reports"]);
+        : readAnalyticsNumber(item, ["totalReports", "reportCount", "reports", "submissions", "count", "damageReports"]);
     if (value <= 0) continue;
     if (splitCounts.hasSplitData) {
-      hasClearDamageSplit = true;
       const breakdown = row.__breakdown ?? {};
-      breakdown[facility] = mergeClearDamageBreakdown(
+      breakdown[facility] = mergeDamageClearBreakdown(
         breakdown[facility],
         splitCounts.damageCount,
         splitCounts.clearCount
@@ -2080,25 +2226,26 @@ function buildDailyAnalyticsTrend(
         return row;
       }),
       keys,
-      hasClearDamageSplit,
     };
   }
 
   const dailyRows = analytics?.dailyTrend ?? [];
-  const keys = ["Damage Submissions"];
+  const keys = [INSPECTION_SUBMISSIONS_SERIES];
   for (const item of dailyRows) {
     const date = normalizeAnalyticsDateKey(item.date);
     const row = rows.get(date);
     if (!row) continue;
     const splitCounts = readAnalyticsSplitPair(item as Record<string, unknown>, countMode);
-    const damageReportsValue = splitCounts.hasSplitData
+    const submissionCount = splitCounts.hasSplitData
       ? splitCounts.damageCount + splitCounts.clearCount
-      : Number(item.damageReports ?? 0);
-    row["Damage Submissions"] = Number.isFinite(damageReportsValue) ? damageReportsValue : Number(item.damageReports ?? 0);
+      : readAnalyticsNumber(item as unknown as Record<string, unknown>, ["totalReports", "reportCount", "reports", "submissions", "count", "damageReports"]);
+    row[INSPECTION_SUBMISSIONS_SERIES] = submissionCount;
     if (splitCounts.hasSplitData) {
-      hasClearDamageSplit = true;
       const breakdown = row.__breakdown ?? {};
-      breakdown["Damage Submissions"] = buildTrendBreakdownForPair(splitCounts.damageCount, splitCounts.clearCount);
+      breakdown[INSPECTION_SUBMISSIONS_SERIES] = buildDamageClearBreakdown(
+        splitCounts.damageCount,
+        splitCounts.clearCount
+      );
       row.__breakdown = breakdown;
     }
   }
@@ -2112,7 +2259,6 @@ function buildDailyAnalyticsTrend(
       return row;
     }),
     keys,
-    hasClearDamageSplit,
   };
 }
 
@@ -2186,7 +2332,8 @@ function buildInspectorTrendData(
     const bucket = dateRows.get(toDateInputValue(date));
     if (!bucket) continue;
     const submitter = normalizeLabel(report.inspector_email || "Unassigned");
-    const increment = countMode === "damages" ? getDamageEntryCount(report) : 1;
+    const damageEntryCount = getDamageEntryCount(report);
+    const increment = countMode === "damages" ? damageEntryCount : damageEntryCount > 0 ? 1 : 0;
     if (increment <= 0) continue;
     bucket[submitter] = Number(bucket[submitter] ?? 0) + increment;
     addDamageBreakdown(bucket, submitter, report);
@@ -2940,51 +3087,13 @@ function buildDashboardSummary(
   };
 }
 
-function SkeletonBlock({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-slate-100 ${className}`} />;
-}
-
 function HomeLoadingShell({ message = "Loading analytics..." }: { message?: string }) {
   return (
-    <div className="space-y-6" aria-busy="true" aria-live="polite">
-      <Card className="overflow-hidden border-slate-200/80 bg-white/95">
-        <CardHeader title="Filters" subtitle={message} />
-        <CardContent>
-          <div className="grid gap-4 xl:grid-cols-4">
-            <SkeletonBlock className="h-14" />
-            <SkeletonBlock className="h-14" />
-            <SkeletonBlock className="h-14" />
-            <SkeletonBlock className="h-14" />
-          </div>
-        </CardContent>
-      </Card>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <Card key={`metric-loading-${index}`} className="p-4">
-            <div className="flex h-32 flex-col items-center justify-center gap-3">
-              <SkeletonBlock className="h-9 w-9 rounded-full" />
-              <SkeletonBlock className="h-3 w-28" />
-              <SkeletonBlock className="h-8 w-20" />
-              <SkeletonBlock className="h-3 w-32" />
-            </div>
-          </Card>
-        ))}
-      </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="overflow-hidden">
-          <CardHeader title="Daily Analytics" subtitle="Preparing chart data." />
-          <CardContent className="h-96">
-            <SkeletonBlock className="h-full w-full" />
-          </CardContent>
-        </Card>
-        <Card className="overflow-hidden">
-          <CardHeader title="Inspector Trend" subtitle="Preparing chart data." />
-          <CardContent className="h-96">
-            <SkeletonBlock className="h-full w-full" />
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <PageLoadingScreen
+      title="Loading home analytics"
+      description={message}
+      detail="Preparing filters, totals, and chart data."
+    />
   );
 }
 
@@ -3059,32 +3168,32 @@ function FacilitySummaryCard({ facility }: { facility: DashboardFacilityItem }) 
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Today</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Today</p>
             <p className="mt-1 text-xl font-black text-slate-950">{formatNumber(facility.today)}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Last 7 Days</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Last 7 Days</p>
             <p className="mt-1 text-xl font-black text-slate-950">{formatNumber(facility.last7Days)}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Month to Date</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Month to Date</p>
             <p className="mt-1 text-xl font-black text-slate-950">{formatNumber(facility.monthToDate)}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Year to Date</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Year to Date</p>
             <p className="mt-1 text-xl font-black text-slate-950">{formatNumber(facility.yearToDate)}</p>
           </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Severity</p>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Severity</p>
             <div className="mt-3 space-y-2">
               {facility.severity.map((item) => (
                 <div key={`${facility.id}-${item.level}`} className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-700">{item.level}</span>
-                    <span className="text-[11px] font-semibold text-slate-500">{formatNumber(item.count)}</span>
+                    <span className="text-xs text-slate-700">{item.level}</span>
+                    <span className="text-xs font-semibold text-slate-500">{formatNumber(item.count)}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <div
@@ -3128,7 +3237,15 @@ function FacilitySummaryCard({ facility }: { facility: DashboardFacilityItem }) 
 }
 
 export default function HomeDashboard() {
-  const { organizationId, session } = usePortalSession();
+  const {
+    organizationId,
+    session,
+    status: sessionStatus,
+    organizationScopes,
+    selectedOrganizationScopeKey,
+    selectedOrganizationScope,
+    switchOrganizationScope,
+  } = usePortalSession();
   const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
   const [initialHomeAnalyticsFilters] = useState<HomeAnalyticsFilters>(() =>
     typeof window === "undefined"
@@ -3137,25 +3254,38 @@ export default function HomeDashboard() {
   );
   const [devStatsCopyStatus, setDevStatsCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [showDevStatsCopyButton, setShowDevStatsCopyButton] = useState(process.env.NODE_ENV !== "production");
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState(organizationId ?? "");
   const [selectedFacilityKey, setSelectedFacilityKey] = useState(initialHomeAnalyticsFilters.facilityKey);
-  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState(initialHomeAnalyticsFilters.severity ?? "all");
+  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState(
+    normalizeSeverityFilterValue(initialHomeAnalyticsFilters.severity)
+  );
   const [selectedDamageAreaFilter, setSelectedDamageAreaFilter] = useState(initialHomeAnalyticsFilters.damageArea ?? "");
   const [createdFrom, setCreatedFrom] = useState(initialHomeAnalyticsFilters.from ?? "");
   const [createdTo, setCreatedTo] = useState(initialHomeAnalyticsFilters.to ?? "");
   const [reportIdFilter, setReportIdFilter] = useState(initialHomeAnalyticsFilters.reportId ?? "");
   const [vinFilter, setVinFilter] = useState(initialHomeAnalyticsFilters.vin ?? "");
   const [inspectionTypeFilter, setInspectionTypeFilter] = useState(initialHomeAnalyticsFilters.inspectionType ?? "");
-  const [inspectionTypeSearch, setInspectionTypeSearch] = useState(initialHomeAnalyticsFilters.inspectionType ?? "");
-  const [inspectionTypeSuggestionsOpen, setInspectionTypeSuggestionsOpen] = useState(false);
   const [makeFilter, setMakeFilter] = useState(initialHomeAnalyticsFilters.make ?? "");
   const [modelFilter, setModelFilter] = useState(initialHomeAnalyticsFilters.model ?? "");
   const [yardFilter, setYardFilter] = useState(initialHomeAnalyticsFilters.yard ?? "");
   const [inspectorEmailFilter, setInspectorEmailFilter] = useState(initialHomeAnalyticsFilters.inspectorKey);
   const [statusFilter, setStatusFilter] = useState(initialHomeAnalyticsFilters.status ?? "");
-  const [vinSheetExporting, setVinSheetExporting] = useState(false);
   const homeCountMode: HomeCountMode = initialHomeAnalyticsFilters.countMode;
   const [homeFilterMenuOpen, setHomeFilterMenuOpen] = useState(false);
+  const [hoveredSeverityIndex, setHoveredSeverityIndex] = useState<number | null>(null);
+  const [hoveredAreaIndex, setHoveredAreaIndex] = useState<number | null>(null);
+  const [severityFacilityBreakdown, setSeverityFacilityBreakdown] = useState<PieFacilityBreakdownState>({
+    key: "",
+    status: "idle",
+    items: [],
+  });
+  const [areaFacilityBreakdown, setAreaFacilityBreakdown] = useState<PieFacilityBreakdownState>({
+    key: "",
+    status: "idle",
+    items: [],
+  });
+  const pieFacilityBreakdownCacheRef = useRef(new Map<string, PieBreakdownItem[]>());
+  const didApplyInitialHomeFiltersRef = useRef(false);
+  const [isApplyingHomeFilters, setIsApplyingHomeFilters] = useState(false);
   const [activeHomeFilterKeys, setActiveHomeFilterKeys] = useState<HomeFilterKey[]>(() =>
     getHomeFilterKeysWithValues(initialHomeAnalyticsFilters)
   );
@@ -3182,19 +3312,28 @@ export default function HomeDashboard() {
       make: makeFilter || undefined,
       model: modelFilter || undefined,
       yard: yardFilter || undefined,
-      severity: selectedSeverityLevel !== "all" ? selectedSeverityLevel : undefined,
+      severity: normalizeSeverityFilterValue(selectedSeverityLevel) !== "all"
+        ? normalizeSeverityFilterValue(selectedSeverityLevel)
+        : undefined,
       damageArea: selectedDamageAreaFilter || undefined,
     }),
     [createdFrom, createdTo, homeCountMode, inspectionTypeFilter, inspectorEmailFilter, makeFilter, modelFilter, reportIdFilter, selectedDamageAreaFilter, selectedFacilityKey, selectedSeverityLevel, statusFilter, vinFilter, yardFilter]
   );
   const analyticsParams = useMemo(
-    () => buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
-    [currentHomeAnalyticsFilters]
+    () => ({
+      ...buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
+      suborg: getPortalSuborgValue(selectedOrganizationScopeKey),
+    }),
+    [currentHomeAnalyticsFilters, selectedOrganizationScopeKey]
+  );
+  const organizationScopeParams = useMemo(
+    () => ({ suborg: getPortalSuborgValue(selectedOrganizationScopeKey) }),
+    [selectedOrganizationScopeKey]
   );
   const {
     data: baseAnalyticsSnapshot,
     isValidating: baseAnalyticsValidating,
-  } = useDashboardAnalyticsSnapshot();
+  } = useDashboardAnalyticsSnapshot(organizationScopeParams);
   const {
     data: analyticsSnapshot,
     error: analyticsError,
@@ -3202,83 +3341,30 @@ export default function HomeDashboard() {
     isValidating: analyticsValidating,
     hasCachedData: analyticsHasCachedData,
   } = useDashboardAnalyticsSnapshot(analyticsParams);
+  const { data: baseFilterSnapshot } = useHomeAnalyticsSnapshot(organizationScopeParams);
 
   const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
   const facilitySource = facilities.length > 0 ? facilities : undefined;
   const dashboardAnalytics = analyticsSnapshot as DashboardAnalyticsPayload | undefined;
+  const fullFilterOptions = useMemo(
+    () => getPortalAnalyticsFilterOptions(baseFilterSnapshot, baseAnalyticsSnapshot),
+    [baseAnalyticsSnapshot, baseFilterSnapshot]
+  );
   const analyticsErrorMessage = analyticsError instanceof Error ? analyticsError.message : analyticsError ? String(analyticsError) : null;
   const analyticsHasUsableData = Boolean(dashboardAnalytics);
-  const analyticsRefreshInProgress = Boolean(analyticsHasUsableData && (analyticsValidating || baseAnalyticsValidating));
+  const analyticsRefreshInProgress = Boolean(
+    analyticsHasUsableData && (analyticsValidating || baseAnalyticsValidating)
+  );
   const reportsLoading = analyticsLoading;
   const reportsError = analyticsError;
   const activeInspectionTypeOptions = useMemo(
-    () =>
-      (dashboardAnalytics?.byInspectionType ?? [])
-        .map((item) => ({
-          number: String((item as Record<string, unknown>).number ?? (item as Record<string, unknown>).inspection_type_number ?? ""),
-          label: String((item as Record<string, unknown>).label ?? (item as Record<string, unknown>).inspection_type_label ?? ""),
-          displayLabel: String((item as Record<string, unknown>).displayLabel ?? (item as Record<string, unknown>).label ?? ""),
-        }))
-        .filter((item) => item.number || item.label),
-    [dashboardAnalytics?.byInspectionType]
+    () => fullFilterOptions.inspectionTypes.map((option) => ({
+      number: option.value,
+      label: option.label,
+      displayLabel: `${option.value} - ${option.label}`,
+    })),
+    [fullFilterOptions.inspectionTypes]
   );
-  const filteredInspectionTypeOptions = useMemo(() => {
-    const query = inspectionTypeSearch.trim().toLowerCase();
-    if (!query) return activeInspectionTypeOptions;
-    return activeInspectionTypeOptions.filter((option) =>
-      `${option.number} ${option.label} ${option.displayLabel}`.toLowerCase().includes(query)
-    );
-  }, [activeInspectionTypeOptions, inspectionTypeSearch]);
-	  const homeFilters = useMemo(
-	    () => ({
-	      ...DEFAULT_DAMAGE_REPORT_FILTERS,
-	      facilityFilter: selectedFacilityKey,
-      reportIdFilter,
-      vinFilter,
-      inspectionTypeFilter,
-      makeFilter,
-      modelFilter,
-      yardFilter,
-      inspectorEmailFilter,
-      statusFilter: statusFilter as "" | import("@/lib/types").ReportStatus,
-      createdFrom,
-      createdTo,
-	    }),
-	    [createdFrom, createdTo, inspectorEmailFilter, inspectionTypeFilter, makeFilter, modelFilter, reportIdFilter, selectedFacilityKey, statusFilter, vinFilter, yardFilter]
-	  );
-  const exportFilterBundle = useMemo(
-    () =>
-      normalizeHomeReportFiltersForExport({
-        selectedFacilityKey,
-        reportIdFilter,
-        vinFilter,
-        inspectionTypeFilter,
-        makeFilter,
-        modelFilter,
-        yardFilter,
-        inspectorEmailFilter,
-        statusFilter,
-        createdFrom,
-        createdTo,
-      }),
-    [createdFrom, createdTo, inspectorEmailFilter, inspectionTypeFilter, makeFilter, modelFilter, reportIdFilter, selectedFacilityKey, statusFilter, vinFilter, yardFilter]
-  );
-  const reportListParams = useMemo<ReportListParams>(
-    () => ({
-      page: 1,
-      pageSize: 50,
-      limit: 50,
-      sort: "created_at_desc",
-      ...buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
-    }),
-    [currentHomeAnalyticsFilters]
-  );
-  const {
-    data: reportListSnapshot,
-    error: reportListError,
-    isLoading: reportListLoading,
-    isValidating: reportListValidating,
-  } = useReportListSnapshot(reportListParams);
 	  const facilityDamageStats = useMemo(
 	    () =>
 	      (baseAnalyticsSnapshot?.byFacility ?? baseAnalyticsSnapshot?.facilities ?? dashboardAnalytics?.byFacility ?? dashboardAnalytics?.facilities ?? [])
@@ -3286,24 +3372,6 @@ export default function HomeDashboard() {
         .sort((a, b) => b.totalReports - a.totalReports),
     [baseAnalyticsSnapshot?.byFacility, baseAnalyticsSnapshot?.facilities, dashboardAnalytics?.byFacility, dashboardAnalytics?.facilities]
   );
-	  const selectedSeverityNumber = selectedSeverityLevel === "all" ? null : Number(selectedSeverityLevel);
-	  const selectedSeverityFilter = Number.isFinite(selectedSeverityNumber) ? selectedSeverityNumber : null;
-  const previewInspectionReports = useMemo(
-    () =>
-      filterHomeInspectionReports(
-        normalizeReportListRows(reportListSnapshot?.rows ?? []).map(normalizedRowToDamageReport),
-        exportFilterBundle,
-        selectedSeverityFilter,
-        selectedDamageAreaFilter
-      ),
-    [exportFilterBundle, reportListSnapshot?.rows, selectedDamageAreaFilter, selectedSeverityFilter]
-  );
-  const previewOutcomeCounts = useMemo(
-    () => buildInspectionOutcomeCounts(previewInspectionReports),
-    [previewInspectionReports]
-  );
-  const reportListErrorMessage =
-    reportListError instanceof Error ? reportListError.message : reportListError ? String(reportListError) : null;
 	  const hasClientOnlyHomeFilters = Boolean(
     selectedFacilityKey !== "all" ||
       createdFrom ||
@@ -3320,11 +3388,7 @@ export default function HomeDashboard() {
       selectedDamageAreaFilter
   );
   const fallbackSummary = useMemo(() => buildDashboardSummary([], [], []), []);
-  const currentOrganizationLabel =
-    session?.organization?.name ||
-    session?.organization?.organization_id ||
-    organizationId ||
-    "Current organization";
+  const currentOrganizationLabel = selectedOrganizationScope.label;
   const normalizedOrganizationName = normalizeOrganizationName(currentOrganizationLabel);
   const isInspectionTracOrg =
     normalizedOrganizationName === "american wheel & car" ||
@@ -3336,7 +3400,6 @@ export default function HomeDashboard() {
   const hideFacilitySelector = currentOrganizationLabel.trim().toLowerCase() === "free tier organization";
   const hideInspectorSections = hideFacilitySelector;
   const sanitizeFacilityDisplay = (value: string): string => normalizeFacilityDisplayLabel(value);
-  const sanitizeDisplay = (value: string): string => stripFacilitySuffix(value);
   const availableHomeFilterOptions = DAMAGE_FILTER_OPTIONS.filter(
     (option): option is (typeof DAMAGE_FILTER_OPTIONS)[number] & { key: HomeFilterKey } =>
       HOME_ANALYTICS_FILTER_KEYS.includes(option.key as HomeFilterKey)
@@ -3345,24 +3408,51 @@ export default function HomeDashboard() {
     () => getActiveHomeFilterChips(currentHomeAnalyticsFilters),
     [currentHomeAnalyticsFilters]
   );
+  const homeFilterSignature = useMemo(
+    () => serializeHomeAnalyticsFilters(currentHomeAnalyticsFilters).toString(),
+    [currentHomeAnalyticsFilters]
+  );
+
+  useEffect(() => {
+    if (!didApplyInitialHomeFiltersRef.current) {
+      didApplyInitialHomeFiltersRef.current = true;
+      return;
+    }
+    setIsApplyingHomeFilters(true);
+    const timeout = window.setTimeout(() => setIsApplyingHomeFilters(false), 220);
+    return () => window.clearTimeout(timeout);
+  }, [homeFilterSignature]);
+  const clearHomeFilterValue = (key: HomeFilterKey) => {
+    if (key === "facility") setSelectedFacilityKey("all");
+    else if (key === "report_id") setReportIdFilter("");
+    else if (key === "vin") setVinFilter("");
+    else if (key === "inspection_type") setInspectionTypeFilter("");
+    else if (key === "make") setMakeFilter("");
+    else if (key === "model") setModelFilter("");
+    else if (key === "yard") setYardFilter("");
+    else if (key === "severity") setSelectedSeverityLevel("all");
+    else if (key === "damage_area") setSelectedDamageAreaFilter("");
+    else if (key === "inspector_email") setInspectorEmailFilter("");
+    else if (key === "status") setStatusFilter("");
+  };
   const clearHomeFilters = () => {
     setHomeFilterMenuOpen(false);
     setActiveHomeFilterKeys([]);
-      setSelectedFacilityKey("all");
-      setSelectedSeverityLevel("all");
-      setSelectedDamageAreaFilter("");
-      setCreatedFrom("");
+    setSelectedFacilityKey("all");
+    setSelectedSeverityLevel("all");
+    setSelectedDamageAreaFilter("");
+    setCreatedFrom("");
     setCreatedTo("");
     setReportIdFilter("");
     setVinFilter("");
     setInspectionTypeFilter("");
-    setInspectionTypeSearch("");
-    setInspectionTypeSuggestionsOpen(false);
     setMakeFilter("");
     setModelFilter("");
     setYardFilter("");
     setInspectorEmailFilter("");
     setStatusFilter("");
+    setSeverityFacilityBreakdown({ key: "", status: "idle", items: [] });
+    setAreaFacilityBreakdown({ key: "", status: "idle", items: [] });
   };
   const renderHomeFilterControl = (key: (typeof activeHomeFilterKeys)[number]) => {
     if (key === "report_id") {
@@ -3373,51 +3463,12 @@ export default function HomeDashboard() {
     }
     if (key === "inspection_type") {
       return (
-        <div className="relative w-96">
-          <input
-            type="search"
-            placeholder="Type inspection number or name"
-            value={inspectionTypeSearch}
-            onChange={(e) => {
-              const nextSearch = e.target.value;
-              setInspectionTypeSearch(nextSearch);
-              setInspectionTypeSuggestionsOpen(Boolean(nextSearch.trim()));
-              if (!nextSearch.trim()) {
-                setInspectionTypeFilter("");
-              }
-            }}
-            onFocus={() => setInspectionTypeSuggestionsOpen(Boolean(inspectionTypeSearch.trim()))}
-            onBlur={() => {
-              window.setTimeout(() => setInspectionTypeSuggestionsOpen(false), 120);
-            }}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
-          />
-          {inspectionTypeSuggestionsOpen && inspectionTypeSearch.trim() ? (
-            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
-              <div className="max-h-64 overflow-auto py-1">
-                {filteredInspectionTypeOptions.length > 0 ? (
-                  filteredInspectionTypeOptions.map((option) => (
-                    <button
-                      key={option.number}
-                      type="button"
-                      onClick={() => {
-                        setInspectionTypeFilter(option.number);
-                        setInspectionTypeSearch(`${option.number} - ${option.label}`);
-                        setInspectionTypeSuggestionsOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-slate-900 transition hover:bg-slate-100"
-                    >
-                      <span className="font-semibold text-slate-900">{option.number}</span>
-                      <span className="min-w-0 flex-1 truncate text-right text-slate-600">{option.label}</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-3 py-2 text-sm text-slate-500">No matching inspection type.</div>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <select value={inspectionTypeFilter} onChange={(e) => setInspectionTypeFilter(e.target.value)} className="h-8 w-80 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="">All inspection types</option>
+          {activeInspectionTypeOptions.map((option) => (
+            <option key={option.number} value={option.number}>{option.number} - {option.label}</option>
+          ))}
+        </select>
       );
     }
     if (key === "make") {
@@ -3427,7 +3478,7 @@ export default function HomeDashboard() {
       return <input type="search" placeholder="Model" value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
     }
     if (key === "yard") {
-      return <input type="search" placeholder="Yard" value={yardFilter} onChange={(e) => setYardFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300" />;
+      return <select value={yardFilter} onChange={(e) => setYardFilter(e.target.value)} className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"><option value="">All yards</option>{fullFilterOptions.yards.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
     }
     if (key === "inspector_email") {
       return (
@@ -3437,8 +3488,8 @@ export default function HomeDashboard() {
           className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
         >
           <option value="">All inspectors</option>
-          {inspectorChoices.map((inspector) => (
-            <option key={inspector.email} value={inspector.email}>
+          {fullFilterOptions.inspectors.map((inspector) => (
+            <option key={inspector.value} value={inspector.value}>
               {inspector.label}
             </option>
           ))}
@@ -3449,20 +3500,25 @@ export default function HomeDashboard() {
       return (
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-44 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
           <option value="">All statuses</option>
-          <option value="open">Open</option>
-          <option value="review">Review</option>
-          <option value="closed">Closed</option>
-          <option value="verified">Verified</option>
-          <option value="archived">Archived</option>
+          {(fullFilterOptions.statuses.length ? fullFilterOptions.statuses : ["open", "review", "closed", "verified", "archived"].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       );
     }
+    if (key === "severity") {
+      return (
+        <select value={selectedSeverityLevel} onChange={(e) => setSelectedSeverityLevel(normalizeSeverityFilterValue(e.target.value))} className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300">
+          <option value="all">All severities</option>
+          {homeSeverityFilterOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      );
+    }
+    if (key === "damage_area") {
+      return <select value={selectedDamageAreaFilter} onChange={(e) => setSelectedDamageAreaFilter(e.target.value)} className="h-8 w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"><option value="">All damage areas</option>{fullFilterOptions.damageAreas.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+    }
     return null;
   };
-
-  useEffect(() => {
-    setSelectedOrganizationId(organizationId ?? "");
-  }, [organizationId]);
 
   useEffect(() => {
     if (!didMountOrganizationResetRef.current) {
@@ -3482,7 +3538,10 @@ export default function HomeDashboard() {
     setYardFilter("");
     setInspectorEmailFilter("");
     setStatusFilter("");
-  }, [selectedOrganizationId]);
+    setSeverityFacilityBreakdown({ key: "", status: "idle", items: [] });
+    setAreaFacilityBreakdown({ key: "", status: "idle", items: [] });
+    pieFacilityBreakdownCacheRef.current.clear();
+  }, [selectedOrganizationScopeKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3496,46 +3555,16 @@ export default function HomeDashboard() {
   }, [currentHomeAnalyticsFilters]);
 
 	  const inspectorChoices = useMemo(
-	    () => buildAnalyticsInspectorSummaries(dashboardAnalytics, homeCountMode),
-	    [dashboardAnalytics, homeCountMode]
+	    () => {
+        const choices = buildAnalyticsInspectorSummaries(dashboardAnalytics, homeCountMode);
+        if (!inspectorEmailFilter) return choices;
+        const selectedInspector = normalizeSearchText(inspectorEmailFilter);
+        return choices.filter((choice) =>
+          [choice.email, choice.label].some((value) => normalizeSearchText(value) === selectedInspector)
+        );
+      },
+	    [dashboardAnalytics, homeCountMode, inspectorEmailFilter]
 	  );
-
-  const modelOptions = useMemo(
-    () => {
-      const optionsByValue = new Map<string, { value: string; label: string; count: number }>();
-      for (const item of dashboardAnalytics?.byInspectionType ?? []) {
-        const record = item as Record<string, unknown>;
-        const value = String(record.number ?? record.inspection_type_number ?? record.label ?? "").trim();
-        if (!value) continue;
-        const label = String(record.label ?? record.inspection_type_label ?? value).trim() || value;
-        const count = Number(record.count ?? 0);
-        const existing = optionsByValue.get(value);
-        if (existing) {
-          existing.count += Number.isFinite(count) ? count : 0;
-          if (existing.label === value && label !== value) {
-            existing.label = label;
-          }
-        } else {
-          optionsByValue.set(value, {
-            value,
-            label,
-            count: Number.isFinite(count) ? count : 0,
-          });
-        }
-      }
-      return Array.from(optionsByValue.values()).sort((left, right) => left.value.localeCompare(right.value));
-    },
-    [dashboardAnalytics?.byInspectionType]
-  );
-  const [selectedModelFilter, setSelectedModelFilter] = useState("all");
-  useEffect(() => {
-    if (selectedModelFilter === "all") {
-      return;
-    }
-    if (!modelOptions.some((option) => option.value === selectedModelFilter)) {
-      setSelectedModelFilter("all");
-    }
-  }, [modelOptions, selectedModelFilter]);
   const filteredFacilityStats = useMemo(
     () =>
       (dashboardAnalytics?.byFacility ?? dashboardAnalytics?.facilities ?? [])
@@ -3544,10 +3573,49 @@ export default function HomeDashboard() {
         .sort((a, b) => b.totalReports - a.totalReports),
     [dashboardAnalytics?.byFacility, dashboardAnalytics?.facilities]
   );
-  const homeFacilityFilterOptions = useMemo(
-    () => facilityDamageStats.filter((stats) => isHomeVisibleFacility(stats.label)),
-    [facilityDamageStats]
-  );
+  const homeFacilityFilterOptions = useMemo(() => {
+    const optionsByLabel = new Map<string, (typeof fullFilterOptions.facilities)[number]>();
+    const optionValues = new Set<string>();
+    fullFilterOptions.facilities.forEach((option) => {
+      const label = sanitizeFacilityDisplay(option.label);
+      const normalizedLabel = normalizeSearchText(label);
+      const matchingFacility = facilityDamageStats.find(
+        (facility) => normalizeSearchText(sanitizeFacilityDisplay(facility.label)) === normalizedLabel
+      );
+      const value = matchingFacility?.key && matchingFacility.key !== "other"
+        ? matchingFacility.key
+        : option.value;
+      const normalizedValue = normalizeSearchText(value);
+      if (
+        !normalizedLabel ||
+        !normalizedValue ||
+        optionsByLabel.has(normalizedLabel) ||
+        optionValues.has(normalizedValue)
+      ) {
+        return;
+      }
+      optionValues.add(normalizedValue);
+      optionsByLabel.set(normalizedLabel, {
+        ...option,
+        value,
+        label,
+      });
+    });
+    return Array.from(optionsByLabel.values());
+  }, [facilityDamageStats, fullFilterOptions]);
+  const homeSeverityFilterOptions = useMemo(() => {
+    const source = fullFilterOptions.severities.length ? fullFilterOptions.severities : DAMAGE_SEVERITIES;
+    const optionsByLevel = new Map<string, { value: string; label: string }>();
+    source.forEach((option) => {
+      const level = normalizeSeverityFilterValue(option.value);
+      if (level === "all" || optionsByLevel.has(level)) return;
+      optionsByLevel.set(level, {
+        value: level,
+        label: DAMAGE_SEVERITIES.find((severity) => severity.value === level)?.label ?? option.label,
+      });
+    });
+    return Array.from(optionsByLevel.values()).sort((left, right) => Number(left.value) - Number(right.value));
+  }, [fullFilterOptions.severities]);
   const inspectorChartRows = useMemo(
     () =>
       inspectorChoices
@@ -3558,7 +3626,7 @@ export default function HomeDashboard() {
           reportCount: Number(inspector.reportCount ?? 0),
           __breakdown: inspector.hasClearDamageSplit
             ? {
-                reportCount: buildTrendBreakdownForPair(inspector.damageCount ?? 0, inspector.clearCount ?? 0),
+                reportCount: buildDamageClearBreakdown(inspector.damageCount ?? 0, inspector.clearCount ?? 0),
               }
             : undefined,
         }))
@@ -3579,7 +3647,7 @@ export default function HomeDashboard() {
       return;
     }
     console.debug("[home.data]", {
-      selectedOrgId: selectedOrganizationId,
+      selectedOrganizationScopeKey,
       activeFilterCount: activeHomeFilterKeys.length,
       damageReportCount: dashboardAnalytics?.totals?.damageReports ?? 0,
       rsaReportCount: dashboardAnalytics?.totals?.rsaReports ?? 0,
@@ -3594,7 +3662,7 @@ export default function HomeDashboard() {
     dashboardAnalytics?.totals?.damageReports,
     dashboardAnalytics?.totals?.rsaReports,
     activeHomeFilterKeys.length,
-    selectedOrganizationId,
+    selectedOrganizationScopeKey,
   ]);
 
   const summary = useMemo(
@@ -3716,78 +3784,190 @@ export default function HomeDashboard() {
     },
 	    [dashboardAnalytics, filteredFacilityStats, homeCountMode]
 	  );
-	  const chartSummary = summary;
-		  const isDamageCountMode = false;
-	  const countNoun = "damage submissions";
-	  const countNounTitle = "Damage Submissions";
+  const chartSummary = summary;
+	  const isDamageCountMode = homeCountMode === "damages";
+	  const countNoun = isDamageCountMode ? "damage entries" : "damaged submissions";
+	  const countNounTitle = isDamageCountMode ? "Damage Entries" : "Damaged Submissions";
+	  const inspectionCountNoun = "inspection submissions";
+	  const inspectionCountNounTitle = INSPECTION_SUBMISSIONS_SERIES;
   const hasBackendClearReports = Boolean(
     dashboardAnalytics?.totals &&
       ("noDamageReports" in dashboardAnalytics.totals ||
         "noDamageCount" in dashboardAnalytics.totals ||
         "noDamageScans" in dashboardAnalytics.totals)
   );
-  const damageInspectionCount = summary.totals.damageReports || previewOutcomeCounts.damageCount;
-  const clearInspectionCount = hasBackendClearReports ? summary.totals.noDamageReports : previewOutcomeCounts.clearCount;
-  const totalDamageSubmissionCount =
-    damageInspectionCount + clearInspectionCount ||
-    previewOutcomeCounts.inspectionCount;
+  const hasBackendDamageReports = Boolean(
+    dashboardAnalytics?.totals &&
+      ("damageReports" in dashboardAnalytics.totals ||
+        "damage_reports" in dashboardAnalytics.totals)
+  );
+  const damageInspectionCount = hasBackendDamageReports
+    ? summary.totals.damageReports
+    : 0;
+  const clearInspectionCount = hasBackendClearReports ? summary.totals.noDamageReports : 0;
+	  const totalDamageSubmissionCount = damageInspectionCount;
 	  const primaryDamageTotal = damageInspectionCount;
 	  const primaryDamageToday = summary.currentPeriod.damageToday;
 	  const primaryDamageMonthToDate = summary.currentPeriod.damageMonthToDate;
-	  const totalReportsDetail = `Damaged ${formatNumber(damageInspectionCount)} · Clear ${formatNumber(clearInspectionCount)} · RSA separate ${formatNumber(summary.totals.rsaReports)}`;
+	  const totalReportsDetail = `Damage only · clear and RSA excluded`;
 	  const severityPieData = useMemo(
-	    () =>
-	      buildSelectedSeverityPieData(chartSummary.severity as DashboardSeverityItem[], selectedSeverityLevel).map((item) => {
-	        const level = Number(String(item.name).split(" - ")[0]);
-	        const matchingReports = Number.isFinite(level)
-	          ? previewInspectionReports.filter((report) => reportMatchesSeverityFilter(report, level))
-	          : [];
-	        const counts = matchingReports.length ? buildInspectionOutcomeCounts(matchingReports) : null;
-	        return {
-	          ...item,
-	          breakdown: [],
-	          inspectionCount: counts?.inspectionCount ?? item.count,
-	          damageCount: counts?.damageCount ?? item.count,
-	          clearCount: counts?.clearCount ?? 0,
-	          vinSamples: counts?.vinSamples ?? [],
-	        };
-	      }),
-	    [chartSummary.severity, previewInspectionReports, selectedSeverityLevel]
+	    () => buildSelectedSeverityPieData(chartSummary.severity as DashboardSeverityItem[], selectedSeverityLevel),
+	    [chartSummary.severity, selectedSeverityLevel]
 	  );
   const visibleSeverityPieData = useMemo(
     () => severityPieData.filter((item) => Number(item.count) > 0),
     [severityPieData]
   );
+  const severityPieTotal = visibleSeverityPieData.reduce((sum, item) => sum + Number(item.count), 0);
   const severityFooterRows = useMemo(
-    () => buildSeverityTotalRows(chartSummary.severity as DashboardSeverityItem[]),
-    [chartSummary.severity]
+    () => {
+      const selectedLevel = normalizeSeverityFilterValue(selectedSeverityLevel);
+      const visibleSeverityItems = selectedLevel === "all"
+        ? chartSummary.severity
+        : chartSummary.severity.filter((item) => normalizeSeverityFilterValue(item.level) === selectedLevel);
+      return buildSeverityTotalRows(visibleSeverityItems as DashboardSeverityItem[]);
+    },
+    [chartSummary.severity, selectedSeverityLevel]
   );
   const areaCounts = useMemo(
     () => new Map((chartSummary.topAreas ?? []).map((item) => [item.name, item.count] as const)),
     [chartSummary.topAreas]
   );
 	  const areaPieData = useMemo(
-	    () =>
-	      buildSelectedAreaPieData([...areaCounts.entries()].map(([name, count]) => ({ name, count })), selectedDamageAreaFilter).map((item) => {
-	        const matchingReports = previewInspectionReports.filter((report) => reportMatchesDamageAreaFilter(report, item.name));
-	        const counts = matchingReports.length ? buildInspectionOutcomeCounts(matchingReports) : null;
-	        return {
-	          ...item,
-	          inspectionCount: counts?.inspectionCount ?? item.count,
-	          damageCount: counts?.damageCount ?? item.count,
-	          clearCount: counts?.clearCount ?? 0,
-	          vinSamples: counts?.vinSamples ?? [],
-	        };
-	      }),
-	    [areaCounts, previewInspectionReports, selectedDamageAreaFilter]
+	    () => buildSelectedAreaPieData([...areaCounts.entries()].map(([name, count]) => ({ name, count })), selectedDamageAreaFilter),
+	    [areaCounts, selectedDamageAreaFilter]
 	  );
   const visibleAreaPieData = useMemo(
     () => areaPieData.filter((item) => Number(item.count) > 0),
     [areaPieData]
   );
+  const areaPieTotal = visibleAreaPieData.reduce((sum, item) => sum + Number(item.count), 0);
+  const getPieFacilityBreakdown = async (kind: "severity" | "area", slice: PieAreaDatum) => {
+    const cacheKey = JSON.stringify({ kind, slice: slice.name, homeCountMode, analyticsParams });
+    const cached = pieFacilityBreakdownCacheRef.current.get(cacheKey);
+    if (cached) return { cacheKey, items: cached };
+
+    const scopedParams: DashboardAnalyticsParams = { ...analyticsParams };
+    if (kind === "severity") {
+      scopedParams.severity = String(slice.name).split(" - ")[0];
+    } else {
+      scopedParams.damage_area = slice.name;
+    }
+
+    try {
+      const scopedAnalytics = await fetchDashboardAnalytics(scopedParams);
+      const counts = new Map<string, number>();
+      for (const row of scopedAnalytics.byFacility ?? scopedAnalytics.facilities ?? []) {
+        const record = row as Record<string, unknown>;
+        const facility = normalizeAnalyticsFacility(record);
+        const count = homeCountMode === "damages"
+          ? readAnalyticsNumber(record, ["entries", "damageEntries", "totalDamages", "count"])
+          : readAnalyticsNumber(record, ["damageReports", "damage_reports", "reportCount", "reports", "count", "totalReports"]);
+        if (count > 0) {
+          counts.set(facility.label, (counts.get(facility.label) ?? 0) + count);
+        }
+      }
+      const items = [...counts.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+      pieFacilityBreakdownCacheRef.current.set(cacheKey, items);
+      return { cacheKey, items };
+    } catch (error) {
+      throw { cacheKey, error };
+    }
+  };
+  const loadPieFacilityBreakdown = async (kind: "severity" | "area", slice: PieAreaDatum) => {
+    const cacheKey = JSON.stringify({ kind, slice: slice.name, homeCountMode, analyticsParams });
+    const cached = pieFacilityBreakdownCacheRef.current.get(cacheKey);
+    if (cached) {
+      const nextState: PieFacilityBreakdownState = { key: cacheKey, status: "ready", items: cached };
+      if (kind === "severity") setSeverityFacilityBreakdown(nextState);
+      else setAreaFacilityBreakdown(nextState);
+      return;
+    }
+
+    const loadingState: PieFacilityBreakdownState = { key: cacheKey, status: "loading", items: [] };
+    if (kind === "severity") setSeverityFacilityBreakdown(loadingState);
+    else setAreaFacilityBreakdown(loadingState);
+
+    try {
+      const { items } = await getPieFacilityBreakdown(kind, slice);
+      if (kind === "severity") {
+        setSeverityFacilityBreakdown((current) => current.key === cacheKey ? { key: cacheKey, status: "ready", items } : current);
+      } else {
+        setAreaFacilityBreakdown((current) => current.key === cacheKey ? { key: cacheKey, status: "ready", items } : current);
+      }
+    } catch {
+      if (kind === "severity") {
+        setSeverityFacilityBreakdown((current) => current.key === cacheKey ? { key: cacheKey, status: "error", items: [] } : current);
+      } else {
+        setAreaFacilityBreakdown((current) => current.key === cacheKey ? { key: cacheKey, status: "error", items: [] } : current);
+      }
+    }
+  };
+  const buildPieFacilityExportRows = async (
+    kind: "severity" | "area",
+    categoryHeader: string,
+    slices: PieAreaDatum[],
+    pieTotal: number
+  ) => {
+    const breakdowns = await Promise.all(
+      slices.map(async (slice) => {
+        try {
+          return {
+            slice,
+            items: (await getPieFacilityBreakdown(kind, slice)).items,
+          };
+        } catch {
+          return { slice, items: [] as PieBreakdownItem[] };
+        }
+      })
+    );
+    const pivotRows = breakdowns.map(({ slice, items }) => {
+      const counts = new Map(items.map((facility) => [facility.label, facility.count] as const));
+      const attributedTotal = items.reduce((sum, facility) => sum + facility.count, 0);
+      if (attributedTotal < slice.count) {
+        counts.set("Unattributed", slice.count - attributedTotal);
+      }
+      return {
+        slice,
+        counts,
+        total: [...counts.values()].reduce((sum, count) => sum + count, 0),
+      };
+    });
+    const facilityLabels = [...new Set(pivotRows.flatMap((row) => [...row.counts.keys()]))]
+      .sort((left, right) => {
+        if (left === "Unattributed") return 1;
+        if (right === "Unattributed") return -1;
+        return left.localeCompare(right);
+      });
+    const reconciledTotal = pivotRows.reduce((sum, row) => sum + row.total, 0);
+    return [
+      [categoryHeader, ...facilityLabels, "Total", "Percentage"],
+      ...pivotRows.map((row) => [
+        row.slice.name,
+        ...facilityLabels.map((facility) => row.counts.get(facility) ?? 0),
+        row.total,
+        formatPieExportPercentage(row.total, reconciledTotal || pieTotal),
+      ]),
+    ];
+  };
+  const exportPieFacilityCsv = async (
+    kind: "severity" | "area",
+    categoryHeader: string,
+    filenamePrefix: string,
+    slices: PieAreaDatum[],
+    pieTotal: number
+  ) => {
+    const cardRows = await buildPieFacilityExportRows(kind, categoryHeader, slices, pieTotal);
+    exportVisualizedCardCsv({ filenamePrefix, cardRows });
+  };
   const allAreaRows = useMemo(
-    () => [...areaCounts.entries()].map(([name, count]) => ({ name, count })),
-    [areaCounts]
+    () =>
+      [...areaCounts.entries()]
+        .filter(([name]) => !selectedDamageAreaFilter || normalizeSearchText(name) === normalizeSearchText(selectedDamageAreaFilter))
+        .map(([name, count]) => ({ name, count })),
+    [areaCounts, selectedDamageAreaFilter]
   );
   const areaFooterRows = useMemo(
     () => buildAreaTotalRows(allAreaRows),
@@ -3798,19 +3978,23 @@ export default function HomeDashboard() {
     [allAreaRows]
   );
   const facilityTrendRange = useMemo(
-    () => clampDateRangeToThirtyDays(createdFrom || null, createdTo || dashboardAnalytics?.range?.to || null, safeDate(reportDateBounds.maxDate)),
-    [createdFrom, createdTo, dashboardAnalytics?.range?.to, reportDateBounds.maxDate]
-  );
-  const analyticsSplitCoverage = useMemo(
-    () => buildDashboardDailySplitCoverage(dashboardAnalytics, homeCountMode),
-    [dashboardAnalytics, homeCountMode]
+    () =>
+      clampDateRangeToThirtyDays(
+        createdFrom || null,
+        createdTo || null,
+        safeDate(reportDateBounds.maxDate)
+      ),
+    [createdFrom, createdTo, reportDateBounds.maxDate]
   );
   const facilityTrend = useMemo(() => {
-    const trend = buildDailyAnalyticsTrend(dashboardAnalytics, facilityTrendRange, homeCountMode);
+    const trend = buildDailyAnalyticsTrend(
+      dashboardAnalytics,
+      facilityTrendRange,
+      homeCountMode
+    );
     const colors = buildFacilityColorMap(trend.keys);
     return {
       source: trend.source,
-      hasClearDamageSplit: trend.hasClearDamageSplit,
       range: {
         from: toDateInputValue(facilityTrendRange.start),
         to: toDateInputValue(facilityTrendRange.end),
@@ -3827,7 +4011,8 @@ export default function HomeDashboard() {
       [],
       HOME_DEFAULT_TREND_DAYS,
       homeCountMode,
-      facilityTrendRange
+      facilityTrendRange,
+      inspectorEmailFilter
     );
     const totals = trend.keys.reduce<Map<string, number>>((acc, key) => {
       acc.set(
@@ -3855,18 +4040,21 @@ export default function HomeDashboard() {
       return nextRow;
     });
     return {
-      hasClearDamageSplit: trend.hasClearDamageSplit,
       range: {
         from: toDateInputValue(facilityTrendRange.start),
         to: toDateInputValue(facilityTrendRange.end),
         days: daysBetween(facilityTrendRange.start, facilityTrendRange.end) + 1,
       },
       inspectors: keys,
-      colors: buildFacilityColorMap(keys),
+      colors: buildInspectorColorMap(keys),
       rows,
       hasDailyData: rows.some((row) => keys.some((key) => Number(row[key] ?? 0) > 0)),
     };
-  }, [dashboardAnalytics, facilityTrendRange, homeCountMode]);
+  }, [dashboardAnalytics, facilityTrendRange, homeCountMode, inspectorEmailFilter]);
+  const inspectorSummaryColors = useMemo(
+    () => buildInspectorColorMap(inspectorChartRows.map((item) => item.label)),
+    [inspectorChartRows]
+  );
   const devStatsPayload = useMemo(
     () => ({
       capturedAt: new Date().toISOString(),
@@ -3874,7 +4062,7 @@ export default function HomeDashboard() {
       purpose: "Compact visual data audit. Each section below maps to one visible home dashboard visual.",
       filters: {
         organizationId,
-        selectedOrganizationId,
+        selectedOrganizationScopeKey,
         homeCountMode,
         analyticsParams,
         selectedFacilityKey,
@@ -3899,13 +4087,10 @@ export default function HomeDashboard() {
 	      sources: {
 	        analyticsEndpoint: DASHBOARD_ANALYTICS_ENDPOINT,
 	        directoryEndpoint: "portal directory snapshot",
-	        reportListEndpoint: "/reports/list",
-	        note: "Home summary charts come from /api/dashboard/analytics; the VIN sheet preview and VIN exports use /reports/list.",
+	        note: "Home cards, charts, facility breakdowns, and exports use /api/dashboard/analytics statistics.",
 	      },
 	      sourceCounts: {
 	        analyticsFacilityRows: (dashboardAnalytics?.byFacility ?? dashboardAnalytics?.facilities ?? []).length,
-	        reportListPreviewRows: previewInspectionReports.length,
-	        reportListTotal: reportListSnapshot?.total ?? null,
 	        sharedRsaReports: 0,
 	      },
       reportCacheStatus: {
@@ -3959,7 +4144,7 @@ export default function HomeDashboard() {
       ],
       visuals: {
         facilityDamageReportsBarChart: {
-          title: `Daily ${countNounTitle}`,
+          title: `Daily ${inspectionCountNounTitle}`,
           source: facilityTrend.source,
           range: facilityTrend.range,
           series: facilityTrend.facilities,
@@ -3968,7 +4153,7 @@ export default function HomeDashboard() {
           rows: facilityTrend.rows,
         },
         inspectorDailyBarChart: {
-          title: `Daily Inspector ${countNounTitle}`,
+          title: `Daily Inspector ${inspectionCountNounTitle}`,
           source: "/api/dashboard/analytics byInspectorDaily",
           range: inspectorTrend.range,
           series: inspectorTrend.inspectors,
@@ -3996,7 +4181,7 @@ export default function HomeDashboard() {
           slices: visibleSeverityPieData.map((slice) => ({
             name: slice.name,
             count: slice.count,
-            breakdown: slice.breakdown ?? [],
+            metric: countNoun,
           })),
           footerRows: severityFooterRows.map((group) => ({
             section: group.section,
@@ -4015,6 +4200,7 @@ export default function HomeDashboard() {
           slices: visibleAreaPieData.map((slice) => ({
             name: slice.name,
             count: slice.count,
+            metric: countNoun,
           })),
           footerRows: areaFooterRows.map((group) => ({
             section: group.section,
@@ -4040,7 +4226,6 @@ export default function HomeDashboard() {
         byInspectorDailyRows: ((dashboardAnalytics as { byInspectorDaily?: unknown[] } | undefined)?.byInspectorDaily ?? []).length,
         severityRows: dashboardAnalytics?.severity?.length ?? 0,
 	        topAreaRows: dashboardAnalytics?.topAreas?.length ?? 0,
-	        reportListPreviewRows: previewInspectionReports.length,
 	        facilityDailyRowsFromAnalytics: ((dashboardAnalytics as { byFacilityDaily?: unknown[]; facilityDaily?: unknown[] } | undefined)?.byFacilityDaily ?? []).length +
 	          ((dashboardAnalytics as { byFacilityDaily?: unknown[]; facilityDaily?: unknown[] } | undefined)?.facilityDaily ?? []).length,
 	      },
@@ -4068,14 +4253,13 @@ export default function HomeDashboard() {
       inspectorTrend.range,
       inspectorTrend.rows,
 	      inspectorChoices.length,
+	      inspectionCountNounTitle,
 	      isDamageCountMode,
 	      isLoading,
 		      organizationId,
-      previewInspectionReports.length,
-      reportListSnapshot?.total,
 	      selectedDamageAreaFilter,
       selectedFacilityKey,
-      selectedOrganizationId,
+      selectedOrganizationScopeKey,
       selectedSeverityLevel,
       severityFooterRows,
       visibleAreaPieData,
@@ -4118,274 +4302,46 @@ export default function HomeDashboard() {
 	    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 	    downloadJson(`portal-local-data-dump-${timestamp}.json`, devStatsPayload);
 	  };
-  const selectedFacilityExportLabel =
-    selectedFacilityKey === "all"
-      ? "All facilities"
-      : homeFacilityFilterOptions.find((stats) => stats.key === selectedFacilityKey)?.label ?? selectedFacilityKey;
-  const selectedSeverityExportLabel =
-    selectedSeverityLevel === "all"
-      ? "All severities"
-      : DAMAGE_SEVERITIES.find((option) => option.value === selectedSeverityLevel)?.label ?? selectedSeverityLevel;
-  const selectedCardInspectionTypeLabel =
-    selectedModelFilter === "all"
-      ? "All inspection types"
-      : modelOptions.find((option) => option.value === selectedModelFilter)?.label ?? selectedModelFilter;
-  const buildDashboardFilterRows = (): unknown[][] => [
-    ["Organization", sanitizeDisplay(currentOrganizationLabel)],
-    ["Organization ID", selectedOrganizationId || organizationId || ""],
-    ["Facility", sanitizeFacilityDisplay(selectedFacilityExportLabel)],
-    ["Severity", selectedSeverityExportLabel],
-    ["Damage Area", selectedDamageAreaFilter || "All damage areas"],
-    ["Date From", createdFrom || "All dates"],
-    ["Date To", createdTo || "All dates"],
-    ["Report ID", reportIdFilter || "All reports"],
-    ["VIN", vinFilter || "All VINs"],
-    ["Inspection Type", inspectionTypeSearch || inspectionTypeFilter || "All inspection types"],
-    ["Make", makeFilter || "All makes"],
-    ["Model", modelFilter || "All models"],
-    ["Yard", yardFilter || "All yards"],
-    ["Inspector", inspectorEmailFilter || "All inspectors"],
-    ["Status", statusFilter || "All statuses"],
+  const buildAllVisualizedRows = async (): Promise<unknown[][]> => [
+    ["Dashboard Summary"],
+    ["Metric", "Value"],
+    ["Total Damage Submissions", totalDamageSubmissionCount],
+    ["Damaged Submissions Today", primaryDamageToday],
+    ["Damaged Submissions", primaryDamageTotal],
+    ["Clear Submissions", clearInspectionCount],
+    ["RSA Reports", summary.totals.rsaReports],
+    ["Active Facilities", summary.totals.facilities],
+    ["Unique Inspectors", inspectorChoices.length],
+    [],
+    ["Active Filters"],
+    ["Filter", "Value"],
+    ...(activeHomeFilterChips.length
+      ? activeHomeFilterChips.map((chip) => [chip.label, chip.value])
+      : [["None", "All data"]]),
+    [],
+    [`Daily ${inspectionCountNounTitle}`],
+    ...buildCategoryTrendExportRows("Facility", facilityTrend.rows, facilityTrend.facilities),
+    [],
+    [inspectorTrend.hasDailyData ? `Daily Inspector ${inspectionCountNounTitle}` : `Inspector ${inspectionCountNounTitle}`],
+    ...(inspectorTrend.hasDailyData
+      ? buildCategoryTrendExportRows("Inspector", inspectorTrend.rows, inspectorTrend.inspectors)
+      : [
+          ["Inspector", "Email", inspectionCountNounTitle, "Damaged", "Clear"],
+          ...inspectorChartRows.map((item) => {
+            const split = readDamageClearBreakdown(item.__breakdown?.reportCount);
+            return [item.label, item.email, item.reportCount, split?.damageCount ?? "", split?.clearCount ?? ""];
+          }),
+        ]),
+    [],
+    ["Severity Detail"],
+    ...(await buildPieFacilityExportRows("severity", "Severity", visibleSeverityPieData, severityPieTotal)),
+    [],
+    ["Top Damage Areas"],
+    ...(await buildPieFacilityExportRows("area", "Damage Area", visibleAreaPieData, areaPieTotal)),
   ];
-  const buildExportSummaryRows = (context: ExportCardContext, reports: ReportDamageApiRow[], warning?: string): unknown[][] => {
-    const outcomeCounts = buildInspectionOutcomeCounts(reports);
-    return [
-      ["Inspection Trac Analytics Export"],
-      ["Export", context.title],
-      ["Generated At", new Date().toISOString()],
-      ["Rows Exported", reports.length],
-      ["Entries Count", countDamageEntries(reports)],
-      ["Damage Submission Count", outcomeCounts.inspectionCount],
-      ["Damaged Submissions", outcomeCounts.damageCount],
-      ["Clear Submissions", outcomeCounts.clearCount],
-      ["Unknown Submissions", outcomeCounts.unknownCount],
-      ...(warning ? [["Export Warning", warning]] : []),
-      [],
-      ["Dashboard Filters"],
-      ["Filter", "Value"],
-      ...buildDashboardFilterRows(),
-      [],
-      ["Card Filters"],
-      ["Filter", "Value"],
-      ...(context.cardFilters?.length ? context.cardFilters : [["Card", "Current dashboard selection"]]),
-    ];
-  };
-  const addCsvToZip = (zip: JSZip, filename: string, rows: unknown[][]) => {
-    zip.file(filename, `\uFEFF${csvRowsToText(rows)}`);
-  };
-  const buildClaimsManifest = (context: ExportCardContext, reports: ReportDamageApiRow[], warning?: string) => {
-    const outcomeCounts = buildInspectionOutcomeCounts(reports);
-    return {
-      title: context.title,
-      generatedAt: new Date().toISOString(),
-      organization: {
-        name: sanitizeDisplay(currentOrganizationLabel),
-        id: selectedOrganizationId || organizationId || "",
-      },
-      counts: {
-        rowsExported: reports.length,
-        entriesCount: countDamageEntries(reports),
-        damageSubmissionCount: outcomeCounts.inspectionCount,
-        damagedSubmissions: outcomeCounts.damageCount,
-        clearSubmissions: outcomeCounts.clearCount,
-        unknownSubmissions: outcomeCounts.unknownCount,
-        vins: new Set(reports.map((report) => (report.vin ?? "").trim().toUpperCase()).filter(Boolean)).size,
-      },
-      filters: Object.fromEntries(buildDashboardFilterRows().map(([key, value]) => [String(key), value])),
-      cardFilters: Object.fromEntries((context.cardFilters ?? [["Card", "Current dashboard selection"]]).map(([key, value]) => [String(key), value])),
-      warning: warning || null,
-      files: [
-        "README.txt",
-        "manifest.json",
-        "summary.csv",
-        "vin-sheet.csv",
-        "damage-entries.csv",
-        "media-links.csv",
-        ...(context.cardRows?.length ? ["sections/card-data.csv"] : []),
-        ...(context.cardFiles ?? []).map((file) => `sections/${sanitizeFileNameSegment(file.filename.replace(/\.csv$/i, ""), "section")}.csv`),
-        "submissions/*/submission.csv",
-        "submissions/*/submission.json",
-        "submissions/*/damage-entries.csv",
-      ],
-    };
-  };
-  const buildClaimsReadme = (context: ExportCardContext, reports: ReportDamageApiRow[], warning?: string): string => {
-    const outcomeCounts = buildInspectionOutcomeCounts(reports);
-    return [
-      "Inspection Trac Claims Export",
-      "",
-      `Export: ${context.title}`,
-      `Generated: ${new Date().toISOString()}`,
-      `Organization: ${sanitizeDisplay(currentOrganizationLabel)}`,
-      `Rows exported: ${reports.length}`,
-      `Entries count: ${countDamageEntries(reports)}`,
-      `Damaged submissions: ${outcomeCounts.damageCount}`,
-      `Clear submissions: ${outcomeCounts.clearCount}`,
-      warning ? `Warning: ${warning}` : "",
-      "",
-      "Files:",
-      "- summary.csv: organization, active dashboard filters, card filters, and total counts.",
-      "- vin-sheet.csv: one row per damage submission/VIN in this export.",
-      "- damage-entries.csv: one row per damage entry across exported submissions.",
-      "- media-links.csv: PDF, photo, and splat links by submission.",
-      "- sections/*.csv: the visible chart or table data for the export button used.",
-      "- submissions/*: per-submission CSV detail, raw JSON, and damage-entry CSV where applicable.",
-      "",
-      "Media files are included as links. Embedding the actual photos/PDF binaries needs backend signed URLs that allow browser fetches or a backend ZIP endpoint.",
-    ]
-      .filter((line) => line !== "")
-      .join("\n");
-  };
-  const buildClaimsZip = async (context: ExportCardContext, reports: ReportDamageApiRow[], warning?: string): Promise<Blob> => {
-    const zip = new JSZip();
-    zip.file("README.txt", buildClaimsReadme(context, reports, warning));
-    zip.file("manifest.json", JSON.stringify(buildClaimsManifest(context, reports, warning), null, 2));
-    addCsvToZip(zip, "summary.csv", buildExportSummaryRows(context, reports, warning));
-    addCsvToZip(zip, "vin-sheet.csv", buildInspectionVinSheetRows(reports));
-    addCsvToZip(zip, "damage-entries.csv", buildDamageEntriesSheetRows(reports));
-    addCsvToZip(zip, "media-links.csv", buildMediaLinksSheetRows(reports));
-    if (context.cardRows?.length) {
-      addCsvToZip(zip, "sections/card-data.csv", context.cardRows);
-    }
-    for (const file of context.cardFiles ?? []) {
-      addCsvToZip(zip, `sections/${sanitizeFileNameSegment(file.filename.replace(/\.csv$/i, ""), "section")}.csv`, file.rows);
-    }
-    reports.forEach((report, index) => {
-      const indexSegment = String(index + 1).padStart(4, "0");
-      const reportSegment = sanitizeFileNameSegment(report.report_id, "report");
-      const vinSegment = sanitizeFileNameSegment(report.vin || "no-vin", "no-vin");
-      const folder = `submissions/${indexSegment}-${reportSegment}-${vinSegment}`;
-      addCsvToZip(zip, `${folder}/submission.csv`, buildSubmissionDetailRows(report));
-      zip.file(`${folder}/submission.json`, JSON.stringify(report, null, 2));
-      if (getDamageEntryCount(report) > 0) {
-        addCsvToZip(zip, `${folder}/damage-entries.csv`, buildDamageEntriesSheetRows([report]));
-      }
-    });
-    return zip.generateAsync({
-      type: "blob",
-      compression: "DEFLATE",
-      compressionOptions: { level: 6 },
-    });
-  };
-  const loadAllFilteredInspectionReports = async (context: ExportCardContext): Promise<ReportDamageApiRow[]> => {
-    const reports = await fetchDamageReportListSnapshot({
-      ...reportListParams,
-      page: 1,
-      pageSize: 100,
-      limit: 100,
-      sort: "created_at_desc",
-    });
-    const filtered = filterHomeInspectionReports(
-      reports,
-      exportFilterBundle,
-      selectedSeverityFilter,
-      selectedDamageAreaFilter
-    );
-    return context.filterReport ? filtered.filter(context.filterReport) : filtered;
-  };
-  const exportInspectionVinSheet = async (context: ExportCardContext) => {
-    setVinSheetExporting(true);
-    try {
-      const reports = await loadAllFilteredInspectionReports(context);
-      const blob = await buildClaimsZip(context, reports);
-      downloadBlob(`${context.filenamePrefix}-${exportTimestamp()}.zip`, blob);
-    } catch (exportError) {
-      console.warn("[home.export] unable to fetch complete VIN export", exportError);
-      const warning =
-        exportError instanceof Error
-          ? exportError.message
-          : "Unable to fetch every matching report row; exported the loaded preview rows instead.";
-      const fallbackRows = context.filterReport ? previewInspectionReports.filter(context.filterReport) : previewInspectionReports;
-      const blob = await buildClaimsZip(context, fallbackRows, warning);
-      downloadBlob(`${context.filenamePrefix}-preview-${exportTimestamp()}.zip`, blob);
-    } finally {
-      setVinSheetExporting(false);
-    }
-  };
-  const buildAllClaimsSectionFiles = (): NonNullable<ExportCardContext["cardFiles"]> => [
-    {
-      filename: "active-dashboard-filters.csv",
-      rows: buildFilterExportRows(currentHomeAnalyticsFilters as Record<string, unknown>),
-    },
-    {
-      filename: "daily-damage-submission-analytics.csv",
-      rows: [
-        ["Date", ...facilityTrend.facilities],
-        ...facilityTrend.rows.map((row) => [
-          row.date,
-          ...facilityTrend.facilities.map((series) => String(row[series] ?? 0)),
-        ]),
-      ],
-    },
-    {
-      filename: "facility-damage-submission-counts.csv",
-      rows: [
-        ["Facility", "Damage Submissions", "Damaged Submissions", "Entries Count", "RSA Reports", "VINs"],
-        ...filteredFacilityStats.map((facility) => [
-          sanitizeFacilityDisplay(facility.label),
-          isDamageCountMode ? facility.entries : facility.damageReports,
-          facility.damageReports,
-          facility.entries,
-          facility.rsaReports,
-          facility.vins,
-        ]),
-      ],
-    },
-    {
-      filename: "inspector-damage-submission-counts.csv",
-      rows: [
-        ["Inspector", "Email", countNounTitle],
-        ...inspectorChartRows.map((item) => [item.label, item.email, item.reportCount]),
-      ],
-    },
-    {
-      filename: inspectorTrend.hasDailyData ? "daily-inspector-damage-submissions.csv" : "inspector-damage-submissions.csv",
-      rows: inspectorTrend.hasDailyData
-        ? [
-            ["Date", ...inspectorTrend.inspectors],
-            ...inspectorTrend.rows.map((row) => [
-              row.date,
-              ...inspectorTrend.inspectors.map((series) => String(row[series] ?? 0)),
-            ]),
-          ]
-        : [
-            ["Inspector", "Email", countNounTitle],
-            ...inspectorChartRows.map((item) => [item.label, item.email, String(item.reportCount)]),
-          ],
-    },
-    {
-      filename: "severity-damage-submission-detail.csv",
-      rows: [
-        ["Severity", "Damage Submissions", "Damaged Submissions", "Clear Submissions", "Entries Count", "VIN Samples"],
-        ...visibleSeverityPieData.map((slice) => [
-          slice.name,
-          slice.inspectionCount ?? slice.count,
-          slice.damageCount ?? slice.count,
-          slice.clearCount ?? 0,
-          slice.damageCount ?? slice.count,
-          (slice.vinSamples ?? []).join(" | "),
-        ]),
-      ],
-    },
-    {
-      filename: "damage-area-submission-detail.csv",
-      rows: [
-        ["Damage Area", "Damage Submissions", "Damaged Submissions", "Clear Submissions", "Entries Count", "VIN Samples"],
-        ...visibleAreaPieData.map((slice) => [
-          slice.name,
-          slice.inspectionCount ?? slice.count,
-          slice.damageCount ?? slice.count,
-          slice.clearCount ?? 0,
-          slice.damageCount ?? slice.count,
-          (slice.vinSamples ?? []).join(" | "),
-        ]),
-      ],
-    },
-    {
-      filename: "loaded-vin-preview.csv",
-      rows: buildInspectionVinSheetRows(previewInspectionReports),
-    },
-  ];
+  if (sessionStatus === "loading" || sessionStatus === "authenticating") {
+    return <HomeLoadingShell message="Loading your portal session..." />;
+  }
 
 	  if (!organizationId) {
     return <EmptyState title="Home unavailable" description="Organization session required." />;
@@ -4422,7 +4378,7 @@ export default function HomeDashboard() {
       filteredFacilityStats.find((stats) => sanitizeFacilityDisplay(stats.label) === normalizedFacilityLabel) ??
       homeFacilityFilterOptions.find((stats) => sanitizeFacilityDisplay(stats.label) === normalizedFacilityLabel);
     if (matched) {
-      setSelectedFacilityKey(matched.key);
+      setSelectedFacilityKey("key" in matched ? matched.key : matched.value);
     }
   };
   const selectInspectorFromChart = (inspectorLabel: string) => {
@@ -4445,13 +4401,22 @@ export default function HomeDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+          {isApplyingHomeFilters ? (
+            <div className="absolute inset-0 z-[70] rounded-2xl bg-white/85 px-3 pt-4 backdrop-blur-sm">
+              <PageLoadingScreen
+                title="Applying dashboard filters"
+                description="Updating the loaded analytics view..."
+                detail="Using the active in-memory snapshot; no new dashboard request is being sent."
+              />
+            </div>
+          ) : null}
           {showDevStatsCopyButton ? (
-            <div className="fixed right-4 top-4 z-[80] flex items-center gap-2">
+            <div className="fixed right-4 top-4 z-[80] hidden items-center gap-2 sm:flex">
               <button
                 type="button"
                 onClick={downloadDevStatsPayload}
-                className="inline-flex h-9 items-center rounded-lg border border-slate-900 bg-white px-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg transition hover:bg-slate-100"
+                className="inline-flex h-9 items-center rounded-lg border border-slate-900 bg-white px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg transition hover:bg-slate-100"
                 title="Download a JSON dump of the local portal data behind home, damage, and RSA views."
               >
                 Download data dump
@@ -4459,7 +4424,7 @@ export default function HomeDashboard() {
               <button
                 type="button"
                 onClick={() => void copyDevStatsPayload()}
-                className="inline-flex h-9 items-center rounded-lg border border-slate-900 bg-white px-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg transition hover:bg-slate-100"
+                className="inline-flex h-9 items-center rounded-lg border border-slate-900 bg-white px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg transition hover:bg-slate-100"
                 title="Copy a compact JSON audit of the data behind each visible home dashboard visual."
               >
                 {devStatsCopyStatus === "copied"
@@ -4474,38 +4439,29 @@ export default function HomeDashboard() {
             refreshing={analyticsRefreshInProgress}
             errorMessage={analyticsHasUsableData ? analyticsErrorMessage : null}
           />
-          <AnalyticsCoverageAlert coverage={analyticsSplitCoverage} />
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-            <span className="font-semibold text-slate-950">Dashboard model:</span>{" "}
-            {HOME_DASHBOARD_VISUALS.length} configured visuals use shared filters, typed adapters, backend field coverage checks, and export rows.
-            Power BI and JavaScript notes live in <span className="font-mono">docs/analytics/home-dashboard-explainer-for-powerbi-js.md</span>.
-          </div>
           <Card className="sticky top-0 z-30 overflow-visible border-slate-200/80 bg-white/95 shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)] backdrop-blur">
             <CardHeader
               title="Filters"
               subtitle="Filters scope the damage submissions analytics; RSA counts stay separate."
 		              actions={
-		                <div className="flex items-center gap-2">
+		                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      void exportInspectionVinSheet({
-                        filenamePrefix: "claims-all-sections",
-                        title: "All Visible Analytics Sections",
-                        cardFilters: [["Package", "All visible dashboard sections"]],
-                        cardFiles: buildAllClaimsSectionFiles(),
+                    onClick={async () =>
+                      exportVisualizedCardCsv({
+                        filenamePrefix: "home-dashboard-visible-data",
+                        cardRows: await buildAllVisualizedRows(),
                       })
                     }
-                    disabled={vinSheetExporting}
-                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-black bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-black shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-black bg-white px-3 text-xs font-semibold text-black shadow-sm transition hover:bg-slate-50"
                   >
                     <Download className="h-4 w-4" />
-                    {vinSheetExporting ? "Exporting" : "Export all ZIP"}
+                    Export visible CSV
                   </button>
 		                  <button
 		                    type="button"
 		                    onClick={clearHomeFilters}
-                    className="inline-flex h-8 items-center rounded-lg border border-black bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-black shadow-sm transition hover:bg-slate-50"
+                    className="inline-flex h-8 items-center rounded-lg border border-black bg-white px-3 text-xs font-semibold text-black shadow-sm transition hover:bg-slate-50"
                   >
                     Clear filters
                   </button>
@@ -4513,7 +4469,7 @@ export default function HomeDashboard() {
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-black bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-black shadow-sm transition hover:bg-slate-100 aria-expanded:bg-slate-900 aria-expanded:text-white"
+                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-black bg-white px-3 text-xs font-semibold text-black shadow-sm transition hover:bg-slate-100 aria-expanded:bg-slate-900 aria-expanded:text-white"
                       >
                         <Filter className="h-4 w-4" />
                         + Add filter
@@ -4543,27 +4499,35 @@ export default function HomeDashboard() {
             <CardContent>
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Organization</span>
+                  <span className="text-sm font-semibold text-slate-700">Organization</span>
                   <select
-                    value={selectedOrganizationId}
-                    onChange={(event) => setSelectedOrganizationId(event.target.value)}
+                    value={selectedOrganizationScopeKey}
+                    onChange={(event) =>
+                      switchOrganizationScope(
+                        event.target.value as typeof selectedOrganizationScopeKey
+                      )
+                    }
                     className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                   >
-                    <option value={organizationId ?? ""}>{sanitizeDisplay(currentOrganizationLabel)}</option>
+                    {organizationScopes.map((scope) => (
+                      <option key={scope.key} value={scope.key}>
+                        {scope.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 {!hideFacilitySelector ? (
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Facility</span>
+                    <span className="text-sm font-semibold text-slate-700">Facility</span>
                     <select
                       value={selectedFacilityKey}
                       onChange={(event) => setSelectedFacilityKey(event.target.value)}
                       className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                     >
                       <option value="all">All facilities</option>
-                      {homeFacilityFilterOptions.map((stats) => (
-                        <option key={stats.key} value={stats.key}>
-                          {sanitizeFacilityDisplay(stats.label)}
+                      {homeFacilityFilterOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {sanitizeFacilityDisplay(option.label)}
                         </option>
                       ))}
                     </select>
@@ -4571,23 +4535,21 @@ export default function HomeDashboard() {
                 ) : null}
 
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Severity</span>
+                  <span className="text-sm font-semibold text-slate-700">Severity</span>
                   <select
                     value={selectedSeverityLevel}
-                    onChange={(event) => setSelectedSeverityLevel(event.target.value)}
+                    onChange={(event) => setSelectedSeverityLevel(normalizeSeverityFilterValue(event.target.value))}
                     className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                   >
                     <option value="all">All severities</option>
-                    {DAMAGE_SEVERITIES.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
+                    {homeSeverityFilterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
 
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Date Range</span>
+                  <span className="text-sm font-semibold text-slate-700">Date Range</span>
                   <ReportDateRangeFilter
                     value={{ createdFrom, createdTo }}
                     onChange={({ createdFrom: nextFrom, createdTo: nextTo }) => {
@@ -4607,12 +4569,15 @@ export default function HomeDashboard() {
                       const label = availableHomeFilterOptions.find((option) => option.key === key)?.label ?? key;
                       return (
                         <div key={key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                          <span className="w-24 shrink-0 truncate text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+                          <span className="w-24 shrink-0 truncate text-xs font-black uppercase tracking-widest text-slate-500">{label}</span>
                           {renderHomeFilterControl(key)}
                           <button
                             type="button"
-                            onClick={() => setActiveHomeFilterKeys((current) => current.filter((item) => item !== key))}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
+                            onClick={() => {
+                              clearHomeFilterValue(key);
+                              setActiveHomeFilterKeys((current) => current.filter((item) => item !== key));
+                            }}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
                             aria-label={`Remove ${label} filter`}
                           >
                             Remove
@@ -4625,7 +4590,7 @@ export default function HomeDashboard() {
               ) : null}
               {activeHomeFilterChips.length ? (
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Applied</span>
+                  <span className="text-xs font-black uppercase tracking-[0.24em] text-slate-500">Applied</span>
                   {activeHomeFilterChips.map((chip) => (
                     <span key={`${chip.key}-${chip.value}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
                       {chip.label}: {chip.value}
@@ -4657,50 +4622,39 @@ export default function HomeDashboard() {
               </div>
 
 	              <div className="grid gap-4 xl:grid-cols-1">
-	                <Card className="overflow-hidden">
+	                <Card className="relative overflow-visible hover:z-20">
 	                  <CardHeader
-		                    title={`Daily ${countNounTitle}`}
-		                    subtitle={`30-day analytics trend ending ${formatDateKeyLabel(facilityTrend.range.to)}.`}
+		                    title={`Daily ${inspectionCountNounTitle}`}
+		                    subtitle={`30-day inspection totals by facility ending ${formatDateKeyLabel(facilityTrend.range.to)}.`}
 	                    actions={
 		                      <button
 		                        type="button"
 		                        onClick={() =>
-	                            void exportInspectionVinSheet({
-	                              filenamePrefix: "daily-damage-submission-analytics",
-	                              title: `Daily ${countNounTitle}`,
-	                              cardFilters: [
-	                                ["Card range from", facilityTrend.range.from],
-	                                ["Card range to", facilityTrend.range.to],
-	                                ["Card source", facilityTrend.source],
-	                              ],
-	                              cardRows: [
-	                                ["Date", ...facilityTrend.facilities],
-	                                ...facilityTrend.rows.map((row) => [
-	                                  row.date,
-	                                  ...facilityTrend.facilities.map((series) => String(row[series] ?? 0)),
-	                                ]),
-	                              ],
+	                            exportVisualizedCardCsv({
+	                              filenamePrefix: "daily-facility-inspection-submissions",
+	                              cardRows: buildCategoryTrendExportRows("Facility", facilityTrend.rows, facilityTrend.facilities),
 	                            })
 	                          }
-		                        disabled={vinSheetExporting}
-		                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60"
+		                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
 		                      >
 		                        <Download className="h-4 w-4" />
-		                        {vinSheetExporting ? "Exporting" : "Export ZIP"}
+		                        Export CSV
 		                      </button>
                     }
                   />
-                  <CardContent className="h-96">
-                    <div className="h-full overflow-x-auto">
-                      <div className="h-full min-w-[760px]">
-                        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+                  <CardContent className="flex h-[28rem] flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                      <span>Hover over any facility bar to see its total, Damaged, and Clear submissions.</span>
+                    </div>
+	                  <div className="min-h-0 w-full flex-1">
+	                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
 	                          <BarChart data={facilityTrend.rows} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="16%">
 	                            <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
 	                            <XAxis
 	                              dataKey="date"
 	                              type="category"
-	                              interval={0}
-	                              minTickGap={0}
+	                              interval="preserveStartEnd"
+	                              minTickGap={28}
 	                              tickMargin={8}
 	                              tickFormatter={(value) => formatEvenDateKeyLabel(String(value))}
 	                              tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
@@ -4708,7 +4662,7 @@ export default function HomeDashboard() {
 	                            />
 	                            <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
 	                            <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
-	                            <Tooltip content={<NonZeroBarTooltip />} labelFormatter={(value) => formatDateKeyLabel(String(value))} />
+	                            <Tooltip content={<NonZeroBarTooltip />} labelFormatter={(value) => formatDateKeyLabel(String(value))} cursor={false} isAnimationActive={false} wrapperStyle={{ zIndex: 50, pointerEvents: "none" }} />
                               {facilityTrend.facilities.map((series) => (
                                 <Bar
                                   key={series}
@@ -4717,17 +4671,18 @@ export default function HomeDashboard() {
                                   stackId="daily-analytics"
                                   fill={facilityTrend.colors[series] ?? chartTheme.colors.text}
                                   cursor="pointer"
+	                              activeBar={false}
+	                              isAnimationActive={false}
                                   onClick={() => {
-                                    if (series !== "Damage Submissions") {
+                                    if (series !== INSPECTION_SUBMISSIONS_SERIES) {
                                       selectFacilityFromChart(series);
                                     }
                                   }}
                                 />
                               ))}
 	                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
+	                    </ResponsiveContainer>
+	                  </div>
                   </CardContent>
                 </Card>
 
@@ -4738,68 +4693,61 @@ export default function HomeDashboard() {
 
           {!hideInspectorSections ? (
             <div className="grid gap-4">
-              <Card className="overflow-hidden">
+              <Card className="relative overflow-visible hover:z-20">
                 <CardHeader
-		                  title={inspectorTrend.hasDailyData ? `Daily Inspector ${countNounTitle}` : `Inspector ${countNounTitle}`}
-		                  subtitle={inspectorTrend.hasDailyData ? `Per-day ${countNoun} by inspector for the selected range.` : `Analytics ${countNoun} totals by inspector.`}
+		                  title={inspectorTrend.hasDailyData ? `Daily Inspector ${inspectionCountNounTitle}` : `Inspector ${inspectionCountNounTitle}`}
+		                  subtitle={inspectorTrend.hasDailyData ? `Per-day inspection totals by inspector for the selected range.` : `Inspection totals by inspector.`}
                   actions={
 	                    <button
 	                      type="button"
 	                      onClick={() =>
-	                        void exportInspectionVinSheet({
-	                          filenamePrefix: inspectorTrend.hasDailyData ? "daily-inspector-damage-submissions" : "inspector-damage-submissions",
-	                          title: inspectorTrend.hasDailyData ? `Daily Inspector ${countNounTitle}` : `Inspector ${countNounTitle}`,
-	                          cardFilters: [
-	                            ["Card range from", inspectorTrend.range.from],
-	                            ["Card range to", inspectorTrend.range.to],
-	                            ["Inspector series", inspectorTrend.inspectors.join(" | ") || "Summary"],
-	                          ],
+	                        exportVisualizedCardCsv({
+	                          filenamePrefix: inspectorTrend.hasDailyData ? "daily-inspector-inspection-submissions" : "inspector-inspection-submissions",
 	                          cardRows: inspectorTrend.hasDailyData
-	                            ? [
-	                                ["Date", ...inspectorTrend.inspectors],
-	                                ...inspectorTrend.rows.map((row) => [
-	                                  row.date,
-	                                  ...inspectorTrend.inspectors.map((series) => String(row[series] ?? 0)),
-	                                ]),
-	                              ]
+	                            ? buildCategoryTrendExportRows("Inspector", inspectorTrend.rows, inspectorTrend.inspectors)
 	                            : [
-			                              ["Inspector", "Email", countNounTitle],
-	                                ...inspectorChartRows.map((item) => [
-	                                  item.label,
-	                                  item.email,
-			                              String(item.reportCount),
-	                                ]),
+			                              ["Inspector", "Email", inspectionCountNounTitle, "Damaged", "Clear"],
+	                                ...inspectorChartRows.map((item) => {
+	                                  const split = readDamageClearBreakdown(item.__breakdown?.reportCount);
+	                                  return [item.label, item.email, item.reportCount, split?.damageCount ?? "", split?.clearCount ?? ""];
+	                                }),
 	                              ],
 	                        })
 	                      }
-	                      disabled={vinSheetExporting}
-	                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60"
+	                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
 	                    >
 	                      <Download className="h-4 w-4" />
-	                      {vinSheetExporting ? "Exporting" : "Export ZIP"}
+	                      Export CSV
 	                    </button>
                   }
                 />
-                <CardContent className="h-96">
+                <CardContent className="flex h-[28rem] flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                    <span>Hover over any inspector bar to see the total, Damaged, and Clear submissions.</span>
+                  </div>
                   {inspectorTrend.hasDailyData ? (
-                    <div className="h-full overflow-x-auto">
-                      <div className="h-full min-w-[760px]">
+	                <div className="min-h-0 w-full flex-1">
                         <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                          <BarChart data={inspectorTrend.rows} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="16%">
+                          <BarChart data={inspectorTrend.rows} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="20%">
                             <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
                             <XAxis
                               dataKey="date"
                               type="category"
-                              interval={0}
-                              minTickGap={0}
+	                          interval="preserveStartEnd"
+	                          minTickGap={28}
                               tickMargin={8}
                               tickFormatter={(value) => formatEvenDateKeyLabel(String(value))}
                               tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
                               stroke={chartTheme.colors.grid}
                             />
                             <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
-                            <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
-                            <Tooltip content={<NonZeroBarTooltip />} labelFormatter={(value) => formatDateKeyLabel(String(value))} />
+                            <Tooltip
+                              content={<NonZeroBarTooltip />}
+                              labelFormatter={(value) => formatDateKeyLabel(String(value))}
+	                          cursor={false}
+	                          isAnimationActive={false}
+	                          wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+                            />
                             {inspectorTrend.inspectors.map((series) => (
                               <Bar
                                 key={series}
@@ -4808,45 +4756,48 @@ export default function HomeDashboard() {
                                 stackId="daily-inspector-analytics"
                                 fill={inspectorTrend.colors[series] ?? palette[0]}
                                 cursor="pointer"
+	                            activeBar={false}
+	                            isAnimationActive={false}
                                 onClick={() => selectInspectorFromChart(series)}
                               />
                             ))}
                           </BarChart>
                         </ResponsiveContainer>
-                      </div>
-                    </div>
+	                </div>
                   ) : inspectorChartRows.length ? (
-                    <div className="h-full overflow-x-auto">
-                      <div className="h-full min-w-[760px]">
+	                <div className="min-h-0 w-full flex-1">
                         <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
                           <BarChart data={inspectorChartRows} margin={{ top: 8, right: 16, left: 0, bottom: 12 }} barCategoryGap="16%">
                             <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.colors.grid} />
                             <XAxis
                               dataKey="shortLabel"
                               type="category"
-                              interval={0}
-                              minTickGap={0}
+	                          interval="preserveStartEnd"
+	                          minTickGap={18}
                               tickMargin={8}
                               tick={{ fill: chartTheme.colors.text, fontSize: 11, fontWeight: 700 }}
                               stroke={chartTheme.colors.grid}
                             />
                             <YAxis tick={{ fill: chartTheme.colors.text, fontSize: 13, fontWeight: 700 }} stroke={chartTheme.colors.grid} allowDecimals={false} />
-                            <Legend verticalAlign="top" align="left" iconType="square" wrapperStyle={{ paddingBottom: 12, fontSize: 13, fontWeight: 700 }} />
-                            <Tooltip content={<NonZeroBarTooltip />} />
+	                        <Tooltip content={<NonZeroBarTooltip hideSeriesNames />} cursor={false} isAnimationActive={false} wrapperStyle={{ zIndex: 50, pointerEvents: "none" }} />
                             <Bar
                               dataKey="reportCount"
-                              name={countNounTitle}
-                              fill={palette[0]}
+                              name={inspectionCountNounTitle}
                               cursor="pointer"
+	                          activeBar={false}
+	                          isAnimationActive={false}
                               onClick={(entry) => {
                                 const label = (entry as { payload?: { label?: string } })?.payload?.label;
                                 if (label) selectInspectorFromChart(label);
                               }}
-                            />
+                            >
+                              {inspectorChartRows.map((entry) => (
+                                <Cell key={entry.email} fill={inspectorSummaryColors[entry.label] ?? INSPECTOR_CHART_PALETTE[0]} />
+                              ))}
+                            </Bar>
                           </BarChart>
                         </ResponsiveContainer>
-                      </div>
-                    </div>
+	                </div>
                   ) : (
                     <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
                       No inspector activity available.
@@ -4858,77 +4809,88 @@ export default function HomeDashboard() {
           ) : null}
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="overflow-hidden">
+            <Card className="relative overflow-visible hover:z-20">
               <CardHeader
                 title="Severity Detail"
-                subtitle={
-                  selectedModelFilter === "all"
-		                    ? `Six-level breakdown by ${isDamageCountMode ? "damage entry" : "damage report"}.`
-                    : `Filtered to model ${selectedModelFilter}.`
-                }
                 actions={
                   <div className="flex min-w-[220px] flex-col items-end gap-1">
                     <select
-                      value={selectedModelFilter}
-                      onChange={(event) => setSelectedModelFilter(event.target.value)}
+                      aria-label="Filter pie charts by inspection type"
+                      value={inspectionTypeFilter}
+                      onChange={(event) => setInspectionTypeFilter(event.target.value)}
                       className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                     >
-                      <option value="all">All models</option>
-                      {modelOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
+                      <option value="">All inspection types</option>
+                      {activeInspectionTypeOptions.map((option) => (
+                        <option key={option.number} value={option.number}>
+                          {option.displayLabel}
                         </option>
                       ))}
                     </select>
-	                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{formatNumber(primaryDamageTotal)} {countNoun}</p>
+	                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{formatNumber(primaryDamageTotal)} {countNoun}</p>
                     <button
                       type="button"
-                      onClick={() =>
-                        void exportInspectionVinSheet({
-                          filenamePrefix: "severity-damage-submission-detail",
-                          title: "Severity Detail",
-                          cardFilters: [
-                            ["Severity", selectedSeverityExportLabel],
-                            ["Card inspection type selector", selectedCardInspectionTypeLabel],
-                          ],
-                          cardRows: [
-                            ["Severity", "Damage Submissions", "Damaged Submissions", "Clear Submissions", "Entries Count", "VIN Samples"],
-                            ...visibleSeverityPieData.map((slice) => [
-                              slice.name,
-                              slice.inspectionCount ?? slice.count,
-                              slice.damageCount ?? slice.count,
-                              slice.clearCount ?? 0,
-                              slice.damageCount ?? slice.count,
-                              (slice.vinSamples ?? []).join(" | "),
-                            ]),
-                          ],
-                        })
-                      }
-                      disabled={vinSheetExporting}
-                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60"
+                      onClick={() => void exportPieFacilityCsv(
+                        "severity",
+                        "Severity",
+                        "severity-damage-submission-detail",
+                        visibleSeverityPieData,
+                        severityPieTotal
+                      )}
+                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                     >
                       <Download className="h-4 w-4" />
-                      {vinSheetExporting ? "Exporting" : "Export ZIP"}
+                      Export CSV
                     </button>
 	                  </div>
 	                }
               />
-              <CardContent className="flex h-[760px] flex-col p-0">
-                <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-6 pb-4">
-                  <div className="h-full min-h-[360px] w-full">
-                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                      <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
-                        <Tooltip content={<PieSummaryTooltip />} />
+              <CardContent className="flex h-[720px] flex-col p-0">
+	            <div className="flex min-h-0 flex-1 items-center justify-center px-2 pt-6 pb-4 sm:px-4">
+	              <div className="h-full min-h-[360px] w-full">
+                      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+	                    <PieChart margin={{ top: 18, right: 8, bottom: 18, left: 8 }}>
+	                      <Tooltip
+	                        content={
+	                          <PieSummaryTooltip
+	                            sectionLabel="Severity section"
+	                            facilityBreakdown={severityFacilityBreakdown}
+	                          />
+	                        }
+	                        active={hoveredSeverityIndex !== null}
+	                        defaultIndex={hoveredSeverityIndex ?? undefined}
+	                        allowEscapeViewBox={{ x: true, y: true }}
+	                        cursor={false}
+	                        isAnimationActive={false}
+	                        wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+	                      />
                         <Pie
                           data={visibleSeverityPieData}
                           dataKey="count"
                           nameKey="name"
-                          outerRadius={100}
+	                      outerRadius="57%"
                           cx="50%"
-                          cy="48%"
-                          label={renderPieSliceLabel}
+                          cy="50%"
+                          startAngle={90}
+                          endAngle={-270}
+                          label={(props) => (
+                            <PieSliceCalloutLabel
+                              {...props}
+                              data={visibleSeverityPieData}
+                            />
+                          )}
                           labelLine={false}
+                          paddingAngle={0}
+                          cornerRadius={0}
+                          stroke="none"
+                          strokeWidth={0}
                           isAnimationActive={false}
+	                      onMouseEnter={(_, index) => {
+	                        setHoveredSeverityIndex(index);
+	                        const slice = visibleSeverityPieData[index];
+	                        if (slice) void loadPieFacilityBreakdown("severity", slice);
+	                      }}
+	                      onMouseLeave={() => setHoveredSeverityIndex(null)}
                           onClick={(_, index) => {
                             const item = visibleSeverityPieData[index ?? -1];
                             if (item) {
@@ -4941,94 +4903,102 @@ export default function HomeDashboard() {
                             <Cell key={entry.name} fill={entry.fill} />
                           ))}
                         </Pie>
-                        <Legend
-                          verticalAlign="bottom"
-                          align="center"
-                          height={60}
-                          wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700, whiteSpace: "normal" }}
-                        />
                       </PieChart>
-                  </ResponsiveContainer>
-                  </div>
+                      </ResponsiveContainer>
+	              </div>
                 </div>
                 <ChartFooterTable
-                  title={`Section ${countNoun} rows`}
-                  subtitle={selectedModelFilter === "all" ? `Total ${countNoun} per severity section.` : `Model ${countNoun} rows per severity section for the selected model.`}
+                  title={`${countNounTitle} by severity`}
                   items={severityFooterRows}
                   showSeverityPills
                 />
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden">
+            <Card className="relative overflow-visible hover:z-20">
               <CardHeader
                 title="Top Damage Areas"
-                subtitle={`Pie chart for the current filtered ${countNoun}.`}
                 actions={
                   <div className="flex min-w-[220px] flex-col items-end gap-1">
                     <select
-                      value={selectedModelFilter}
-                      onChange={(event) => setSelectedModelFilter(event.target.value)}
+                      aria-label="Filter pie charts by inspection type"
+                      value={inspectionTypeFilter}
+                      onChange={(event) => setInspectionTypeFilter(event.target.value)}
                       className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
                     >
-                      <option value="all">All models</option>
-                      {modelOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
+                      <option value="">All inspection types</option>
+                      {activeInspectionTypeOptions.map((option) => (
+                        <option key={option.number} value={option.number}>
+                          {option.displayLabel}
                         </option>
                       ))}
                     </select>
-	                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+	                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
 	                      {formatNumber(primaryDamageTotal)} {countNoun}
 	                    </p>
                     <button
                       type="button"
-                      onClick={() =>
-                        void exportInspectionVinSheet({
-                          filenamePrefix: "damage-area-submission-detail",
-                          title: "Top Damage Areas",
-                          cardFilters: [
-                            ["Damage Area", selectedDamageAreaFilter || "All damage areas"],
-                            ["Card inspection type selector", selectedCardInspectionTypeLabel],
-                          ],
-                          cardRows: [
-                            ["Damage Area", "Damage Submissions", "Damaged Submissions", "Clear Submissions", "Entries Count", "VIN Samples"],
-                            ...visibleAreaPieData.map((slice) => [
-                              slice.name,
-                              slice.inspectionCount ?? slice.count,
-                              slice.damageCount ?? slice.count,
-                              slice.clearCount ?? 0,
-                              slice.damageCount ?? slice.count,
-                              (slice.vinSamples ?? []).join(" | "),
-                            ]),
-                          ],
-                        })
-                      }
-                      disabled={vinSheetExporting}
-                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60"
+                      onClick={() => void exportPieFacilityCsv(
+                        "area",
+                        "Damage Area",
+                        "damage-area-submission-detail",
+                        visibleAreaPieData,
+                        areaPieTotal
+                      )}
+                      className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                     >
                       <Download className="h-4 w-4" />
-                      {vinSheetExporting ? "Exporting" : "Export ZIP"}
+                      Export CSV
                     </button>
 	                  </div>
 	                }
               />
-              <CardContent className="flex h-[760px] flex-col p-0">
-                <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-6 pb-4">
-                  <div className="h-full min-h-[360px] w-full">
-                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-                      <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
-                        <Tooltip content={<PieSummaryTooltip />} />
+              <CardContent className="flex h-[720px] flex-col p-0">
+	            <div className="flex min-h-0 flex-1 items-center justify-center px-2 pt-6 pb-4 sm:px-4">
+	              <div className="h-full min-h-[360px] w-full">
+                      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+	                    <PieChart margin={{ top: 18, right: 8, bottom: 18, left: 8 }}>
+	                      <Tooltip
+	                        content={
+	                          <PieSummaryTooltip
+	                            sectionLabel="Damage area"
+	                            facilityBreakdown={areaFacilityBreakdown}
+	                          />
+	                        }
+	                        active={hoveredAreaIndex !== null}
+	                        defaultIndex={hoveredAreaIndex ?? undefined}
+	                        allowEscapeViewBox={{ x: true, y: true }}
+	                        cursor={false}
+	                        isAnimationActive={false}
+	                        wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+	                      />
                         <Pie
                           data={visibleAreaPieData}
                           dataKey="count"
                           nameKey="name"
-                          outerRadius={100}
+	                      outerRadius="57%"
                           cx="50%"
-                          cy="48%"
-                          label={renderPieSliceLabel}
+                          cy="50%"
+                          startAngle={90}
+                          endAngle={-270}
+                          label={(props) => (
+                            <PieSliceCalloutLabel
+                              {...props}
+                              data={visibleAreaPieData}
+                            />
+                          )}
                           labelLine={false}
+                          paddingAngle={0}
+                          cornerRadius={0}
+                          stroke="none"
+                          strokeWidth={0}
                           isAnimationActive={false}
+	                      onMouseEnter={(_, index) => {
+	                        setHoveredAreaIndex(index);
+	                        const slice = visibleAreaPieData[index];
+	                        if (slice) void loadPieFacilityBreakdown("area", slice);
+	                      }}
+	                      onMouseLeave={() => setHoveredAreaIndex(null)}
                           onClick={(_, index) => {
                             const item = visibleAreaPieData[index ?? -1];
                             if (item) {
@@ -5040,19 +5010,12 @@ export default function HomeDashboard() {
                             <Cell key={`${entry.name}-${index}`} fill={entry.fill} />
                           ))}
                         </Pie>
-                        <Legend
-                          verticalAlign="bottom"
-                          align="center"
-                          height={60}
-                          wrapperStyle={{ paddingTop: 10, fontSize: 12, fontWeight: 700, whiteSpace: "normal" }}
-                        />
                       </PieChart>
-                  </ResponsiveContainer>
-                  </div>
+                      </ResponsiveContainer>
+	              </div>
                 </div>
                 <ChartFooterTable
-                  title={`Section ${countNoun} rows`}
-                  subtitle={selectedModelFilter === "all" ? `Total ${countNoun} per area section.` : `Model ${countNoun} rows per area section for the selected model.`}
+                  title={`${countNounTitle} by damage area`}
                   items={areaFooterRows}
                   showRowCount={false}
                 />

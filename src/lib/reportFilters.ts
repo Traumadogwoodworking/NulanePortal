@@ -186,6 +186,41 @@ function readReportString(report: unknown, keys: string[]): string {
   return "";
 }
 
+function readReportStrings(report: unknown, keys: string[]): string[] {
+  const record = asRecord(report);
+  if (!record) return [];
+  const nestedPayload = asRecord(record.payload);
+  const nestedReport = asRecord(record.report);
+  const nestedRaw = asRecord(record.raw);
+  const nestedLocation = asRecord(record.location);
+  const nestedMetadata = asRecord(record.metadata);
+  const payloadMetadata = asRecord(nestedPayload?.metadata);
+  const reportMetadata = asRecord(nestedReport?.metadata);
+  const rawMetadata = asRecord(nestedRaw?.metadata);
+  const values = new Set<string>();
+
+  for (const key of keys) {
+    const candidates = [
+      record[key],
+      nestedPayload?.[key],
+      nestedReport?.[key],
+      nestedRaw?.[key],
+      nestedLocation?.[key],
+      nestedMetadata?.[key],
+      payloadMetadata?.[key],
+      reportMetadata?.[key],
+      rawMetadata?.[key],
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) values.add(candidate.trim());
+      if (typeof candidate === "number" && Number.isFinite(candidate)) values.add(String(candidate));
+      if (typeof candidate === "boolean") values.add(String(candidate));
+    }
+  }
+
+  return [...values];
+}
+
 function readReportDate(report: unknown): string {
   return readReportString(report, ["created_at", "createdAt", "submitted_at", "submittedAt", "updated_at", "updatedAt"]);
 }
@@ -442,7 +477,9 @@ export function matchesDamageReportFilters(report: ReportDamageApiRow, filters: 
   const vin = normalizeSearchText(readReportString(report, ["vin", "vehicleVin", "vehicle_vin"]));
   const make = normalizeSearchText(readReportString(report, ["make", "vehicleMake", "vehicle_make"]));
   const model = normalizeSearchText(readReportString(report, ["model", "vehicleModel", "vehicle_model"]));
-  const yard = normalizeSearchText(readReportString(report, ["yard", "yardName", "yard_name", "yardLabel", "yard_label", "yardId", "yard_id"]));
+  const yard = readReportStrings(report, ["yard", "yardName", "yard_name", "yardLabel", "yard_label", "yardId", "yard_id"])
+    .map((value) => normalizeSearchText(value))
+    .join(" ");
   const inspectorEmail = normalizeSearchText(readReportString(report, ["inspector_email", "inspectorEmail", "user_email", "userEmail"]));
 
   if (filters.reportIdFilter && !matchesAnyToken(reportId, filters.reportIdFilter)) return false;

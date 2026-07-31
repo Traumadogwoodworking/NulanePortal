@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
+import { saveAs } from "file-saver";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
@@ -10,13 +11,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import {
   fetchTwentyFourHourInspectionDisplay,
   filterTwentyFourHourRows,
-  getTwentyFourHourRequestId,
+  orderTwentyFourHourRowsByPriority,
   TWENTY_FOUR_HOUR_STATUSES,
   type TwentyFourHourInspectionResponse,
   type TwentyFourHourInspectionRow,
   type TwentyFourHourRecordFilter,
 } from "@/lib/services/twentyFourHourInspectionService";
 import { usePortalSession } from "@/lib/portalSession";
+
+const TWENTY_FOUR_HOUR_AUTO_REFRESH_MS = 60_000;
+const TWENTY_FOUR_HOUR_EVENT_REFRESH_THROTTLE_MS = 2_000;
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "Unavailable";
@@ -61,6 +65,10 @@ function getRowYard(row: TwentyFourHourInspectionRow): string {
   return readRowString(row, ["yard_label", "yard_name", "yard", "facility", "facility_code"]);
 }
 
+function getRowFacility(row: TwentyFourHourInspectionRow): string {
+  return readRowString(row, ["facility", "facility_code", "facility_id", "yard_label", "yard_name", "yard"]);
+}
+
 function getInventoryLocation(row: TwentyFourHourInspectionRow): string {
   return normalizeTwentyFourHourLocation(readRowString(row, [
     "row",
@@ -80,26 +88,75 @@ function getReportId(row: TwentyFourHourInspectionRow): string {
   return row.report_id || row.reportId || "";
 }
 
+function csvCell(value: string | number): string {
+  const text = String(value);
+  const excelSafeText = /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+  return `"${excelSafeText.replace(/"/g, '""')}"`;
+}
+
+function buildTwentyFourHourVisibleCsv(rows: TwentyFourHourInspectionRow[]): string {
+  const headings = [
+    "Work Order",
+    "VIN",
+    "Inspection",
+    "Status",
+    "Yard / Facility",
+    "Row / Bay",
+    "First Seen",
+    "Last Seen",
+    "Time In Inventory",
+    "Until 24h",
+    "Overdue",
+    "Inspected At",
+    "Inspector",
+    "Report ID",
+  ];
+  const exportRows = rows.map((row, index) => [
+    index + 1,
+    row.vin,
+    row.inspected ? "Inspected" : "Uninspected",
+    row.display_label,
+    getRowYard(row) || "Unavailable",
+    getInventoryLocation(row) || "Unavailable",
+    formatDateTime(row.first_seen_at),
+    formatDateTime(row.last_seen_at),
+    formatDuration(row.time_in_inventory_seconds),
+    row.inspected ? "Complete" : formatDuration(row.time_until_24h_seconds),
+    row.inspected ? "Complete" : formatDuration(row.overdue_seconds),
+    formatDateTime(row.inspected_at),
+    row.inspector || row.user || "Unavailable",
+    getReportId(row) || "None",
+  ]);
+  return [headings, ...exportRows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
+
 function formatStatus(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function buildYardOptions(rows: TwentyFourHourInspectionRow[]) {
-  const options = new Set(rows.map(getRowYard).filter(Boolean));
-  return Array.from(options).sort((left, right) => left.localeCompare(right));
+function buildReturnedFacilityOptions(rows: TwentyFourHourInspectionRow[]) {
+  const inventoryCounts = new Map<string, number>();
+  rows.forEach((row) => {
+    const facility = getRowFacility(row);
+    if (!facility) return;
+    inventoryCounts.set(facility, (inventoryCounts.get(facility) ?? 0) + 1);
+  });
+  return Array.from(inventoryCounts.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => left.value.localeCompare(right.value));
 }
 
 type InspectionTableProps = {
   data: TwentyFourHourInspectionResponse | null;
   rows: TwentyFourHourInspectionRow[];
   search: string;
-  yardFilter: string;
+  facilityFilter: string;
   recordFilter: TwentyFourHourRecordFilter;
-  yardOptions: string[];
+  facilityOptions: Array<{ value: string; count: number }>;
   loading: boolean;
   error: string | null;
   onSearchChange: (value: string) => void;
-  onYardChange: (value: string) => void;
+  onFacilityChange: (value: string) => void;
   onRecordFilterChange: (value: TwentyFourHourRecordFilter) => void;
 };
 
@@ -107,24 +164,32 @@ function InspectionTable({
   data,
   rows,
   search,
-  yardFilter,
+  facilityFilter,
   recordFilter,
-  yardOptions,
+  facilityOptions,
   loading,
   error,
   onSearchChange,
-  onYardChange,
+  onFacilityChange,
   onRecordFilterChange,
 }: InspectionTableProps) {
+  const exportVisibleRows = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    saveAs(
+      new Blob(["\uFEFF", buildTwentyFourHourVisibleCsv(rows)], { type: "text/csv;charset=utf-8;" }),
+      `24-hour-work-queue-${date}.csv`
+    );
+  };
+
   return (
     <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
         <h2 className="text-sm font-black uppercase tracking-widest text-slate-700">Latest Active Snapshot Inventory</h2>
-        <p className="mt-1 text-xs text-slate-500">Scroll this list; filters and column labels remain pinned.</p>
+        <p className="mt-1 text-xs text-slate-500">All record fields are grouped to fit the available width; filters and column labels remain pinned.</p>
       </div>
       <div className="max-h-[calc(100vh-15rem)] min-h-[420px] overflow-auto" data-testid="inspection-table-scroll-container">
-        <div className="sticky top-0 z-30 flex h-[104px] min-w-[1120px] items-end gap-3 border-b border-slate-300 bg-white px-4 py-3 shadow-sm md:h-[88px]">
-          <label className="flex w-72 shrink-0 flex-col gap-1.5">
+        <div className="sticky top-0 z-30 grid min-h-[104px] grid-cols-2 items-end gap-3 border-b border-slate-300 bg-white px-4 py-3 shadow-sm md:min-h-[88px] md:grid-cols-[minmax(200px,2fr)_minmax(140px,1fr)_minmax(160px,1fr)_auto]">
+          <label className="col-span-2 flex min-w-0 flex-col gap-1.5 md:col-span-1">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Search all records</span>
             <input
               aria-label="Search inspected and uninspected records"
@@ -135,7 +200,7 @@ function InspectionTable({
               className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
             />
           </label>
-          <label className="flex w-48 shrink-0 flex-col gap-1.5">
+          <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Records</span>
             <select
               aria-label="Filter records by inspection state or status"
@@ -151,57 +216,72 @@ function InspectionTable({
               ))}
             </select>
           </label>
-          <label className="flex w-52 shrink-0 flex-col gap-1.5">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Yard / Facility</span>
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Facility inventory</span>
             <select
-              aria-label="Filter records by yard or facility"
-              value={yardFilter}
-              onChange={(event) => onYardChange(event.target.value)}
+              aria-label="Filter returned inventory by facility"
+              value={facilityFilter}
+              onChange={(event) => onFacilityChange(event.target.value)}
               className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
             >
-              <option value="">All yards</option>
-              {yardOptions.map((yard) => <option key={yard} value={yard}>{yard}</option>)}
+              <option value="">All returned facilities</option>
+              {facilityOptions.map(({ value, count }) => (
+                <option key={value} value={value}>
+                  {value} ({count} {count === 1 ? "inventory" : "inventories"})
+                </option>
+              ))}
             </select>
           </label>
-          <div className="ml-auto shrink-0 pb-2 text-right" aria-live="polite">
-            <p className="text-sm font-black text-slate-900">{rows.length} displayed</p>
-            <p className="text-xs font-semibold text-slate-500">{data ? `${data.rows.length} active in snapshot` : "Snapshot unavailable"}</p>
+          <div className="flex items-end justify-end gap-3 pb-1 text-right">
+            <div aria-live="polite">
+              <p className="text-sm font-black text-slate-900">{rows.length} displayed</p>
+              <p className="text-xs font-semibold text-slate-500">{data ? `${data.rows.length} active in snapshot` : "Snapshot unavailable"}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" disabled={rows.length === 0} onClick={exportVisibleRows}>
+              <Download className="mr-1.5 h-4 w-4" />
+              Export to Excel
+            </Button>
           </div>
         </div>
 
-        <table className="min-w-[1500px] divide-y divide-slate-200 text-sm">
+        <table className="w-full table-fixed divide-y divide-slate-200 text-xs">
+          <colgroup>
+            <col className="w-[16%]" />
+            <col className="w-[13%]" />
+            <col className="w-[15%]" />
+            <col className="w-[17%]" />
+            <col className="w-[16%]" />
+            <col className="w-[17%]" />
+            <col className="w-[6%]" />
+          </colgroup>
           <thead className="sticky top-[104px] z-20 bg-slate-100 text-left text-xs font-black uppercase tracking-widest text-slate-600 shadow-[0_2px_5px_rgba(15,23,42,0.18)] md:top-[88px]">
             <tr>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">VIN</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Inspection</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Status</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Yard</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Row / Bay</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">First Seen</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Last Seen</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Time In Inventory</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Until 24h</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Overdue</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Inspected At</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Inspector</th>
-              <th scope="col" className="whitespace-nowrap border-b border-slate-300 px-4 py-3">Report</th>
+              <th scope="col" className="border-b border-slate-300 px-3 py-2.5">VIN</th>
+              <th scope="col" className="border-b border-slate-300 px-3 py-2.5">Status</th>
+              <th scope="col" className="border-b border-slate-300 px-3 py-2.5">Location</th>
+              <th scope="col" className="border-b border-slate-300 px-3 py-2.5">Inventory Seen</th>
+              <th scope="col" className="border-b border-slate-300 px-3 py-2.5">24 Hour Timing</th>
+              <th scope="col" className="border-b border-slate-300 px-3 py-2.5">Inspection Detail</th>
+              <th scope="col" className="border-b border-slate-300 px-2 py-2.5 text-center">Report</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {rows.map((row) => {
               const reportId = getReportId(row);
               return (
-                <tr key={row.inventory_row_id} className="hover:bg-slate-50">
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-slate-900">{row.vin}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <Badge variant={row.inspected ? "default" : "secondary"} className={row.inspected ? "bg-emerald-700 text-white" : ""}>
-                      {row.inspected ? "Inspected" : "Uninspected"}
-                    </Badge>
+                <tr key={row.inventory_row_id} className="align-top hover:bg-slate-50">
+                  <td className="break-all px-3 py-2.5 font-mono font-bold text-slate-900">
+                    {row.vin}
+                    <div className="mt-1 font-sans">
+                      <Badge variant={row.inspected ? "default" : "secondary"} className={row.inspected ? "bg-emerald-700 text-white" : ""}>
+                        {row.inspected ? "Inspected" : "Uninspected"}
+                      </Badge>
+                    </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  <td className="px-3 py-2.5">
                     <Badge
                       variant="secondary"
-                      className="border border-slate-300 font-black"
+                      className="max-w-full whitespace-normal border border-slate-300 text-center font-black leading-tight"
                       style={{
                         backgroundColor: row.severity === "overdue" ? "#000000" : row.display_background_color || "#ffffff",
                         color: row.severity === "overdue" ? "#ffffff" : row.display_text_color || "#0f172a",
@@ -210,16 +290,27 @@ function InspectionTable({
                       {row.display_label}
                     </Badge>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-700">{getRowYard(row) || "Unavailable"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold text-slate-800">{getInventoryLocation(row) || "Unavailable"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(row.first_seen_at)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(row.last_seen_at)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{formatDuration(row.time_in_inventory_seconds)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-700">{row.inspected ? "Complete" : formatDuration(row.time_until_24h_seconds)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900">{row.inspected ? "Complete" : formatDuration(row.overdue_seconds)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(row.inspected_at)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-700">{row.inspector || row.user || "Unavailable"}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
+                  <td className="break-words px-3 py-2.5 text-slate-700">
+                    <div className="font-semibold">{getRowYard(row) || "Unavailable"}</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      <span className="font-sans font-bold">Row / Bay: </span>
+                      <span className="font-mono">{getInventoryLocation(row) || "Unavailable"}</span>
+                    </div>
+                  </td>
+                  <td className="break-words px-3 py-2.5 leading-snug text-slate-600">
+                    <div><span className="font-bold text-slate-700">First:</span> {formatDateTime(row.first_seen_at)}</div>
+                    <div className="mt-1"><span className="font-bold text-slate-700">Last:</span> {formatDateTime(row.last_seen_at)}</div>
+                  </td>
+                  <td className="break-words px-3 py-2.5 leading-snug text-slate-700">
+                    <div><span className="font-bold">In inventory:</span> {formatDuration(row.time_in_inventory_seconds)}</div>
+                    <div className="mt-1"><span className="font-bold">Until 24h:</span> {row.inspected ? "Complete" : formatDuration(row.time_until_24h_seconds)}</div>
+                    <div className="mt-1 font-semibold text-slate-900"><span className="font-bold">Overdue:</span> {row.inspected ? "Complete" : formatDuration(row.overdue_seconds)}</div>
+                  </td>
+                  <td className="break-words px-3 py-2.5 leading-snug text-slate-600">
+                    <div><span className="font-bold text-slate-700">At:</span> {formatDateTime(row.inspected_at)}</div>
+                    <div className="mt-1 text-slate-700"><span className="font-bold">By:</span> {row.inspector || row.user || "Unavailable"}</div>
+                  </td>
+                  <td className="px-2 py-2.5 text-center">
                     {reportId ? (
                       <Link href={`/reports/damage?focus=${encodeURIComponent(reportId)}`} className="text-xs font-black uppercase tracking-widest text-blue-700 hover:text-blue-900">Open</Link>
                     ) : <span className="text-xs font-semibold text-slate-400">None</span>}
@@ -228,7 +319,7 @@ function InspectionTable({
               );
             })}
             {rows.length === 0 ? (
-              <tr><td colSpan={13} className="px-4 py-12 text-center text-sm font-semibold text-slate-500">
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-sm font-semibold text-slate-500">
                 {loading ? "Loading the latest completed snapshot…" : error ? "Current snapshot data is unavailable. Use Retry above." : "No records match the current search and filters."}
               </td></tr>
             ) : null}
@@ -240,62 +331,96 @@ function InspectionTable({
 }
 
 export default function TwentyFourHourInspectionPage() {
-  const { isShap, status } = usePortalSession();
+  const { status } = usePortalSession();
   const [data, setData] = useState<TwentyFourHourInspectionResponse | null>(null);
   const [search, setSearch] = useState("");
-  const [yardFilter, setYardFilter] = useState("");
+  const [facilityFilter, setFacilityFilter] = useState("");
   const [recordFilter, setRecordFilter] = useState<TwentyFourHourRecordFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [failedRequestId, setFailedRequestId] = useState("");
-  const [lastSuccessfulRefresh, setLastSuccessfulRefresh] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const requestSequence = useRef(0);
+  const lastEventRefreshAt = useRef(0);
+
+  const requestRefresh = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setReloadToken((current) => current + 1);
+  }, []);
 
   useEffect(() => {
-    if (!isShap) {
+    if (status !== "success") return;
+
+    const refreshCurrentFacility = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastEventRefreshAt.current < TWENTY_FOUR_HOUR_EVENT_REFRESH_THROTTLE_MS) return;
+      lastEventRefreshAt.current = now;
+      requestRefresh();
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refreshCurrentFacility();
+    };
+    const intervalId = window.setInterval(refreshCurrentFacility, TWENTY_FOUR_HOUR_AUTO_REFRESH_MS);
+
+    window.addEventListener("focus", refreshCurrentFacility);
+    window.addEventListener("online", refreshCurrentFacility);
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", refreshCurrentFacility);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshCurrentFacility);
+      window.removeEventListener("online", refreshCurrentFacility);
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", refreshCurrentFacility);
+    };
+  }, [requestRefresh, status]);
+
+  useEffect(() => {
+    if (status !== "success") {
       return;
     }
     const sequence = ++requestSequence.current;
     const controller = new AbortController();
-    void fetchTwentyFourHourInspectionDisplay({ signal: controller.signal })
+    void fetchTwentyFourHourInspectionDisplay({
+      signal: controller.signal,
+    })
       .then((response) => {
         if (sequence !== requestSequence.current) return;
         setData(response);
-        setLastSuccessfulRefresh(new Date().toISOString());
-        setFailedRequestId("");
       })
       .catch((caught) => {
         if (sequence !== requestSequence.current || controller.signal.aborted) return;
         setError(caught instanceof Error ? caught.message : "Unable to load the current 24-hour snapshot.");
-        setFailedRequestId(getTwentyFourHourRequestId(caught));
       })
       .finally(() => {
         if (sequence === requestSequence.current) setLoading(false);
       });
     return () => controller.abort();
-  }, [isShap, reloadToken]);
+  }, [reloadToken, status]);
 
-  const yardOptions = useMemo(() => buildYardOptions(data?.rows ?? []), [data?.rows]);
-  const visibleRows = useMemo(() => filterTwentyFourHourRows(data?.rows ?? [], {
+  const facilityOptions = useMemo(() => buildReturnedFacilityOptions(data?.rows ?? []), [data?.rows]);
+  const visibleRows = useMemo(() => orderTwentyFourHourRowsByPriority(filterTwentyFourHourRows(data?.rows ?? [], {
     search,
-    yard: yardFilter,
+    yard: facilityFilter,
     recordFilter,
-  }), [data?.rows, recordFilter, search, yardFilter]);
+  })), [data?.rows, facilityFilter, recordFilter, search]);
 
-  const refresh = () => {
-    setLoading(true);
-    setError(null);
-    setReloadToken((current) => current + 1);
-  };
+  const summaryCards: Array<{
+    label: string;
+    count: number;
+    filter: TwentyFourHourRecordFilter;
+  }> = data ? [
+    { label: "Active", count: data.summary.total_active, filter: "all" },
+    { label: "Uninspected", count: data.summary.needs_inspected, filter: "uninspected" },
+    { label: "Inspected", count: data.summary.inspected, filter: "inspected" },
+    { label: "Critical", count: data.summary.critical, filter: "critical" },
+    { label: "Overdue", count: data.summary.overdue, filter: "overdue" },
+  ] : [];
 
   if (status !== "success") {
     return <EmptyState title="Session required" description="24-hour inspection display is available after the portal session loads." />;
   }
-  if (!isShap) {
-    return <EmptyState title="Restricted" description="The 24-hour inspection display is only available for SHAP." />;
-  }
-
   return (
     <div className="space-y-4">
       <Card className="border-slate-200 bg-white shadow-sm">
@@ -304,43 +429,40 @@ export default function TwentyFourHourInspectionPage() {
             <h2 className="text-base font-black text-slate-900">24 Hour Inspection Display</h2>
             <p className="mt-1 text-xs text-slate-600">Current active inventory from the latest successfully completed development snapshot.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={refresh}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Refreshing" : "Refresh"}
-          </Button>
+          <div className="flex items-end justify-end">
+            <Button variant="outline" size="sm" onClick={requestRefresh}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              {loading ? "Refreshing" : "Refresh"}
+            </Button>
+          </div>
         </div>
         <div className="p-4">
           {error ? (
             <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
               <span>{error}</span>
-              <Button variant="outline" size="sm" onClick={refresh}>Retry</Button>
+              <Button variant="outline" size="sm" onClick={requestRefresh}>Retry</Button>
             </div>
           ) : null}
           {loading && !data ? <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-600">Loading the latest completed snapshot…</div> : null}
           {data ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {[
-                ["Active", data.summary.total_active],
-                ["Uninspected", data.summary.needs_inspected],
-                ["Inspected", data.summary.inspected],
-                ["Critical", data.summary.critical],
-                ["Overdue", data.summary.overdue],
-              ].map(([label, count]) => (
-                <div key={String(label)} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-                  <p className="mt-1 text-2xl font-black text-slate-900">{count}</p>
-                </div>
+              {summaryCards.map(({ label, count, filter }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-label={`Filter records by ${label}`}
+                  aria-pressed={recordFilter === filter}
+                  onClick={() => setRecordFilter((current) => current === filter && filter !== "all" ? "all" : filter)}
+                  className={`rounded-lg border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 ${
+                    recordFilter === filter
+                      ? "border-slate-700 bg-slate-900 shadow-sm"
+                      : "border-slate-200 bg-slate-50 hover:border-slate-400 hover:bg-slate-100"
+                  }`}
+                >
+                  <p className={`text-[10px] font-black uppercase tracking-widest ${recordFilter === filter ? "text-slate-300" : "text-slate-500"}`}>{label}</p>
+                  <p className={`mt-1 text-2xl font-black ${recordFilter === filter ? "text-white" : "text-slate-900"}`}>{count}</p>
+                </button>
               ))}
-            </div>
-          ) : null}
-          {process.env.NODE_ENV !== "production" ? (
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11px] text-slate-600" aria-label="Development snapshot diagnostics">
-              <span>result: {error ? "failed" : data ? "success" : "pending"}</span>
-              <span>last refresh: {lastSuccessfulRefresh ? formatDateTime(lastSuccessfulRefresh) : "none"}</span>
-              <span>snapshot: {data ? formatDateTime(data.snapshot.capture_time) : "unavailable"}</span>
-              <span>displayed: {visibleRows.length}</span>
-              <span>excluded: {data ? data.metadata.excluded_stale_rows + data.metadata.rejected_malformed_rows : 0}</span>
-              <span>request: {failedRequestId || data?.request_id || "pending"}</span>
             </div>
           ) : null}
         </div>
@@ -350,13 +472,13 @@ export default function TwentyFourHourInspectionPage() {
         data={data}
         rows={visibleRows}
         search={search}
-        yardFilter={yardFilter}
+        facilityFilter={facilityFilter}
         recordFilter={recordFilter}
-        yardOptions={yardOptions}
+        facilityOptions={facilityOptions}
         loading={loading}
         error={error}
         onSearchChange={setSearch}
-        onYardChange={setYardFilter}
+        onFacilityChange={setFacilityFilter}
         onRecordFilterChange={setRecordFilter}
       />
     </div>

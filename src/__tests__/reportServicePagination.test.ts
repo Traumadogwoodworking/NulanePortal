@@ -22,7 +22,7 @@ describe("reportService paginated snapshots", () => {
     apiClientMocks.apiFetchResponse.mockReset();
   });
 
-  it("uses the report list endpoint for damage table filters", async () => {
+  it("uses the report list endpoint and expands date filters to full local-day boundaries", async () => {
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
       expect(parsedUrl.pathname).toBe("/reports/list");
@@ -33,8 +33,12 @@ describe("reportService paginated snapshots", () => {
       expect(parsedUrl.searchParams.get("facility_id")).toBe("facility-1");
       expect(parsedUrl.searchParams.has("location_id")).toBe(false);
       expect(parsedUrl.searchParams.get("yard")).toBe("yard-a");
-      expect(parsedUrl.searchParams.get("from")).toBe("2026-07-01");
-      expect(parsedUrl.searchParams.get("to")).toBe("2026-07-09");
+      const from = parsedUrl.searchParams.get("from");
+      const to = parsedUrl.searchParams.get("to");
+      expect(from).toBeTruthy();
+      expect(to).toBeTruthy();
+      expect(new Date(from as string).getTime()).toBe(new Date(2026, 6, 1, 0, 0, 0, 0).getTime());
+      expect(new Date(to as string).getTime()).toBe(new Date(2026, 6, 9, 23, 59, 59, 999).getTime());
       expect(parsedUrl.searchParams.get("severity")).toBe("high");
       expect(parsedUrl.searchParams.get("damage_area")).toBe("hood");
       expect(parsedUrl.searchParams.get("damage_type")).toBe("scratch");
@@ -53,6 +57,30 @@ describe("reportService paginated snapshots", () => {
     });
   });
 
+  it("keeps general search separate from dedicated damage report filters", async () => {
+    apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
+      const parsedUrl = new URL(url, "http://localhost");
+      expect(parsedUrl.searchParams.get("search")).toBe("door scratch");
+      expect(parsedUrl.searchParams.get("report_id")).toBe("report-17");
+      expect(parsedUrl.searchParams.get("vin")).toBe("1TESTVIN");
+      expect(parsedUrl.searchParams.get("make")).toBe("Toyota");
+      expect(parsedUrl.searchParams.get("model")).toBe("Camry");
+      expect(parsedUrl.searchParams.get("location_id")).toBe("location-4");
+      expect(parsedUrl.searchParams.get("inspection_type")).toBe("02");
+      return { rows: [], page: 1, pageSize: 50, total: 0, hasNextPage: false };
+    });
+
+    await fetchReportList({
+      search: "door scratch",
+      report_id: "report-17",
+      vin: "1TESTVIN",
+      make: "Toyota",
+      model: "Camry",
+      location_id: "location-4",
+      inspection_type: "02",
+    });
+  });
+
   it("keeps damage detail hydration on report pull by report id", async () => {
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
@@ -64,6 +92,52 @@ describe("reportService paginated snapshots", () => {
     const report = await fetchDamageReportDetail("damage-1");
 
     expect(report?.report_id).toBe("damage-1");
+  });
+
+  it("rejects malformed and duplicate damage list rows before rendering", async () => {
+    apiClientMocks.apiFetch.mockResolvedValue({
+      rows: [
+        { id: "damage-entry-1", damage_area: "hood" },
+        null,
+        ["not", "a", "report"],
+        { report_id: " damage-1 ", vin: "FIRST" },
+        { report_id: "damage-1", vin: "DUPLICATE" },
+        { reportId: "damage-2", vin: "SECOND" },
+        { report: { report_id: "damage-3" }, vin: "THIRD" },
+      ],
+      page: 1,
+      pageSize: 50,
+      total: 7,
+      hasNextPage: false,
+    });
+
+    const response = await fetchReportList();
+
+    expect(response.rows.map((row) => [row.report_id, row.vin])).toEqual([
+      ["damage-1", "FIRST"],
+      ["damage-2", "SECOND"],
+      ["damage-3", "THIRD"],
+    ]);
+  });
+
+  it("surfaces a finite error when every list row is malformed", async () => {
+    apiClientMocks.apiFetch.mockResolvedValue({
+      rows: [{ id: "damage-entry-1" }, null, ["not", "a", "report"]],
+      page: 1,
+      pageSize: 50,
+      total: 3,
+      hasNextPage: false,
+    });
+
+    await expect(fetchReportList()).rejects.toThrow("rows without stable report IDs");
+  });
+
+  it("does not hydrate a report with an unrelated first detail result", async () => {
+    apiClientMocks.apiFetch.mockResolvedValue({ reports: [{ report_id: "different-report" }] });
+
+    const report = await fetchDamageReportDetail("damage-1");
+
+    expect(report).toBeNull();
   });
 
   it("keeps damage report list snapshots bounded to the first page", async () => {

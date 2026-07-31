@@ -22,10 +22,13 @@ const portalAuthMocks = vi.hoisted(() => ({
     }
   },
   buildPortalLoginUrl: vi.fn((returnTo?: string) => `/login?returnTo=${encodeURIComponent(returnTo ?? "/")}`),
+  cleanAuthCallbackUrl: vi.fn(() => window.history.replaceState({}, "", "/auth/callback/")),
   clearPortalAuthStorage: vi.fn(),
   completeAuth0Callback: vi.fn(() => new Promise<string>(() => {})),
   hasPersistedPortalToken: vi.fn(() => false),
   logAuthFlow: vi.fn(),
+  logoutRejectedPortalSession: vi.fn(),
+  prepareExplicitAuthRetry: vi.fn(),
   startAuth0Login: vi.fn(),
 }));
 
@@ -45,10 +48,13 @@ vi.mock("@/lib/portalSession", () => ({
 vi.mock("@/lib/portalAuth", () => ({
   AuthRedirectError: portalAuthMocks.AuthRedirectError,
   buildPortalLoginUrl: portalAuthMocks.buildPortalLoginUrl,
+  cleanAuthCallbackUrl: portalAuthMocks.cleanAuthCallbackUrl,
   clearPortalAuthStorage: portalAuthMocks.clearPortalAuthStorage,
   completeAuth0Callback: portalAuthMocks.completeAuth0Callback,
   hasPersistedPortalToken: portalAuthMocks.hasPersistedPortalToken,
   logAuthFlow: portalAuthMocks.logAuthFlow,
+  logoutRejectedPortalSession: portalAuthMocks.logoutRejectedPortalSession,
+  prepareExplicitAuthRetry: portalAuthMocks.prepareExplicitAuthRetry,
   startAuth0Login: portalAuthMocks.startAuth0Login,
 }));
 
@@ -85,6 +91,7 @@ beforeEach(() => {
   portalAuthMocks.startAuth0Login.mockRejectedValue(
     new portalAuthMocks.AuthRedirectError()
   );
+  portalAuthMocks.logoutRejectedPortalSession.mockResolvedValue(undefined);
   window.history.replaceState({}, "", "/home/");
 });
 
@@ -105,22 +112,23 @@ describe("PortalLayoutShell auth states", () => {
     expect(window.location.href).toBe(beforeHref);
   });
 
-  it("redirects session_error to Universal Login without rendering an unauthorized screen", async () => {
+  it("fully logs out a backend-rejected session without rendering an unauthorized screen", async () => {
     portalSessionMocks.state.status = "session_error";
     portalSessionMocks.state.error = new Error("Signed in, but no portal organization was resolved.");
 
     render(<PortalLayoutShell>Portal content</PortalLayoutShell>);
 
     expect(screen.queryByText("Portal session unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in again" })).not.toBeInTheDocument();
+    expect(portalAuthMocks.startAuth0Login).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(portalAuthMocks.clearPortalAuthStorage).toHaveBeenCalledWith({ includeAuth0Sdk: true });
-      expect(portalAuthMocks.startAuth0Login).toHaveBeenCalledWith("/home/");
+      expect(portalAuthMocks.logoutRejectedPortalSession).toHaveBeenCalledWith("/home/");
     });
   });
 });
 
 describe("AuthCallbackClient", () => {
-  it("clears stale auth state and returns provider errors to a clean sign-in", async () => {
+  it("shows provider errors without automatically starting another login", async () => {
     window.history.replaceState(
       {},
       "",
@@ -130,10 +138,13 @@ describe("AuthCallbackClient", () => {
     render(<AuthCallbackClient />);
 
     await waitFor(() => {
-      expect(portalAuthMocks.clearPortalAuthStorage).toHaveBeenCalledWith({ includeAuth0Sdk: true });
-      expect(portalAuthMocks.buildPortalLoginUrl).toHaveBeenCalledWith("/home/");
+      expect(screen.getByText("Sign-in callback failed")).toBeInTheDocument();
     });
+    expect(portalAuthMocks.clearPortalAuthStorage).toHaveBeenCalledWith();
+    expect(portalAuthMocks.cleanAuthCallbackUrl).toHaveBeenCalledTimes(1);
+    expect(portalAuthMocks.startAuth0Login).not.toHaveBeenCalled();
     expect(portalAuthMocks.completeAuth0Callback).not.toHaveBeenCalled();
+    expect(screen.getByText("Service not found")).toBeInTheDocument();
   });
 
   it("does not render callback code or state in visible UI", async () => {
