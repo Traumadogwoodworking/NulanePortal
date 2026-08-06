@@ -25,6 +25,15 @@ import {
 } from "@/lib/services/homeAnalyticsSnapshotService";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { fetchEmailLists, fetchEmailListMembers } from "@/lib/services/notificationsService";
+import {
+  BRANDING_CACHE_KEY_PREFIX,
+  CONTROL_CACHE_KEY_PREFIX,
+  DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX,
+  DIRECTORY_CACHE_KEY_PREFIX,
+  EMAIL_MEMBERS_CACHE_KEY_PREFIX,
+  HOME_ANALYTICS_SNAPSHOT_CACHE_KEY_PREFIX,
+  REPORTS_CACHE_KEY_PREFIX,
+} from "@/lib/portalCacheStorage";
 import type { ControlPlaneBootstrapPayload } from "@/lib/services/controlPlaneService";
 import type {
   BrandingSnapshot,
@@ -41,11 +50,6 @@ const STALE_TIME_MS = 1000 * 60 * 5;
 const REVALIDATE_ON_FOCUS = false;
 const REVALIDATE_ON_RECONNECT = false;
 const KEEP_PREVIOUS_DATA = true;
-const DIRECTORY_CACHE_KEY_PREFIX = "portalDirectoryCache";
-const BRANDING_CACHE_KEY_PREFIX = "portalBrandingCache";
-const REPORTS_CACHE_KEY_PREFIX = "portalReportsSnapshotCacheV4";
-const DASHBOARD_ANALYTICS_CACHE_KEY_PREFIX = "portalDashboardAnalyticsCacheV2";
-const HOME_ANALYTICS_SNAPSHOT_CACHE_KEY_PREFIX = "portalHomeAnalyticsSnapshotCacheV1";
 const CACHE_TTL_MS = STALE_TIME_MS;
 
 type CachedPayload<T> = {
@@ -64,13 +68,14 @@ const homeAnalyticsSnapshotInFlight = new Map<string, Promise<HomeAnalyticsSnaps
 const HOME_SNAPSHOT_MAX_ATTEMPTS = 20;
 const HOME_SNAPSHOT_MAX_ELAPSED_MS = 45000;
 
-interface DirectorySnapshot {
+export interface DirectorySnapshot {
   users: UserSummary[];
   facilities: FacilitySummary[];
   locationMemberships: LocationMembership[];
   emailLists: EmailListSummary[];
   emailListMembersByListId: Record<string, EmailListMemberSummary[]>;
   partialError: string | null;
+  lastUpdated: string | null;
 }
 
 interface ReportsSnapshot {
@@ -293,6 +298,12 @@ function hasUsefulReportsData(value: ReportsSnapshot | null): boolean {
   return Boolean(value && (value.damageReports.length > 0 || value.rsaReports.length > 0));
 }
 
+function isAuthorizationFailure(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const status = Number((error as { status?: unknown }).status);
+  return status === 401 || status === 403;
+}
+
 function emptyReportStreamStatus(): ReportStreamStatus {
   return {
     refreshing: false,
@@ -377,6 +388,54 @@ export function getControlPlaneBootstrapKey(organizationId?: string | null) {
   return resolvedOrgId ? (["portal/control-plane/bootstrap", resolvedOrgId] as const) : null;
 }
 
+export type PortalDataRefreshTarget =
+  | "directory"
+  | "branding"
+  | "reports"
+  | "analytics"
+  | "control";
+
+function matchesPortalRefreshTarget(
+  key: unknown,
+  organizationId: string,
+  targets: Set<PortalDataRefreshTarget>
+) {
+  if (!Array.isArray(key)) return false;
+  const first = key[0];
+  const containsOrganization = key.some((part) => {
+    if (part === organizationId) return true;
+    return typeof part === "string" && part.split(":").includes(organizationId);
+  });
+  if (!containsOrganization) return false;
+
+  if (targets.has("directory")) {
+    if (first === "portal/email-list-members") return true;
+    if (first === "portal" && key.includes("directory")) return true;
+  }
+  if (targets.has("branding") && first === "portal" && key.includes("branding")) return true;
+  if (targets.has("reports")) {
+    if (first === "portal" && key.includes("reports")) return true;
+    if (first === "portal/report-list" || first === "portal/report-filter-options") return true;
+  }
+  if (targets.has("analytics")) {
+    if (first === "portal/dashboard-analytics" || first === "portal/home-analytics-snapshot") return true;
+  }
+  if (targets.has("control")) {
+    if (first === "portal/control-plane/bootstrap" || first === "portal/control-snapshot") return true;
+  }
+  return false;
+}
+
+export async function refreshPortalData(
+  organizationId: string | null | undefined,
+  targets: PortalDataRefreshTarget[] = ["directory", "control"]
+) {
+  const resolvedOrgId = ensureOrgId(organizationId);
+  if (!resolvedOrgId) return undefined;
+  const targetSet = new Set(targets);
+  return globalMutate((key) => matchesPortalRefreshTarget(key, resolvedOrgId, targetSet));
+}
+
 export async function refreshControlPlaneBootstrap(organizationId?: string | null) {
   const key = getControlPlaneBootstrapKey(organizationId);
   if (!key) {
@@ -439,10 +498,12 @@ export function useControlPlaneBootstrap() {
 export function usePortalBrandingSnapshot() {
   const { organizationId, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
+  const userScope = session?.user?.user_id?.trim() || "anonymous";
+  const brandingCacheScope = resolvedOrgId ? `${userScope}:${resolvedOrgId}` : null;
   const sessionBranding = (session?.branding_snapshot as BrandingSnapshot | undefined) ?? null;
-  const scope = getPortalScopeKey(resolvedOrgId, session?.user?.user_id ?? null);
-  const cachedValue = resolvedOrgId
-    ? readCachedPayload(brandingMemoryCache, BRANDING_CACHE_KEY_PREFIX, resolvedOrgId, {
+  const scope = getPortalScopeKey(resolvedOrgId, userScope);
+  const cachedValue = brandingCacheScope
+    ? readCachedPayload(brandingMemoryCache, BRANDING_CACHE_KEY_PREFIX, brandingCacheScope, {
         allowStale: true,
         storage: "local",
       })
@@ -451,21 +512,19 @@ export function usePortalBrandingSnapshot() {
     scope ? [...scope, "branding", "v1"] : null,
     async () => {
       if (!resolvedOrgId) return sessionBranding;
-      return fetchBranding(resolvedOrgId).catch(() => cachedValue ?? sessionBranding);
+      return fetchBranding(resolvedOrgId);
     },
     {
       fallbackData: cachedValue ?? sessionBranding,
       revalidateIfStale: true,
       onSuccess: (data) => {
-        if (resolvedOrgId) {
-          writeCachedPayload(brandingMemoryCache, BRANDING_CACHE_KEY_PREFIX, resolvedOrgId, data, "local");
+        if (brandingCacheScope) {
+          writeCachedPayload(brandingMemoryCache, BRANDING_CACHE_KEY_PREFIX, brandingCacheScope, data, "local");
         }
       },
     }
   );
 }
-
-const CONTROL_CACHE_KEY_PREFIX = "portalControlCache";
 
 export function usePortalControlSnapshots() {
   const { organizationId } = usePortalSession();
@@ -510,12 +569,13 @@ export function usePortalControlSnapshots() {
 }
 
 export function usePortalDirectorySnapshot() {
-  const { organizationId, selectedOrganizationScopeKey } = usePortalSession();
+  const { organizationId, selectedOrganizationScopeKey, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
+  const userScope = session?.user?.user_id?.trim() || "anonymous";
   const directoryScopeKey = resolvedOrgId
-    ? `${resolvedOrgId}:${selectedOrganizationScopeKey}`
+    ? `${userScope}:${resolvedOrgId}:${selectedOrganizationScopeKey}`
     : null;
-  const scope = getPortalScopeKey(directoryScopeKey, null);
+  const scope = getPortalScopeKey(directoryScopeKey, userScope);
   const cachedValue = directoryScopeKey
     ? readCachedPayload(directoryMemoryCache, DIRECTORY_CACHE_KEY_PREFIX, directoryScopeKey, {
         allowStale: true,
@@ -533,7 +593,7 @@ export function usePortalDirectorySnapshot() {
       usableCache,
     });
   }
-  return useSWR<DirectorySnapshot | undefined>(
+  const swr = useSWR<DirectorySnapshot | undefined>(
     scope ? [...scope, "directory", "v1"] : null,
     async () => {
       const previousSnapshot = cachedValue ?? {
@@ -543,6 +603,7 @@ export function usePortalDirectorySnapshot() {
         emailLists: [],
         emailListMembersByListId: {},
         partialError: null,
+        lastUpdated: null,
       };
       if (!resolvedOrgId) {
         return previousSnapshot;
@@ -558,6 +619,9 @@ export function usePortalDirectorySnapshot() {
         ENABLE_ADMIN_DATA ? UsersAdapter.getLocationMemberships(resolvedOrgId) : Promise.resolve([]),
         fetchEmailLists(resolvedOrgId),
       ]);
+      const authorizationRejected = [usersResult, facilitiesResult, membershipsResult, emailListsResult].some(
+        (result) => result.status === "rejected" && isAuthorizationFailure(result.reason)
+      );
       const partialErrors = [
         usersResult.status === "rejected"
           ? `users: ${usersResult.reason instanceof Error ? usersResult.reason.message : "Unable to load users."}`
@@ -572,6 +636,9 @@ export function usePortalDirectorySnapshot() {
           ? `email lists: ${emailListsResult.reason instanceof Error ? emailListsResult.reason.message : "Unable to load email lists."}`
           : null,
       ].filter((entry): entry is string => Boolean(entry));
+      if (authorizationRejected) {
+        partialErrors.unshift("Access changed; previously cached directory data was cleared.");
+      }
 
       const emailLists = emailListsResult.status === "fulfilled" ? emailListsResult.value : [];
       const emailListMemberResults = await Promise.allSettled(
@@ -601,20 +668,31 @@ export function usePortalDirectorySnapshot() {
       );
 
       const mergedUsers =
-        usersResult.status === "fulfilled" ? usersResult.value : previousSnapshot.users;
+        authorizationRejected ? [] : usersResult.status === "fulfilled" ? usersResult.value : previousSnapshot.users;
       const mergedFacilities =
-        facilitiesResult.status === "fulfilled" ? facilitiesResult.value : previousSnapshot.facilities;
+        authorizationRejected ? [] : facilitiesResult.status === "fulfilled" ? facilitiesResult.value : previousSnapshot.facilities;
       const scopedFacilityIds = new Set(mergedFacilities.map((facility) => facility.id));
       const mergedMemberships = (
-        membershipsResult.status === "fulfilled"
+        authorizationRejected
+          ? []
+          : membershipsResult.status === "fulfilled"
           ? membershipsResult.value
           : previousSnapshot.locationMemberships
       ).filter((membership) => scopedFacilityIds.has(membership.location_id));
-      const mergedEmailLists = mergeByKey(previousSnapshot.emailLists, emailLists, (l) => l.email_list_id);
-      const mergedEmailListMembers = mergeEmailListMembers(
-        previousSnapshot.emailListMembersByListId,
-        emailListMembersByListId
-      );
+      const mergedEmailLists =
+        authorizationRejected ? [] : emailListsResult.status === "fulfilled" ? emailLists : previousSnapshot.emailLists;
+      const mergedEmailListMembers = authorizationRejected
+        ? {}
+        : emailListsResult.status === "fulfilled"
+        ? emailLists.reduce<Record<string, EmailListMemberSummary[]>>((acc, list, index) => {
+            const listId = list.email_list_id;
+            const memberResult = emailListMemberResults[index];
+            acc[listId] = memberResult?.status === "fulfilled"
+              ? emailListMembersByListId[listId] ?? []
+              : previousSnapshot.emailListMembersByListId[listId] ?? [];
+            return acc;
+          }, {})
+        : previousSnapshot.emailListMembersByListId;
 
       const snapshot = {
         users: normalizeDirectoryUsers(mergedUsers, mergedMemberships),
@@ -623,6 +701,13 @@ export function usePortalDirectorySnapshot() {
         emailLists: mergedEmailLists,
         emailListMembersByListId: mergedEmailListMembers,
         partialError: partialErrors.length ? partialErrors.join(" | ") : null,
+        lastUpdated:
+          authorizationRejected ||
+          (usersResult.status === "fulfilled" &&
+            facilitiesResult.status === "fulfilled" &&
+            membershipsResult.status === "fulfilled")
+            ? new Date().toISOString()
+            : previousSnapshot.lastUpdated,
       };
       if (directoryScopeKey) {
         writeCachedPayload(
@@ -638,18 +723,27 @@ export function usePortalDirectorySnapshot() {
     {
       fallbackData: usableCache && cachedValue ? cachedValue : undefined,
       keepPreviousData: false,
-      revalidateIfStale: !usableCache,
+      revalidateIfStale: true,
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
     }
   );
+  return {
+    ...swr,
+    isRefreshing: swr.isLoading || swr.isValidating,
+    lastUpdated: swr.data?.lastUpdated ?? cachedValue?.lastUpdated ?? null,
+  };
 }
 
-const EMAIL_MEMBERS_CACHE_KEY_PREFIX = "portalEmailMembersCache";
-
 export function usePortalEmailListMembers(listId?: string | null) {
-  const { organizationId } = usePortalSession();
+  const { organizationId, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const resolvedListId = ensureOrgId(listId);
-  const cacheKey = resolvedOrgId && resolvedListId ? `${resolvedOrgId}:${resolvedListId}` : null;
+  const userScope = session?.user?.user_id?.trim() || "anonymous";
+  const cacheKey = resolvedOrgId && resolvedListId
+    ? `${userScope}:${resolvedOrgId}:${resolvedListId}`
+    : null;
   const cachedValue = cacheKey
     ? readCachedPayload(emailMembersMemoryCache, EMAIL_MEMBERS_CACHE_KEY_PREFIX, cacheKey, {
         allowStale: true,
@@ -657,12 +751,14 @@ export function usePortalEmailListMembers(listId?: string | null) {
       })
     : null;
   return useSWR<EmailListMemberSummary[]>(
-    resolvedOrgId && resolvedListId ? ["portal/email-list-members", resolvedOrgId, resolvedListId] : null,
+    resolvedOrgId && resolvedListId
+      ? ["portal/email-list-members", userScope, resolvedOrgId, resolvedListId]
+      : null,
     async () => {
       if (!resolvedOrgId || !resolvedListId) {
         return cachedValue ?? [];
       }
-      return fetchEmailListMembers(resolvedOrgId, resolvedListId).catch(() => cachedValue ?? []);
+      return fetchEmailListMembers(resolvedOrgId, resolvedListId);
     },
     {
       fallbackData: cachedValue ?? [],
@@ -676,64 +772,14 @@ export function usePortalEmailListMembers(listId?: string | null) {
   );
 }
 
-function mergeCachedReports<T extends { report_id?: string; id?: string }>(
-  cached: T[],
-  fresh: T[]
-): T[] {
-  const map = new Map<string, T>();
-  cached.forEach((item) => {
-    const id = (item.report_id || item.id) as string | undefined;
-    if (id) map.set(id, item);
-  });
-  fresh.forEach((item) => {
-    const id = (item.report_id || item.id) as string | undefined;
-    if (id) map.set(id, item);
-  });
-  return Array.from(map.values());
-}
-
-function mergeById<T extends { id?: string }>(cached: T[], fresh: T[]): T[] {
-  const map = new Map<string, T>();
-  cached.forEach((item) => {
-    if (item.id) map.set(item.id, item);
-  });
-  fresh.forEach((item) => {
-    if (item.id) map.set(item.id, item);
-  });
-  return Array.from(map.values());
-}
-
-function mergeByKey<T>(cached: T[], fresh: T[], keyFn: (item: T) => string | undefined): T[] {
-  const map = new Map<string, T>();
-  cached.forEach((item) => {
-    const key = keyFn(item);
-    if (key) map.set(key, item);
-  });
-  fresh.forEach((item) => {
-    const key = keyFn(item);
-    if (key) map.set(key, item);
-  });
-  return Array.from(map.values());
-}
-
-function mergeEmailListMembers(
-  cached: Record<string, EmailListMemberSummary[]>,
-  fresh: Record<string, EmailListMemberSummary[]>
-): Record<string, EmailListMemberSummary[]> {
-  const merged = { ...cached };
-  Object.entries(fresh).forEach(([listId, members]) => {
-    merged[listId] = mergeByKey(cached[listId] ?? [], members, (m) => m.email_list_member_id || m.user_id);
-  });
-  return merged;
-}
-
 export function usePortalReportsSnapshot() {
-  const { organizationId } = usePortalSession();
+  const { organizationId, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
-  const scope = getPortalScopeKey(resolvedOrgId, null);
-  const rawCachedValue = resolvedOrgId
-    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, {
-        allowStale: true,
+  const userScope = session?.user?.user_id?.trim() || "anonymous";
+  const reportsCacheScope = resolvedOrgId ? `${userScope}:${resolvedOrgId}` : null;
+  const scope = getPortalScopeKey(resolvedOrgId, userScope);
+  const rawCachedValue = reportsCacheScope
+    ? readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, reportsCacheScope, {
         storage: "local",
       })
     : null;
@@ -758,14 +804,20 @@ export function usePortalReportsSnapshot() {
 
       const readLatestSnapshot = () =>
         normalizeRsaOnlyReportsSnapshot(
-          readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, {
+          readCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, reportsCacheScope || resolvedOrgId, {
             allowStale: true,
             storage: "local",
           }) ?? cachedValue
         );
       const publishSnapshot = (snapshot: ReportsSnapshot) => {
         const finalizedSnapshot = normalizeRsaOnlyReportsSnapshot(snapshot);
-        writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, finalizedSnapshot, "local");
+        writeCachedPayload(
+          reportsMemoryCache,
+          REPORTS_CACHE_KEY_PREFIX,
+          reportsCacheScope || resolvedOrgId,
+          finalizedSnapshot,
+          "local"
+        );
         if (swrKey) {
           void globalMutate(swrKey, finalizedSnapshot, false);
         }
@@ -785,7 +837,7 @@ export function usePortalReportsSnapshot() {
           const latestSnapshot = readLatestSnapshot();
           return publishSnapshot({
             ...latestSnapshot,
-            rsaReports: mergeCachedReports(latestSnapshot.rsaReports, rsaReports),
+            rsaReports,
             rsaStatus: {
               refreshing: false,
               error: null,
@@ -818,14 +870,22 @@ export function usePortalReportsSnapshot() {
           refreshing: false,
         },
       });
-      writeCachedPayload(reportsMemoryCache, REPORTS_CACHE_KEY_PREFIX, resolvedOrgId, completedSnapshot, "local");
+      writeCachedPayload(
+        reportsMemoryCache,
+        REPORTS_CACHE_KEY_PREFIX,
+        reportsCacheScope || resolvedOrgId,
+        completedSnapshot,
+        "local"
+      );
       return completedSnapshot;
     },
     {
       fallbackData: cachedValue ?? undefined,
       keepPreviousData: true,
-      revalidateIfStale: !usableCache,
+      revalidateIfStale: true,
       revalidateOnMount: !usableCache,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
     }
   );
 }
@@ -990,8 +1050,9 @@ export function useHomeAnalyticsSnapshot(params: DashboardAnalyticsParams = {}) 
 }
 
 export function useReportListSnapshot(params: Parameters<typeof fetchReportList>[0] = {}) {
-  const { organizationId, selectedOrganizationScopeKey } = usePortalSession();
+  const { organizationId, selectedOrganizationScopeKey, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
+  const userScope = session?.user?.user_id?.trim() || "anonymous";
   const requestedPageSize = Number(params.pageSize ?? params.limit ?? 50);
   const pageSize = Number.isFinite(requestedPageSize) ? Math.min(Math.max(Math.floor(requestedPageSize), 1), 50) : 50;
   const effectiveParams = {
@@ -1002,7 +1063,7 @@ export function useReportListSnapshot(params: Parameters<typeof fetchReportList>
     pageSize,
   };
   const key = resolvedOrgId
-    ? ["portal/report-list", resolvedOrgId, selectedOrganizationScopeKey, JSON.stringify(effectiveParams)]
+    ? ["portal/report-list", userScope, resolvedOrgId, selectedOrganizationScopeKey, JSON.stringify(effectiveParams)]
     : null;
   return useSWR(key, async () => fetchReportList(effectiveParams), {
     revalidateIfStale: true,
@@ -1011,10 +1072,11 @@ export function useReportListSnapshot(params: Parameters<typeof fetchReportList>
 }
 
 export function useReportFilterOptionsSnapshot() {
-  const { organizationId, selectedOrganizationScopeKey } = usePortalSession();
+  const { organizationId, selectedOrganizationScopeKey, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
+  const userScope = session?.user?.user_id?.trim() || "anonymous";
   const key = resolvedOrgId
-    ? ["portal/report-filter-options", resolvedOrgId, selectedOrganizationScopeKey]
+    ? ["portal/report-filter-options", userScope, resolvedOrgId, selectedOrganizationScopeKey]
     : null;
   return useSWR(
     key,

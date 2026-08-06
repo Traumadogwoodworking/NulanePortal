@@ -92,7 +92,14 @@ export default function FacilitiesPage() {
   } = usePortalSession();
   const searchParams = useSearchParams();
   const { data: branding } = usePortalBrandingSnapshot();
-  const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const {
+    data: directory,
+    mutate: refreshDirectory,
+    isLoading,
+    isRefreshing,
+    lastUpdated,
+    error,
+  } = usePortalDirectorySnapshot();
   const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
   const users = useMemo(() => directory?.users ?? [], [directory]);
   const locationMemberships = useMemo(() => directory?.locationMemberships ?? [], [directory]);
@@ -108,6 +115,7 @@ export default function FacilitiesPage() {
   const [facilityActionError, setFacilityActionError] = useState<string | null>(null);
   const [facilityAssignmentDraftUserIds, setFacilityAssignmentDraftUserIds] = useState<string[]>([]);
   const [facilityAssignmentSaving, setFacilityAssignmentSaving] = useState(false);
+  const [membershipRemovalPending, setMembershipRemovalPending] = useState(false);
   const [isAssignmentEditorOpen, setIsAssignmentEditorOpen] = useState(false);
   const didMountOrganizationScopeRef = useRef(false);
 
@@ -122,53 +130,132 @@ export default function FacilitiesPage() {
   }, [selectedOrganizationScopeKey]);
   const loadFacilities = async () => {
     setStatusMessage(null);
-    await refreshDirectory();
+    setFacilityActionMessage(null);
+    setFacilityActionError(null);
+    try {
+      const refreshedDirectory = await refreshDirectory();
+      const refreshProblem = refreshedDirectory?.partialError;
+      if (refreshProblem && /facilities:|facility assignments:/i.test(refreshProblem)) {
+        setStatusMessage(refreshProblem);
+      } else {
+        setFacilityActionMessage("Facilities refreshed from the server.");
+      }
+    } catch (refreshError) {
+      const message = refreshError instanceof Error ? refreshError.message : "Unable to refresh facilities.";
+      setStatusMessage(message);
+    }
   };
 
   const handleCreateFacility = async (payload: { name: string; slug: string; region: string; active: boolean }) => {
     if (!organizationId || !isOrgAdmin) return;
-    await FacilitiesAdapter.createFacility(organizationId, {
+    setFacilityActionMessage(null);
+    setFacilityActionError(null);
+    const createdFacility = await FacilitiesAdapter.createFacility(organizationId, {
       name: payload.name,
       slug: payload.slug,
       region: payload.region || undefined,
       active: payload.active,
       locationCount: 1,
     });
-    await loadFacilities();
-    await refreshControlPlaneBootstrap(organizationId);
+    try {
+      const refreshedDirectory = await refreshDirectory();
+      const visibleAfterRefresh = refreshedDirectory?.facilities.some(
+        (facility) => facility.id === createdFacility.id
+      );
+      if (!visibleAfterRefresh) {
+        setFacilityActionError(
+          `${createdFacility.name} was created, but it is not visible in the current organization view. Refresh or switch to All organizations.`
+        );
+      } else {
+        setSelectedFacilityId(createdFacility.id);
+        setFacilityActionMessage(`${createdFacility.name} created and verified in the facility list.`);
+      }
+    } catch (refreshError) {
+      setFacilityActionError(
+        `${createdFacility.name} was created, but the facility list could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`
+      );
+    }
+    void refreshControlPlaneBootstrap(organizationId).catch((refreshError) => {
+      setFacilityActionError((current) =>
+        current ||
+        `The facility was created, but control-plane status could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`
+      );
+    });
   };
 
   const handleEditFacility = async (payload: { name: string; slug: string; region: string; active: boolean }) => {
     if (!organizationId || !isOrgAdmin || !selectedFacility) return;
-    await FacilitiesAdapter.updateFacility(organizationId, selectedFacility.id, {
+    setFacilityActionMessage(null);
+    setFacilityActionError(null);
+    const updatedFacility = await FacilitiesAdapter.updateFacility(organizationId, selectedFacility.id, {
       ...selectedFacility,
       name: payload.name,
       slug: payload.slug,
       region: payload.region || undefined,
       active: payload.active,
     });
-    await loadFacilities();
-    await refreshControlPlaneBootstrap(organizationId);
+    try {
+      const refreshedDirectory = await refreshDirectory();
+      const refreshedFacility = refreshedDirectory?.facilities.find(
+        (facility) => facility.id === updatedFacility.id
+      );
+      if (!refreshedFacility) {
+        setFacilityActionError(
+          `${updatedFacility.name} was updated, but it is not visible in the current organization view.`
+        );
+      } else {
+        setFacilityActionMessage(`${refreshedFacility.name} updated and verified.`);
+      }
+    } catch (refreshError) {
+      setFacilityActionError(
+        `${updatedFacility.name} was updated, but the facility list could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`
+      );
+    }
+    void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
   };
 
   const handleRemoveFacilityMembership = async () => {
-    if (!organizationId || !removeTarget) return;
+    if (!organizationId || !removeTarget || membershipRemovalPending) return;
     if (!isOrgAdmin) return;
+    const target = removeTarget;
     setFacilityActionMessage(null);
     setFacilityActionError(null);
+    setMembershipRemovalPending(true);
     try {
-      const currentFacilityIds = Array.from(userFacilityIdsByUserId.get(removeTarget.userId) ?? []);
-      const nextFacilityIds = currentFacilityIds.filter((facilityId) => facilityId !== removeTarget.facilityId);
-      await UsersAdapter.updateUser(organizationId, removeTarget.userId, {
+      const currentFacilityIds = Array.from(userFacilityIdsByUserId.get(target.userId) ?? []);
+      const nextFacilityIds = currentFacilityIds.filter((facilityId) => facilityId !== target.facilityId);
+      await UsersAdapter.updateUser(organizationId, target.userId, {
         facility_ids: nextFacilityIds,
       });
-      setFacilityActionMessage(`Removed ${removeTarget.userName} from ${removeTarget.facilityName}.`);
-      await loadFacilities();
-      await refreshControlPlaneBootstrap(organizationId);
+      try {
+        const refreshedDirectory = await refreshDirectory();
+        const refreshedUser = refreshedDirectory?.users.find((user) => user.id === target.userId);
+        if (refreshedUser?.facilityIds.includes(target.facilityId)) {
+          setFacilityActionError(
+            `${target.userName} was updated, but the refreshed directory still shows access to ${target.facilityName}.`
+          );
+        } else {
+          setFacilityActionMessage(`Removed ${target.userName} from ${target.facilityName} and refreshed the directory.`);
+        }
+      } catch (refreshError) {
+        setFacilityActionError(
+          `${target.userName}'s access was updated, but the directory could not be refreshed: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+      }
+      void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
     } catch (error) {
       setFacilityActionError(error instanceof Error ? error.message : "Unable to remove facility access.");
     } finally {
       setRemoveTarget(null);
+      setMembershipRemovalPending(false);
     }
   };
 
@@ -243,9 +330,27 @@ export default function FacilitiesPage() {
           });
         })
       );
-      setFacilityActionMessage("Facility assignments saved.");
-      await loadFacilities();
-      await refreshControlPlaneBootstrap(organizationId);
+      try {
+        const refreshedDirectory = await refreshDirectory();
+        const mismatchedUser = changedUsers.find((user) => {
+          const refreshedUser = refreshedDirectory?.users.find((candidate) => candidate.id === user.id);
+          return !refreshedUser || refreshedUser.facilityIds.includes(selectedFacilityId) !== nextAssigned.has(user.id);
+        });
+        if (mismatchedUser) {
+          setFacilityActionError(
+            `Assignments were saved, but the refreshed directory did not confirm ${mismatchedUser.name}'s access.`
+          );
+        } else {
+          setFacilityActionMessage("Facility assignments saved and refreshed from the server.");
+        }
+      } catch (refreshError) {
+        setFacilityActionError(
+          `Facility assignments were saved, but the directory could not be refreshed: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+      }
+      void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
       setIsAssignmentEditorOpen(false);
     } catch (error) {
       setFacilityActionError(error instanceof Error ? error.message : "Unable to save facility assignments.");
@@ -343,7 +448,10 @@ export default function FacilitiesPage() {
 
   return (
     <article className="space-y-4">
-      <Dialog open={Boolean(removeTarget)} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+      <Dialog
+        open={Boolean(removeTarget)}
+        onOpenChange={(open) => !open && !membershipRemovalPending && setRemoveTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove user from facility?</DialogTitle>
@@ -355,6 +463,7 @@ export default function FacilitiesPage() {
             <button
               type="button"
               onClick={() => setRemoveTarget(null)}
+              disabled={membershipRemovalPending}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-700"
             >
               Cancel
@@ -362,10 +471,10 @@ export default function FacilitiesPage() {
             <button
               type="button"
               onClick={() => void handleRemoveFacilityMembership()}
-              disabled={!removeTarget}
+              disabled={!removeTarget || membershipRemovalPending}
               className="rounded-full border border-rose-600 bg-rose-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
             >
-              Remove Access
+              {membershipRemovalPending ? "Removing..." : "Remove Access"}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -445,10 +554,10 @@ export default function FacilitiesPage() {
         />
       ) : null}
       {facilityActionMessage ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{facilityActionMessage}</div>
+        <div role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{facilityActionMessage}</div>
       ) : null}
       {facilityActionError ? (
-        <ErrorPanel title="Facility access update failed" error={facilityActionError} />
+        <div role="alert"><ErrorPanel title="Facility update needs attention" error={facilityActionError} /></div>
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {summaryDeck.map((stat) => (
@@ -474,11 +583,13 @@ export default function FacilitiesPage() {
             </div>
             <button
               onClick={() => void loadFacilities()}
-              disabled={isLoading}
-              title={isLoading ? "Facility refresh already in progress" : "Refresh facilities"}
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-brand transition-all shadow-sm"
+              disabled={isRefreshing}
+              aria-label={isRefreshing ? "Refreshing facilities" : "Refresh facilities"}
+              title={isRefreshing ? "Facility refresh already in progress" : "Refresh facilities"}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:text-brand transition-all shadow-sm disabled:cursor-wait disabled:opacity-70"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="text-xs font-bold">{isRefreshing ? "Refreshing…" : "Refresh"}</span>
             </button>
             <FacilityModal
               trigger={
@@ -499,6 +610,10 @@ export default function FacilitiesPage() {
           </div>
         }
       >
+        <div className="mb-3 flex min-h-5 items-center justify-between gap-3 text-xs text-slate-500" aria-live="polite">
+          <span>{isRefreshing && directory ? "Checking the server for facility updates…" : "Facility list is synced from the server."}</span>
+          <span>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}` : "Not synced yet"}</span>
+        </div>
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="lg:col-span-3">
             {isLoading ? (

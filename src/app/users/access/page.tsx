@@ -10,7 +10,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
 import { usePortalSession } from "@/lib/portalSession";
-import { ShieldCheck, UserPlus, Fingerprint, Lock, ChevronRight, FileJson } from "lucide-react";
+import { refreshPortalData } from "@/lib/portalData";
+import { ShieldCheck, UserPlus, Fingerprint, Lock, ChevronRight, RefreshCw } from "lucide-react";
 import type {
   FacilitySummary,
   LocationMembership,
@@ -38,6 +39,7 @@ export default function AccessPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [assignmentPending, setAssignmentPending] = useState(false);
 
   const loadAccessData = useCallback(async () => {
     if (!organizationId) return;
@@ -124,14 +126,22 @@ export default function AccessPage() {
   const handleAssignFacilityToUser = async () => {
     if (!organizationId || !selectedUser || facilityFilter === FACILITY_ALL) return;
     setOperationMessage(null);
+    setAssignmentPending(true);
     try {
       await UsersAdapter.addFacilityMembership(organizationId, selectedUser.id, facilityFilter);
-      setOperationMessage("Facility assignment created.");
-      await loadAccessData();
+      await Promise.all([
+        loadAccessData(),
+        refreshPortalData(organizationId, ["directory", "control"]),
+      ]);
+      setOperationMessage("Facility assignment created and refreshed from the server.");
     } catch (error) {
       setOperationMessage(error instanceof Error ? error.message : "Unable to assign facility membership.");
+    } finally {
+      setAssignmentPending(false);
     }
   };
+
+  const operationFailed = Boolean(operationMessage && /failed|unable|error/i.test(operationMessage));
 
   if (!organizationId) {
     return <EmptyState title="Context missing" description="Authenticate to manage access." />;
@@ -151,8 +161,14 @@ export default function AccessPage() {
                 value={facilityFilter}
                 onChange={setFacilityFilter}
               />
-              <button className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-900 transition-all shadow-sm">
-                 <FileJson className="w-3.5 h-3.5" />
+              <button
+                type="button"
+                onClick={() => void loadAccessData()}
+                disabled={isLoading}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-all shadow-sm disabled:cursor-wait disabled:opacity-70"
+              >
+                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                 {isLoading ? "Refreshing…" : "Refresh"}
               </button>
             </div>
           }
@@ -298,14 +314,20 @@ export default function AccessPage() {
                         <div className="pt-2">
                           <button
                             onClick={handleAssignFacilityToUser}
-                            disabled={!isOrgAdmin || facilityFilter === FACILITY_ALL}
+                            disabled={!isOrgAdmin || facilityFilter === FACILITY_ALL || assignmentPending}
                           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-950 dark:bg-white text-white dark:text-slate-900 text-xs font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-md disabled:opacity-30 disabled:grayscale"
                           >
                             <UserPlus className="w-3.5 h-3.5" />
-                            Apply Filter Access
+                            {assignmentPending ? "Applying…" : "Apply Filter Access"}
                           </button>
                           {operationMessage && (
-                            <p className="text-xs font-black text-slate-700 text-center mt-2 uppercase tracking-widest">{operationMessage}</p>
+                            <p
+                              role={operationFailed ? "alert" : "status"}
+                              aria-live="polite"
+                              className={`mt-2 text-center text-xs font-black uppercase tracking-widest ${operationFailed ? "text-rose-700" : "text-emerald-700"}`}
+                            >
+                              {operationMessage}
+                            </p>
                           )}
                         </div>
                       </div>

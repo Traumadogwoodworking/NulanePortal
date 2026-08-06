@@ -60,6 +60,10 @@ export function rowMatchesOrganizationScope(
   key?: PortalOrganizationScopeKey | null
 ) {
   if (!key || key === "all") return true;
+  const metadata =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
   const explicitScope = normalizePortalOrganizationScope(
     row.suborg ??
       row.suborg_key ??
@@ -67,7 +71,12 @@ export function rowMatchesOrganizationScope(
       row.suborg_id ??
       row.suborgId ??
       row.suborg_label ??
-      row.suborgLabel
+      row.suborgLabel ??
+      metadata.suborg ??
+      metadata.suborg_key ??
+      metadata.suborgKey ??
+      metadata.organization_scope ??
+      metadata.organizationScope
   );
   if (explicitScope) return explicitScope === key;
 

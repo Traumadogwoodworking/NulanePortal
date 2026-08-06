@@ -6,6 +6,7 @@ import { fetchBranding, saveBranding, uploadBrandingLogo } from "@/lib/services/
 import type { BrandingSnapshot } from "@/lib/types";
 import Image from "next/image";
 import { PageSection } from "@/components/ui/PageSection";
+import { refreshPortalData } from "@/lib/portalData";
 
 export default function BrandingPage() {
   const { organizationId, isOrgAdmin, isAdmin, isSuperAdmin } = usePortalSession();
@@ -62,7 +63,7 @@ export default function BrandingPage() {
     try {
       const logoUrl = await uploadBrandingLogo(organizationId, file);
       setFormState((prev) => ({ ...prev, logo_url: logoUrl }));
-      setUploadMessage("Logo uploaded.");
+      setUploadMessage("Logo uploaded. Save branding to publish it across the portal.");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unable to upload logo.";
       setUploadMessage(message);
@@ -93,7 +94,16 @@ export default function BrandingPage() {
     try {
       const updated = await saveBranding(organizationId, finalFormState);
       setFormState(updated);
-      setStatusMessage("Branding saved. Changes will appear in reports and emails.");
+      try {
+        await refreshPortalData(organizationId, ["branding"]);
+        setStatusMessage("Branding saved and refreshed across the portal.");
+      } catch (refreshError) {
+        setStatusMessage(
+          `Branding was saved, but the shared portal view could not be refreshed: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unable to save branding.";
       setStatusMessage(message);
@@ -284,8 +294,14 @@ export default function BrandingPage() {
           <div className="sticky bottom-6 z-20">
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
               {statusMessage && (
-                <p className={`text-xs font-bold text-center ${statusMessage.includes("Unable") ? "text-rose-500" : "text-emerald-500"}`}>
-                    {statusMessage}
+                <p
+                  role={/unable|failed|could not/i.test(statusMessage) ? "alert" : "status"}
+                  aria-live="polite"
+                  className={`text-center text-xs font-bold ${
+                    /unable|failed|could not/i.test(statusMessage) ? "text-rose-500" : "text-emerald-500"
+                  }`}
+                >
+                  {statusMessage}
                 </p>
               )}
               <button

@@ -405,23 +405,33 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     // Dev session bypass uses a fixed tenant snapshot; switching is intentionally inert.
   }, []);
 
+  const organizationScopeStorageKey = useMemo(() => {
+    const userId = session?.user?.user_id?.trim();
+    const organizationId = (
+      session?.organization?.organization_id || session?.user?.organization_id || ""
+    ).trim();
+    return userId && organizationId
+      ? `portalOrganizationScopeV2:${userId}:${organizationId}`
+      : null;
+  }, [session?.organization?.organization_id, session?.user?.organization_id, session?.user?.user_id]);
+
   useEffect(() => {
     const sessionScope = normalizePortalOrganizationScope(session?.organization?.suborg);
     const storedScope =
-      typeof window === "undefined"
+      typeof window === "undefined" || !organizationScopeStorageKey
         ? null
-        : normalizePortalOrganizationScope(window.sessionStorage.getItem("portalOrganizationScopeV2"));
+        : normalizePortalOrganizationScope(window.sessionStorage.getItem(organizationScopeStorageKey));
     setSelectedOrganizationScopeKey(sessionScope ?? storedScope ?? "all");
-  }, [session?.organization?.suborg]);
+  }, [organizationScopeStorageKey, session?.organization?.suborg]);
 
   const switchOrganizationScope = useCallback((key: PortalOrganizationScopeKey) => {
     const normalized = normalizePortalOrganizationScope(key);
     if (!normalized) return;
     setSelectedOrganizationScopeKey(normalized);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem("portalOrganizationScopeV2", normalized);
+    if (typeof window !== "undefined" && organizationScopeStorageKey) {
+      window.sessionStorage.setItem(organizationScopeStorageKey, normalized);
     }
-  }, []);
+  }, [organizationScopeStorageKey]);
 
   useEffect(() => {
     const t = setTimeout(() => {

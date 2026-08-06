@@ -42,7 +42,7 @@ import { submitInspection, deriveReportId } from "@/lib/docudent/submitInspectio
 import { uploadAttachments, type UploadSummary } from "@/lib/docudent/uploadAttachments";
 import { PersistenceService, type StashedReport } from "@/lib/docudent/persistenceService";
 import { RefreshCw } from "lucide-react";
-import { useReportListSnapshot } from "@/lib/portalData";
+import { refreshPortalData, useReportListSnapshot } from "@/lib/portalData";
 import { publicBranding } from "@/lib/publicBranding";
 
 const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
@@ -249,9 +249,17 @@ export default function DocuDentPage() {
       const result = await submitInspection(formState, { reportId, attachments: attachmentsSummary });
       PersistenceService.clearDraft();
       window.localStorage.removeItem(DOCUDENT_STEP_STORAGE_KEY);
+      let refreshWarning = "";
+      try {
+        await refreshPortalData(organizationId, ["reports", "analytics"]);
+      } catch (refreshError) {
+        refreshWarning = ` The report was accepted, but shared report views could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`;
+      }
       setSubmissionState({
         status: "success",
-        message: `Report ${result.reportId} submitted (${files.length} attachment${files.length === 1 ? "" : "s"}).`,
+        message: `Report ${result.reportId} submitted (${files.length} attachment${files.length === 1 ? "" : "s"}).${refreshWarning}`,
         reportId: result.reportId,
         attachments: attachmentsSummary,
       });
@@ -291,7 +299,20 @@ export default function DocuDentPage() {
       
       await PersistenceService.removeFromStash(report.id);
       setStashedReports(PersistenceService.listStashed());
-      setSubmissionState({ status: "success", message: `Stashed report #${report.id.substring(0, 8)} synced successfully.` });
+      let refreshWarning = "";
+      try {
+        await refreshPortalData(organizationId, ["reports", "analytics"]);
+      } catch (refreshError) {
+        refreshWarning = ` The report was accepted, but shared report views could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`;
+      }
+      setSubmissionState({
+        status: "success",
+        message: `Stashed report #${report.id.substring(0, 8)} synced successfully.${refreshWarning}`,
+        reportId: report.id,
+        attachments: attachmentsSummary,
+      });
     } catch (error) {
       console.error("Retry failed", error);
       setSubmissionState({ status: "error", message: "Retry failed. Keeping in stash." });

@@ -122,4 +122,22 @@ describe("api client watchdog", () => {
     expect(authMocks.logoutRejectedPortalSession).not.toHaveBeenCalled();
     expect(window.__portalFetchDebug?.lastErrors()[0]?.phase).toBe("auth_expired");
   });
+
+  it("bypasses the browser HTTP cache for GET requests unless the caller overrides it", async () => {
+    const { apiFetch } = await import("@/lib/apiClient");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiFetch("/organizations/org-1/locations");
+    await apiFetch("/branding/org-1", { cache: "reload" });
+
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: "no-store" });
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ cache: "reload" });
+  });
 });

@@ -23,6 +23,17 @@ function mapLocationToFacility(location: LocationSummary & { active?: boolean; s
   };
 }
 
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || undefined;
+}
+
 function mapRowToLocationSummary(
   row: Record<string, unknown>
 ): LocationSummary {
@@ -75,8 +86,51 @@ function getFacilityNameFields(row: Record<string, unknown>) {
 }
 
 function normalizeFacilitySummary(row: Record<string, unknown>): FacilitySummary {
-  const location = mapRowToLocationSummary(row);
-  return mapLocationToFacility(location);
+  const metadata = readRecord(row.metadata);
+  const id = (row.location_id || row.locationId || row.id || "").toString().trim();
+  const name = (
+    row.location_name ||
+    row.locationName ||
+    row.name ||
+    row.location_label ||
+    row.locationLabel ||
+    "Facility"
+  ).toString().trim();
+  const activeValue = row.is_active ?? row.active;
+  const countValue = row.locationCount ?? row.location_count ?? metadata.locationCount ?? metadata.location_count;
+  const locationCount = Number(countValue);
+  return {
+    id,
+    name,
+    slug: readOptionalString(row.slug) || readOptionalString(metadata.slug) || id,
+    region: readOptionalString(row.region) || readOptionalString(metadata.region),
+    active: typeof activeValue === "boolean" ? activeValue : true,
+    locationCount: Number.isFinite(locationCount) && locationCount > 0 ? locationCount : 1,
+  };
+}
+
+function normalizeFacilityMutationResponse(payload: unknown): FacilitySummary {
+  const response = readRecord(payload);
+  const candidate = readRecord(response.location || response.facility || response.data || response);
+  const facility = normalizeFacilitySummary(candidate);
+  if (!facility.id) {
+    throw new Error("Facility was saved, but the server response did not identify the location.");
+  }
+  return facility;
+}
+
+function buildFacilityWritePayload(payload: Partial<FacilitySummary>) {
+  return {
+    name: payload.name,
+    location_name: payload.name,
+    active: payload.active,
+    is_active: payload.active,
+    metadata: {
+      slug: payload.slug,
+      region: payload.region,
+      locationCount: payload.locationCount ?? 1,
+    },
+  };
 }
 
 export async function fetchOrganizationLocations(
@@ -148,10 +202,11 @@ export async function createFacility(
   organizationId: string,
   payload: Omit<FacilitySummary, 'id'>
 ): Promise<FacilitySummary> {
-  return apiFetch<FacilitySummary>(FACILITIES_ENDPOINT(organizationId), {
+  const response = await apiFetch<unknown>(FACILITIES_ENDPOINT(organizationId), {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(buildFacilityWritePayload(payload)),
   });
+  return normalizeFacilityMutationResponse(response);
 }
 
 export async function updateFacility(
@@ -159,10 +214,11 @@ export async function updateFacility(
   facilityId: string,
   patch: Partial<FacilitySummary>
 ): Promise<FacilitySummary> {
-  return apiFetch<FacilitySummary>(`${FACILITIES_ENDPOINT(organizationId)}/${facilityId}`, {
+  const response = await apiFetch<unknown>(`${FACILITIES_ENDPOINT(organizationId)}/${facilityId}`, {
     method: "PUT",
-    body: JSON.stringify(patch),
+    body: JSON.stringify(buildFacilityWritePayload(patch)),
   });
+  return normalizeFacilityMutationResponse(response);
 }
 
 export async function fetchLocationMemberships(organizationId: string): Promise<LocationSummary[]> {

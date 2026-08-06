@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CirclePlus, Lock, Search, Trash2 } from "lucide-react";
+import { CirclePlus, Lock, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -208,6 +208,32 @@ export default function DeliveryRulesPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [ccEntry, setCcEntry] = useState("");
+  const [mutationPending, setMutationPending] = useState(false);
+
+  const refreshDeliveryRules = async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [ruleResponse, optionResponse] = await Promise.all([
+        fetchDeliveryRules(),
+        fetchDeliveryRuleOptions(),
+      ]);
+      const nextRules = ruleResponse.delivery_rules || [];
+      setRules(nextRules);
+      setOptions(optionResponse);
+      setSelectedId((current) =>
+        current && nextRules.some((rule) => rule.id === current)
+          ? current
+          : nextRules[0]?.id ?? null
+      );
+      setSaveMessage("Delivery rules refreshed from the server.");
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Unable to load delivery rules.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!organizationId) return;
@@ -339,7 +365,7 @@ export default function DeliveryRulesPage() {
   };
 
   const persistDraft = async (mode: "create" | "update") => {
-    if (!draft) return;
+    if (!draft || mutationPending) return;
     if (selectedRuleLocked) {
       setEditorError("Locked rules are managed by platform support and cannot be modified here.");
       return;
@@ -359,6 +385,7 @@ export default function DeliveryRulesPage() {
       return;
     }
     const payload = buildPayload({ ...draft, ccInput: validation.cc.join(", ") });
+    setMutationPending(true);
     try {
       const result =
         mode === "create"
@@ -371,7 +398,27 @@ export default function DeliveryRulesPage() {
       setSelectedId(result.id);
       setDraft(makeDraft(result));
       setCcEntry("");
-      setSaveMessage(mode === "create" ? "Rule created." : "Rule updated.");
+      try {
+        const refreshed = await fetchDeliveryRules();
+        const verifiedRule = refreshed.delivery_rules.find((rule) => rule.id === result.id);
+        if (!verifiedRule) {
+          setEditorError(
+            `${result.name} was saved, but it was not returned by the refreshed delivery-rule list.`
+          );
+          setSaveMessage(mode === "create" ? "Rule created; refresh needs attention." : "Rule updated; refresh needs attention.");
+        } else {
+          setRules(refreshed.delivery_rules);
+          setDraft(makeDraft(verifiedRule));
+          setSaveMessage(mode === "create" ? "Rule created and verified." : "Rule updated and verified.");
+        }
+      } catch (refreshError) {
+        setEditorError(
+          `${result.name} was saved, but the delivery-rule list could not be refreshed: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+        setSaveMessage(mode === "create" ? "Rule created; refresh needs attention." : "Rule updated; refresh needs attention.");
+      }
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save delivery rule.";
       if (message.toLowerCase().includes("read-only") || message.toLowerCase().includes("cannot be edited")) {
@@ -379,16 +426,19 @@ export default function DeliveryRulesPage() {
       } else {
         setEditorError(message);
       }
+    } finally {
+      setMutationPending(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!selectedRule) return;
+    if (!selectedRule || mutationPending) return;
     if (selectedRuleLocked) {
       setEditorError("Locked rules are managed by platform support and cannot be deleted here.");
       return;
     }
     if (!window.confirm(`Delete "${selectedRule.name}"?`)) return;
+    setMutationPending(true);
     try {
       setEditorError(null);
       setSaveMessage(null);
@@ -401,6 +451,8 @@ export default function DeliveryRulesPage() {
       setSaveMessage("Rule deleted.");
     } catch (deleteError) {
       setEditorError(deleteError instanceof Error ? deleteError.message : "Unable to delete delivery rule.");
+    } finally {
+      setMutationPending(false);
     }
   };
 
@@ -411,11 +463,15 @@ export default function DeliveryRulesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" onClick={handleNewRule} className="bg-slate-900 text-white hover:bg-slate-800">
+        <Button type="button" onClick={handleNewRule} disabled={mutationPending} className="bg-slate-900 text-white hover:bg-slate-800">
           <CirclePlus className="h-4 w-4" />
           + New Rule
         </Button>
-        {saveMessage ? <span className="text-sm text-emerald-700">{saveMessage}</span> : null}
+        <Button type="button" variant="outline" onClick={() => void refreshDeliveryRules()} disabled={loading || mutationPending}>
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "Refreshing…" : "Refresh"}
+        </Button>
+        {saveMessage ? <span role="status" aria-live="polite" className="text-sm text-emerald-700">{saveMessage}</span> : null}
       </div>
 
       <Card className="border-slate-200 bg-white shadow-sm">
@@ -531,20 +587,20 @@ export default function DeliveryRulesPage() {
                   </div>
                   {!selectedRuleLocked ? (
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" onClick={() => persistDraft(draft.id === EMPTY_RULE_ID ? "create" : "update")} className="border-slate-200 bg-white">
-                        Save
+                      <Button type="button" variant="outline" onClick={() => persistDraft(draft.id === EMPTY_RULE_ID ? "create" : "update")} disabled={mutationPending} className="border-slate-200 bg-white">
+                        {mutationPending ? "Saving…" : "Save"}
                       </Button>
                       {selectedRule ? (
-                        <Button type="button" variant="destructive" onClick={handleDelete}>
+                        <Button type="button" variant="destructive" onClick={handleDelete} disabled={mutationPending}>
                           <Trash2 className="h-4 w-4" />
-                          Delete
+                          {mutationPending ? "Working…" : "Delete"}
                         </Button>
                       ) : null}
                     </div>
                   ) : null}
                 </div>
 
-                {editorError ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{editorError}</div> : null}
+                {editorError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{editorError}</div> : null}
                 {duplicateWarning ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{duplicateWarning}</div> : null}
 
                 {selectedRuleLocked ? (

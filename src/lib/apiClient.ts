@@ -401,6 +401,7 @@ async function runRequest<T>(
       try {
         response = await fetch(url, {
           ...requestOptions,
+          cache: requestOptions.cache ?? (method === "GET" ? "no-store" : undefined),
           signal: controller?.signal ?? requestOptions.signal,
           headers: isFormDataBody ? { ...(requestOptions.headers || {}), "X-Portal-Request-Id": requestId } : headers,
         });

@@ -237,7 +237,7 @@ function formatRsaDeckCoverageLabel(decks: string[]): string {
 function useRsaReports() {
   const { data: reportsSnapshot, mutate: refreshReportsSnapshot, isLoading, isValidating } = usePortalReportsSnapshot();
   const loadRsaReports = useCallback(() => {
-    void refreshReportsSnapshot();
+    return refreshReportsSnapshot();
   }, [refreshReportsSnapshot]);
   const rsaReports = reportsSnapshot?.rsaReports ?? [];
   const partialLoadError = reportsSnapshot?.partialError ?? null;
@@ -644,8 +644,8 @@ export function RsaReportsManager() {
           timeoutMs: 20000,
         },
       });
-      setOperationMessage("SUCCESS: EOD Report compiled and dispatched to notification list.");
-      loadRsaReports();
+      await loadRsaReports();
+      setOperationMessage("SUCCESS: EOD report dispatched and the RSA list was refreshed.");
     } catch (error) {
       setOperationMessage(error instanceof Error ? error.message : "ERROR: Unable to dispatch EOD report.");
     } finally {
@@ -725,8 +725,9 @@ export function RsaReportsManager() {
           >
             {sendingEod ? "Dispatching…" : "Send Current Day RSA Report"}
           </Button>
-          <Button type="button" variant="outline" size="icon" onClick={loadRsaReports} aria-label="Refresh reports">
+          <Button type="button" variant="outline" onClick={() => void loadRsaReports()} disabled={loading} aria-label={loading ? "Refreshing reports" : "Refresh reports"}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            {loading ? "Refreshing…" : "Refresh"}
           </Button>
         </div>
       </header>
@@ -736,7 +737,8 @@ export function RsaReportsManager() {
           <span>RSA reports are partially unavailable: {partialLoadError}</span>
           <button
             type="button"
-            onClick={loadRsaReports}
+            onClick={() => void loadRsaReports()}
+            disabled={loading}
             className="rounded-full border border-current/20 bg-white/50 px-3 py-1.5 transition hover:bg-white"
           >
             Retry
@@ -745,7 +747,15 @@ export function RsaReportsManager() {
       )}
 
       {operationMessage ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700">
+        <div
+          role={operationMessage.startsWith("SUCCESS:") ? "status" : "alert"}
+          aria-live="polite"
+          className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest ${
+            operationMessage.startsWith("SUCCESS:")
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-rose-200 bg-rose-50 text-rose-700"
+          }`}
+        >
           {operationMessage}
         </div>
       ) : null}

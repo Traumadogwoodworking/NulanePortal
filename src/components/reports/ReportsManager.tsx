@@ -83,6 +83,7 @@ import { getSessionYardOptions } from "@/lib/sessionYards";
 import { normalizeReportListRow } from "@/lib/reportNormalizer";
 import { getPortalAnalyticsFilterOptions } from "@/lib/analyticsFilterOptions";
 import {
+  refreshPortalData,
   useDashboardAnalyticsSnapshot,
   useHomeAnalyticsSnapshot,
   useReportFilterOptionsSnapshot,
@@ -701,6 +702,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const [isDamageEditOpen, setIsDamageEditOpen] = useState(false);
   const [damageEditDraft, setDamageEditDraft] = useState<DamageReportEditDraft | null>(null);
   const [damageEditStatus, setDamageEditStatus] = useState<string | null>(null);
+  const [damageEditSaving, setDamageEditSaving] = useState(false);
+  const [damageSaveNotice, setDamageSaveNotice] = useState<{
+    tone: "success" | "warning";
+    message: string;
+  } | null>(null);
   const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
   const [isDownloadingSelectedPdf, setIsDownloadingSelectedPdf] = useState(false);
   const [isDownloadingSelectedCsv, setIsDownloadingSelectedCsv] = useState(false);
@@ -1397,9 +1403,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   );
 
   const saveDamageReportEditor = useCallback(async () => {
-    if (!selectedDamageFullRow || !damageEditDraft) {
+    if (!selectedDamageFullRow || !damageEditDraft || damageEditSaving) {
       return;
     }
+    setDamageEditSaving(true);
+    setDamageSaveNotice(null);
     setDamageEditStatus("Saving changes...");
     try {
       const payload = {
@@ -1427,15 +1435,30 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         status: selectedDamageFullRow.status ?? "open",
       };
       await ReportsAdapter.updateDamageReport(selectedDamageFullRow.report_id, payload);
-      setDamageEditStatus("Report saved successfully.");
       setReloadToken((current) => current + 1);
+      try {
+        await refreshPortalData(organizationId, ["reports", "analytics"]);
+        setDamageSaveNotice({
+          tone: "success",
+          message: `Report ${selectedDamageFullRow.report_id} saved and refreshed across reports and analytics.`,
+        });
+      } catch (refreshError) {
+        setDamageSaveNotice({
+          tone: "warning",
+          message: `Report ${selectedDamageFullRow.report_id} was saved, but shared report views could not be refreshed: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`,
+        });
+      }
       setIsDamageEditOpen(false);
       setDamageEditDraft(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save damage report.";
       setDamageEditStatus(message);
+    } finally {
+      setDamageEditSaving(false);
     }
-  }, [damageEditDraft, selectedDamageFullRow]);
+  }, [damageEditDraft, damageEditSaving, organizationId, selectedDamageFullRow]);
 
   const toggleDamageMultiSelect = useCallback(() => {
     setDamageMultiSelectEnabled((current) => !current);
@@ -1728,6 +1751,19 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   return (
     <div className="relative space-y-6">
+      {damageSaveNotice ? (
+        <div
+          role={damageSaveNotice.tone === "warning" ? "alert" : "status"}
+          aria-live="polite"
+          className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${
+            damageSaveNotice.tone === "warning"
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {damageSaveNotice.message}
+        </div>
+      ) : null}
       {isDamageFilterLoading ? (
         <div className="absolute inset-0 z-[70] rounded-2xl bg-white/85 px-3 pt-4 backdrop-blur-sm">
           <PageLoadingScreen
@@ -2582,6 +2618,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             <button
               type="button"
               onClick={closeDamageReportEditor}
+              disabled={damageEditSaving}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Close
@@ -2589,10 +2626,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             <button
               type="button"
               onClick={() => void saveDamageReportEditor()}
-              disabled={!damageEditDraft || !selectedDamageFullRow}
+              disabled={!damageEditDraft || !selectedDamageFullRow || damageEditSaving}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Save changes
+              {damageEditSaving ? "Saving..." : "Save changes"}
             </button>
           </DialogFooter>
         </DialogContent>

@@ -86,7 +86,14 @@ export default function UsersPage() {
     selectedOrganizationScopeKey,
   } = usePortalSession();
   const searchParams = useSearchParams();
-  const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const {
+    data: directory,
+    mutate: refreshDirectory,
+    isLoading,
+    isRefreshing,
+    lastUpdated,
+    error,
+  } = usePortalDirectorySnapshot();
   const [viewMode, setViewMode] = useState<typeof VIEW_ACTIVE | typeof VIEW_DELETED>(VIEW_ACTIVE);
   const [facilityFilter, setFacilityFilter] = useState<string>(FACILITY_ALL);
   const [searchTerm, setSearchTerm] = useState("");
@@ -110,13 +117,38 @@ export default function UsersPage() {
 
   const loadDirectory = async () => {
     setStatusMessage(null);
-    await refreshDirectory();
+    try {
+      const refreshedDirectory = await refreshDirectory();
+      const refreshProblem = refreshedDirectory?.partialError;
+      if (refreshProblem && /users:|facility assignments:/i.test(refreshProblem)) {
+        setStatusMessage(refreshProblem);
+        throw new Error(refreshProblem);
+      }
+    } catch (refreshError) {
+      setStatusMessage(refreshError instanceof Error ? refreshError.message : "Unable to refresh the user directory.");
+      throw refreshError;
+    }
+  };
+
+  const refreshCurrentView = async () => {
+    setOperationMessage(null);
+    try {
+      if (viewMode === VIEW_DELETED) {
+        const refreshed = await loadDeletedUsers();
+        setOperationMessage(refreshed ? "Deleted users refreshed from the server." : "Deleted users refresh failed.");
+      } else {
+        await loadDirectory();
+        setOperationMessage("User directory refreshed from the server.");
+      }
+    } catch (refreshError) {
+      setOperationMessage(refreshError instanceof Error ? refreshError.message : "Refresh failed.");
+    }
   };
 
   const loadDeletedUsers = async () => {
     if (!organizationId) {
       setDeletedUsers([]);
-      return;
+      return true;
     }
     setDeletedUsersLoading(true);
     setDeletedUsersError(null);
@@ -126,9 +158,11 @@ export default function UsersPage() {
         selectedOrganizationScopeKey
       );
       setDeletedUsers(records);
+      return true;
     } catch (error) {
       setDeletedUsersError(error instanceof Error ? error.message : "Deleted users could not be loaded.");
       setDeletedUsers([]);
+      return false;
     } finally {
       setDeletedUsersLoading(false);
     }
@@ -268,6 +302,8 @@ export default function UsersPage() {
   ];
 
   const showEmptyState = !filteredUsers.length && !isLoading && !statusMessage;
+  const refreshPending = viewMode === VIEW_DELETED ? deletedUsersLoading : isRefreshing;
+  const operationFailed = Boolean(operationMessage && /failed|unable|error/i.test(operationMessage));
 
   const handleInviteUser = async (payload: {
     email: string;
@@ -445,6 +481,19 @@ export default function UsersPage() {
           action={<button type="button" onClick={() => void loadDirectory()} className="rounded-full border border-current/20 px-4 py-2 text-sm font-black uppercase tracking-widest">Retry</button>}
         />
       ) : null}
+      {operationMessage ? (
+        <div
+          role={operationFailed ? "alert" : "status"}
+          aria-live="polite"
+          className={`rounded-xl border px-4 py-3 text-sm font-bold ${
+            operationFailed
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {operationMessage}
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {summaryDeck.map((stat) => (
           <StatCard key={stat.label} label={stat.label} value={stat.value} detail={stat.detail} />
@@ -491,12 +540,14 @@ export default function UsersPage() {
               <FacilitySelector facilities={facilities} value={facilityFilter} onChange={setFacilityFilter} />
             ) : null}
             <button
-              onClick={() => void loadDirectory()}
-              disabled={isLoading}
-              title={isLoading ? "Directory refresh already in progress" : "Refresh user directory"}
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-900 transition-all shadow-sm"
+              onClick={() => void refreshCurrentView()}
+              disabled={refreshPending}
+              aria-label={refreshPending ? "Refreshing users" : "Refresh users"}
+              title={refreshPending ? "User refresh already in progress" : "Refresh users"}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:text-slate-900 transition-all shadow-sm disabled:cursor-wait disabled:opacity-70"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshPending ? 'animate-spin' : ''}`} />
+              <span className="text-sm font-bold">{refreshPending ? "Refreshing…" : "Refresh"}</span>
             </button>
             {viewMode === VIEW_ACTIVE ? (
               <InviteUserModal
@@ -520,6 +571,10 @@ export default function UsersPage() {
           </div>
         }
       >
+        <div className="mb-3 flex min-h-5 items-center justify-between gap-3 text-sm text-slate-500" aria-live="polite">
+          <span>{refreshPending && directory ? "Checking the server for user updates…" : "User data is synced from the server."}</span>
+          <span>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}` : "Not synced yet"}</span>
+        </div>
         <div className="grid min-w-0 gap-4 lg:grid-cols-4">
           <div className="min-w-0 lg:col-span-3">
             {viewMode === VIEW_ACTIVE && isLoading ? (
@@ -782,11 +837,6 @@ export default function UsersPage() {
                              </select>
                           </div>
                        </div>
-                       {operationMessage && (
-                         <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-black text-slate-700 uppercase tracking-widest text-center animate-in fade-in zoom-in-95">
-                           {operationMessage}
-                         </div>
-                       )}
                     </footer>
                   </>
                 ) : viewMode === VIEW_DELETED && deletedUserDetails ? (
