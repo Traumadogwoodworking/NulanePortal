@@ -126,7 +126,7 @@ describe("api client watchdog", () => {
   it("bypasses the browser HTTP cache for GET requests unless the caller overrides it", async () => {
     const { apiFetch } = await import("@/lib/apiClient");
     authMocks.getPortalAccessToken.mockResolvedValue("token");
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { "content-type": "application/json" },
