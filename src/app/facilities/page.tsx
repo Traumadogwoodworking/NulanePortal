@@ -112,6 +112,7 @@ export default function FacilitiesPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<null | { userId: string; facilityId: string; userName: string; facilityName: string }>(null);
   const [facilityActionMessage, setFacilityActionMessage] = useState<string | null>(null);
+  const [facilityActionWarning, setFacilityActionWarning] = useState<string | null>(null);
   const [facilityActionError, setFacilityActionError] = useState<string | null>(null);
   const [facilityAssignmentDraftUserIds, setFacilityAssignmentDraftUserIds] = useState<string[]>([]);
   const [facilityAssignmentSaving, setFacilityAssignmentSaving] = useState(false);
@@ -131,6 +132,7 @@ export default function FacilitiesPage() {
   const loadFacilities = async () => {
     setStatusMessage(null);
     setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
     setFacilityActionError(null);
     try {
       const refreshedDirectory = await refreshDirectory();
@@ -149,6 +151,7 @@ export default function FacilitiesPage() {
   const handleCreateFacility = async (payload: { name: string; slug: string; region: string; active: boolean }) => {
     if (!organizationId || !isOrgAdmin) return;
     setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
     setFacilityActionError(null);
     const createdFacility = await FacilitiesAdapter.createFacility(organizationId, {
       name: payload.name,
@@ -157,39 +160,75 @@ export default function FacilitiesPage() {
       active: payload.active,
       locationCount: 1,
     });
+    if (selectedOrganizationScopeKey === "all") {
+      await refreshDirectory(
+        (currentDirectory) => currentDirectory
+          ? {
+              ...currentDirectory,
+              facilities: [
+                createdFacility,
+                ...currentDirectory.facilities.filter((facility) => facility.id !== createdFacility.id),
+              ],
+            }
+          : currentDirectory,
+        { revalidate: false }
+      );
+      setSelectedFacilityId(createdFacility.id);
+      setFacilityActionMessage(`${createdFacility.name} created. Verifying the facility list with the server…`);
+    } else {
+      setFacilityActionMessage(`${createdFacility.name} created.`);
+    }
     try {
       const refreshedDirectory = await refreshDirectory();
       const visibleAfterRefresh = refreshedDirectory?.facilities.some(
         (facility) => facility.id === createdFacility.id
       );
       if (!visibleAfterRefresh) {
-        setFacilityActionError(
-          `${createdFacility.name} was created, but it is not visible in the current organization view. Refresh or switch to All organizations.`
-        );
+        if (selectedOrganizationScopeKey === "all") {
+          await refreshDirectory(
+            (currentDirectory) => currentDirectory
+              ? {
+                  ...currentDirectory,
+                  facilities: [
+                    createdFacility,
+                    ...currentDirectory.facilities.filter((facility) => facility.id !== createdFacility.id),
+                  ],
+                }
+              : currentDirectory,
+            { revalidate: false }
+          );
+          setSelectedFacilityId(createdFacility.id);
+          setFacilityActionMessage(`${createdFacility.name} created.`);
+          setFacilityActionWarning(
+            `${createdFacility.name} was saved, but the follow-up directory response did not include it. The confirmed save is shown while the directory catches up.`
+          );
+        } else {
+          setFacilityActionMessage(`${createdFacility.name} created.`);
+          setFacilityActionWarning(
+            `${createdFacility.name} was saved without a suborganization assignment. Switch to All organizations to view it, then assign its organization.`
+          );
+        }
       } else {
         setSelectedFacilityId(createdFacility.id);
         setFacilityActionMessage(`${createdFacility.name} created and verified in the facility list.`);
       }
     } catch (refreshError) {
-      setFacilityActionError(
-        `${createdFacility.name} was created, but the facility list could not be refreshed: ${
+      setFacilityActionMessage(`${createdFacility.name} created.`);
+      setFacilityActionWarning(
+        `${createdFacility.name} was saved, but the facility list could not be refreshed: ${
           refreshError instanceof Error ? refreshError.message : "unknown refresh error"
         }`
       );
     }
     void refreshControlPlaneBootstrap(organizationId).catch((refreshError) => {
-      setFacilityActionError((current) =>
-        current ||
-        `The facility was created, but control-plane status could not be refreshed: ${
-          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
-        }`
-      );
+      console.warn("[facilities] control-plane refresh failed after facility create", refreshError);
     });
   };
 
   const handleEditFacility = async (payload: { name: string; slug: string; region: string; active: boolean }) => {
     if (!organizationId || !isOrgAdmin || !selectedFacility) return;
     setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
     setFacilityActionError(null);
     const updatedFacility = await FacilitiesAdapter.updateFacility(organizationId, selectedFacility.id, {
       ...selectedFacility,
@@ -225,6 +264,7 @@ export default function FacilitiesPage() {
     if (!isOrgAdmin) return;
     const target = removeTarget;
     setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
     setFacilityActionError(null);
     setMembershipRemovalPending(true);
     try {
@@ -317,6 +357,7 @@ export default function FacilitiesPage() {
       return;
     }
     setFacilityAssignmentSaving(true);
+    setFacilityActionWarning(null);
     setFacilityActionError(null);
     try {
       await Promise.all(
@@ -556,8 +597,11 @@ export default function FacilitiesPage() {
       {facilityActionMessage ? (
         <div role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{facilityActionMessage}</div>
       ) : null}
+      {facilityActionWarning ? (
+        <div role="status" aria-live="polite" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{facilityActionWarning}</div>
+      ) : null}
       {facilityActionError ? (
-        <div role="alert"><ErrorPanel title="Facility update needs attention" error={facilityActionError} /></div>
+        <ErrorPanel title="Facility update needs attention" error={facilityActionError} />
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {summaryDeck.map((stat) => (
