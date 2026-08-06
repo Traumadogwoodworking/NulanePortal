@@ -1,5 +1,19 @@
 export type RoleKey = "super_admin" | "admin" | "org_admin" | "facility_admin" | "user" | "viewer";
 
+export interface FacilityYardArea {
+  areaId: string;
+  name: string;
+  active: boolean;
+}
+
+export interface FacilityYard {
+  yardId: string;
+  name: string;
+  code: string;
+  active: boolean;
+  areas: FacilityYardArea[];
+}
+
 export interface FacilitySummary {
   id: string;
   name: string;
@@ -7,6 +21,7 @@ export interface FacilitySummary {
   region?: string;
   active: boolean;
   locationCount: number;
+  yards?: FacilityYard[];
 }
 
 export interface LocationSummary {

@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/apiClient";
-import type { FacilitySummary, FacilitiesListResponse, LocationSummary } from "@/lib/types";
+import type { FacilitySummary, FacilityYard, FacilityYardArea, FacilitiesListResponse, LocationSummary } from "@/lib/types";
 import type { ResponseError } from "../apiClient";
 import {
   appendOrganizationScope,
@@ -32,6 +32,103 @@ function readRecord(value: unknown): Record<string, unknown> {
 function readOptionalString(value: unknown): string | undefined {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || undefined;
+}
+
+function readBoolean(value: unknown, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return fallback;
+}
+
+function normalizeYardArea(value: unknown, index: number): FacilityYardArea | null {
+  if (typeof value === "string") {
+    const name = value.trim();
+    return name ? { areaId: name, name, active: true } : null;
+  }
+  const row = readRecord(value);
+  const name = readOptionalString(
+    row.area_name ?? row.areaName ?? row.name ?? row.label ?? row.display_name ?? row.displayName
+  );
+  const areaId = readOptionalString(
+    row.area_id ?? row.areaId ?? row.id ?? row.code ?? name
+  );
+  if (!name && !areaId) return null;
+  return {
+    areaId: areaId ?? `area-${index + 1}`,
+    name: name ?? areaId ?? `Area ${index + 1}`,
+    active: readBoolean(row.is_active ?? row.active, true),
+  };
+}
+
+function normalizeFacilityYard(value: unknown, index: number): FacilityYard | null {
+  if (typeof value === "string") {
+    const name = value.trim();
+    return name ? { yardId: name, name, code: name, active: true, areas: [] } : null;
+  }
+  const row = readRecord(value);
+  const name = readOptionalString(
+    row.yard_name ?? row.yardName ?? row.name ?? row.label ?? row.display_name ?? row.displayName
+  );
+  const code = readOptionalString(row.code ?? row.yard_code ?? row.yardCode);
+  const yardId = readOptionalString(row.yard_id ?? row.yardId ?? row.id ?? code ?? name);
+  if (!name && !yardId) return null;
+  const rawAreas = row.areas ?? row.yard_areas ?? row.yardAreas ?? row.zones;
+  const areas = (Array.isArray(rawAreas) ? rawAreas : [])
+    .map(normalizeYardArea)
+    .filter((area): area is FacilityYardArea => Boolean(area));
+  return {
+    yardId: yardId ?? `yard-${index + 1}`,
+    name: name ?? yardId ?? `Yard ${index + 1}`,
+    code: code ?? yardId ?? `YARD-${index + 1}`,
+    active: readBoolean(row.is_active ?? row.active, true),
+    areas,
+  };
+}
+
+function normalizeFacilityYards(row: Record<string, unknown>, metadata: Record<string, unknown>) {
+  const rawYards = row.yards ?? row.yard_options ?? row.yardOptions
+    ?? metadata.yards ?? metadata.yard_options ?? metadata.yardOptions;
+  const yards = (Array.isArray(rawYards) ? rawYards : [])
+    .map(normalizeFacilityYard)
+    .filter((yard): yard is FacilityYard => Boolean(yard));
+  const seen = new Set<string>();
+  return yards.filter((yard) => {
+    const key = yard.yardId.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function serializeFacilityYardArea(area: FacilityYardArea) {
+  return {
+    area_id: area.areaId,
+    areaId: area.areaId,
+    area_name: area.name,
+    areaName: area.name,
+    name: area.name,
+    is_active: area.active,
+    active: area.active,
+  };
+}
+
+function serializeFacilityYard(yard: FacilityYard) {
+  return {
+    yard_id: yard.yardId,
+    yardId: yard.yardId,
+    yard_name: yard.name,
+    yardName: yard.name,
+    display_name: yard.name,
+    code: yard.code,
+    yard_code: yard.code,
+    is_active: yard.active,
+    active: yard.active,
+    areas: yard.areas.map(serializeFacilityYardArea),
+  };
 }
 
 function mapRowToLocationSummary(
@@ -99,6 +196,7 @@ function normalizeFacilitySummary(row: Record<string, unknown>): FacilitySummary
   const activeValue = row.is_active ?? row.active;
   const countValue = row.locationCount ?? row.location_count ?? metadata.locationCount ?? metadata.location_count;
   const locationCount = Number(countValue);
+  const yards = normalizeFacilityYards(row, metadata);
   return {
     id,
     name,
@@ -106,6 +204,7 @@ function normalizeFacilitySummary(row: Record<string, unknown>): FacilitySummary
     region: readOptionalString(row.region) || readOptionalString(metadata.region),
     active: typeof activeValue === "boolean" ? activeValue : true,
     locationCount: Number.isFinite(locationCount) && locationCount > 0 ? locationCount : 1,
+    ...(yards.length ? { yards } : {}),
   };
 }
 
@@ -129,6 +228,9 @@ function buildFacilityWritePayload(payload: Partial<FacilitySummary>) {
       slug: payload.slug,
       region: payload.region,
       locationCount: payload.locationCount ?? 1,
+      ...(Array.isArray(payload.yards)
+        ? { yards: payload.yards.map(serializeFacilityYard) }
+        : {}),
     },
   };
 }
@@ -221,6 +323,22 @@ export async function updateFacility(
   return normalizeFacilityMutationResponse(response);
 }
 
+export async function deleteFacility(
+  organizationId: string,
+  facilityId: string,
+  confirmationName: string
+): Promise<FacilitySummary> {
+  const normalizedConfirmationName = confirmationName.trim();
+  if (!normalizedConfirmationName) {
+    throw new Error("Type the facility name to confirm removal.");
+  }
+  const response = await apiFetch<unknown>(`${FACILITIES_ENDPOINT(organizationId)}/${facilityId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirmation_name: normalizedConfirmationName }),
+  });
+  return normalizeFacilityMutationResponse(response);
+}
+
 export async function fetchLocationMemberships(organizationId: string): Promise<LocationSummary[]> {
   if (!organizationId) {
     return [];
@@ -277,6 +395,14 @@ export class FacilitiesAdapter {
     patch: Partial<FacilitySummary>
   ): Promise<FacilitySummary> {
     return updateFacility(organizationId, facilityId, patch);
+  }
+
+  static async deleteFacility(
+    organizationId: string,
+    facilityId: string,
+    confirmationName: string
+  ): Promise<FacilitySummary> {
+    return deleteFacility(organizationId, facilityId, confirmationName);
   }
 
   static async getLocationMemberships(organizationId: string): Promise<LocationSummary[]> {

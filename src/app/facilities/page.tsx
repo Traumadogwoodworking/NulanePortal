@@ -15,9 +15,12 @@ import { refreshControlPlaneBootstrap, usePortalBrandingSnapshot, usePortalDirec
 import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { FacilityModal } from "@/components/facilities/FacilityModal";
-import { Search, RefreshCw, MapPin, Building2, Settings2, Check, Minus } from "lucide-react";
+import { FacilityYardManager, type FacilityYardDraft } from "@/components/facilities/FacilityYardManager";
+import { RemoveFacilityDialog } from "@/components/facilities/RemoveFacilityDialog";
+import { Search, RefreshCw, MapPin, Building2, Settings2, Check, Minus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { matchesAnySearchQuery } from "@/lib/searchText";
+import type { FacilityYard } from "@/lib/types";
 
 const columns = ["Facility Identity", "Users", "Status"];
 const facilityRecipientAliases: Record<string, string> = {
@@ -44,6 +47,12 @@ function normalizeFacilityRecipientKey(value: string | null | undefined): string
 
 function canonicalFacilityKey(value: string | null | undefined): string {
   return normalizeFacilityRecipientKey(value);
+}
+
+function createFacilityMetadataId(prefix: "yard" | "area") {
+  const uniqueId = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${uniqueId}`;
 }
 
 function extractFacilitySuffix(value: string | null | undefined): string {
@@ -111,12 +120,14 @@ export default function FacilitiesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<null | { userId: string; facilityId: string; userName: string; facilityName: string }>(null);
+  const [facilityRemovalTarget, setFacilityRemovalTarget] = useState<null | { id: string; name: string }>(null);
   const [facilityActionMessage, setFacilityActionMessage] = useState<string | null>(null);
   const [facilityActionWarning, setFacilityActionWarning] = useState<string | null>(null);
   const [facilityActionError, setFacilityActionError] = useState<string | null>(null);
   const [facilityAssignmentDraftUserIds, setFacilityAssignmentDraftUserIds] = useState<string[]>([]);
   const [facilityAssignmentSaving, setFacilityAssignmentSaving] = useState(false);
   const [membershipRemovalPending, setMembershipRemovalPending] = useState(false);
+  const [facilityRemovalPending, setFacilityRemovalPending] = useState(false);
   const [isAssignmentEditorOpen, setIsAssignmentEditorOpen] = useState(false);
   const didMountOrganizationScopeRef = useRef(false);
 
@@ -128,6 +139,7 @@ export default function FacilitiesPage() {
     setSelectedFacilityId(null);
     setFacilityAssignmentDraftUserIds([]);
     setIsAssignmentEditorOpen(false);
+    setFacilityRemovalTarget(null);
   }, [selectedOrganizationScopeKey]);
   const loadFacilities = async () => {
     setStatusMessage(null);
@@ -257,6 +269,202 @@ export default function FacilitiesPage() {
       );
     }
     void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
+  };
+
+  const handleSaveFacilityYard = async (yardId: string | null, draft: FacilityYardDraft) => {
+    if (!organizationId || !isOrgAdmin || !selectedFacility) {
+      throw new Error("Select a facility and sign in as an organization administrator.");
+    }
+    setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
+    setFacilityActionError(null);
+    const currentYards = selectedFacility.yards ?? [];
+    const existingYard = yardId
+      ? currentYards.find((yard) => yard.yardId === yardId) ?? null
+      : null;
+    const resolvedYardId = existingYard?.yardId ?? createFacilityMetadataId("yard");
+    const existingAreasByName = new Map(
+      (existingYard?.areas ?? []).map((area) => [area.name.trim().toLowerCase(), area])
+    );
+    const nextYard: FacilityYard = {
+      yardId: resolvedYardId,
+      name: draft.name,
+      code: draft.code,
+      active: draft.active,
+      areas: draft.areaNames.map((name) => {
+        const existingArea = existingAreasByName.get(name.toLowerCase());
+        return existingArea ?? {
+          areaId: createFacilityMetadataId("area"),
+          name,
+          active: true,
+        };
+      }),
+    };
+    const nextYards = existingYard
+      ? currentYards.map((yard) => yard.yardId === existingYard.yardId ? nextYard : yard)
+      : [...currentYards, nextYard];
+
+    try {
+      const updatedFacility = await FacilitiesAdapter.updateFacility(
+        organizationId,
+        selectedFacility.id,
+        { ...selectedFacility, yards: nextYards }
+      );
+      await refreshDirectory(
+        (currentDirectory) => currentDirectory
+          ? {
+              ...currentDirectory,
+              facilities: currentDirectory.facilities.map((facility) =>
+                facility.id === updatedFacility.id ? updatedFacility : facility
+              ),
+            }
+          : currentDirectory,
+        { revalidate: false }
+      );
+      try {
+        const refreshedDirectory = await refreshDirectory();
+        const refreshedYard = refreshedDirectory?.facilities
+          .find((facility) => facility.id === selectedFacility.id)
+          ?.yards?.find((yard) => yard.yardId === resolvedYardId);
+        if (!refreshedYard) {
+          setFacilityActionWarning(
+            `${draft.name} was saved, but the refreshed directory did not include the yard yet.`
+          );
+        } else {
+          setFacilityActionMessage(`${refreshedYard.name} saved and verified for ${selectedFacility.name}.`);
+        }
+      } catch (refreshError) {
+        setFacilityActionMessage(`${draft.name} saved for ${selectedFacility.name}.`);
+        setFacilityActionWarning(
+          `The facility list could not be refreshed afterward: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+      }
+      void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Unable to save yard.";
+      setFacilityActionError(message);
+      throw saveError;
+    }
+  };
+
+  const handleRemoveFacilityYard = async (yardToRemove: FacilityYard) => {
+    if (!organizationId || !isOrgAdmin || !selectedFacility) {
+      throw new Error("Select a facility and sign in as an organization administrator.");
+    }
+    setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
+    setFacilityActionError(null);
+    const nextYards = (selectedFacility.yards ?? []).filter(
+      (yard) => yard.yardId !== yardToRemove.yardId
+    );
+    try {
+      const updatedFacility = await FacilitiesAdapter.updateFacility(
+        organizationId,
+        selectedFacility.id,
+        { ...selectedFacility, yards: nextYards }
+      );
+      await refreshDirectory(
+        (currentDirectory) => currentDirectory
+          ? {
+              ...currentDirectory,
+              facilities: currentDirectory.facilities.map((facility) =>
+                facility.id === updatedFacility.id ? updatedFacility : facility
+              ),
+            }
+          : currentDirectory,
+        { revalidate: false }
+      );
+      try {
+        const refreshedDirectory = await refreshDirectory();
+        const stillPresent = refreshedDirectory?.facilities
+          .find((facility) => facility.id === selectedFacility.id)
+          ?.yards?.some((yard) => yard.yardId === yardToRemove.yardId);
+        if (stillPresent) {
+          setFacilityActionWarning(
+            `${yardToRemove.name} was removed, but the refreshed directory still included a stale copy.`
+          );
+        } else {
+          setFacilityActionMessage(`${yardToRemove.name} removed and verified.`);
+        }
+      } catch (refreshError) {
+        setFacilityActionMessage(`${yardToRemove.name} removed from ${selectedFacility.name}.`);
+        setFacilityActionWarning(
+          `The facility list could not be refreshed afterward: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+      }
+      void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
+    } catch (removeError) {
+      const message = removeError instanceof Error ? removeError.message : "Unable to remove yard.";
+      setFacilityActionError(message);
+      throw removeError;
+    }
+  };
+
+  const handleRemoveFacility = async (confirmationName: string) => {
+    if (!organizationId || !isOrgAdmin || !facilityRemovalTarget || facilityRemovalPending) {
+      throw new Error("Select a facility and sign in as an organization administrator.");
+    }
+    const target = facilityRemovalTarget;
+    setFacilityActionMessage(null);
+    setFacilityActionWarning(null);
+    setFacilityActionError(null);
+    setFacilityRemovalPending(true);
+    try {
+      const removedFacility = await FacilitiesAdapter.deleteFacility(
+        organizationId,
+        target.id,
+        confirmationName
+      );
+      await refreshDirectory(
+        (currentDirectory) => currentDirectory
+          ? {
+              ...currentDirectory,
+              facilities: currentDirectory.facilities.filter((facility) => facility.id !== target.id),
+              locationMemberships: currentDirectory.locationMemberships.filter(
+                (membership) => membership.location_id !== target.id
+              ),
+              users: currentDirectory.users.map((user) => ({
+                ...user,
+                facilityIds: user.facilityIds.filter((facilityId) => facilityId !== target.id),
+              })),
+            }
+          : currentDirectory,
+        { revalidate: false }
+      );
+      setSelectedFacilityId(null);
+      setFacilityAssignmentDraftUserIds([]);
+      setIsAssignmentEditorOpen(false);
+      setFacilityRemovalTarget(null);
+      try {
+        const refreshedDirectory = await refreshDirectory();
+        const stillPresent = refreshedDirectory?.facilities.some((facility) => facility.id === target.id);
+        if (stillPresent) {
+          setFacilityActionWarning(
+            `${removedFacility.name} was removed and verified by the server, but the refreshed directory still included a stale copy.`
+          );
+        } else {
+          setFacilityActionMessage(`${removedFacility.name} removed and verified by the server.`);
+        }
+      } catch (refreshError) {
+        setFacilityActionMessage(`${removedFacility.name} removed and verified by the server.`);
+        setFacilityActionWarning(
+          `The facility list could not be refreshed afterward: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+      }
+      void refreshControlPlaneBootstrap(organizationId).catch(() => undefined);
+    } catch (removalError) {
+      const message = removalError instanceof Error ? removalError.message : "Unable to remove facility.";
+      setFacilityActionError(message);
+      throw removalError;
+    } finally {
+      setFacilityRemovalPending(false);
+    }
   };
 
   const handleRemoveFacilityMembership = async () => {
@@ -520,6 +728,19 @@ export default function FacilitiesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <RemoveFacilityDialog
+        key={facilityRemovalTarget?.id ?? "no-facility-removal"}
+        open={Boolean(facilityRemovalTarget)}
+        facility={facilityRemovalTarget}
+        assignedUserCount={
+          facilityRemovalTarget ? facilityUserCounts.get(facilityRemovalTarget.id) ?? 0 : 0
+        }
+        isPending={facilityRemovalPending}
+        onOpenChange={(open) => {
+          if (!open) setFacilityRemovalTarget(null);
+        }}
+        onConfirm={handleRemoveFacility}
+      />
       <Dialog open={isAssignmentEditorOpen} onOpenChange={(open) => setIsAssignmentEditorOpen(open)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -780,6 +1001,19 @@ export default function FacilitiesPage() {
                         </div>
                       </div>
 
+                      <FacilityYardManager
+                        yards={selectedFacility?.yards ?? []}
+                        disabledReason={
+                          !isOrgAdmin
+                            ? "Organization admin required"
+                            : !selectedFacility
+                              ? "Select a facility to manage yards"
+                              : null
+                        }
+                        onSave={handleSaveFacilityYard}
+                        onRemove={handleRemoveFacilityYard}
+                      />
+
                       <div className="space-y-2">
                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Branding</p>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
@@ -840,6 +1074,26 @@ export default function FacilitiesPage() {
                         }
                         onSubmit={handleEditFacility}
                       />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedFacility) {
+                            setFacilityRemovalTarget({ id: selectedFacility.id, name: selectedFacility.name });
+                          }
+                        }}
+                        disabled={!organizationId || !isOrgAdmin || !selectedFacility || facilityRemovalPending}
+                        title={
+                          !isOrgAdmin
+                            ? "Organization admin required"
+                            : !selectedFacility
+                              ? "Select a facility to remove"
+                              : "Remove facility"
+                        }
+                        className="w-full flex items-center justify-between p-2.5 rounded-lg border border-rose-200 text-xs font-black uppercase tracking-widest text-rose-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-rose-50"
+                      >
+                        Remove Facility
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                    </footer>
                  </>
                ) : (

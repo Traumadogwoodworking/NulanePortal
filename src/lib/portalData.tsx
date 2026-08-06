@@ -594,7 +594,7 @@ export function usePortalDirectorySnapshot() {
     });
   }
   const swr = useSWR<DirectorySnapshot | undefined>(
-    scope ? [...scope, "directory", "v1"] : null,
+    scope ? [...scope, "directory", "v2"] : null,
     async () => {
       const previousSnapshot = cachedValue ?? {
         users: [],
