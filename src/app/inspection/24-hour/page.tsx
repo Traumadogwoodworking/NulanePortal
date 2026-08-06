@@ -19,7 +19,7 @@ import {
 } from "@/lib/services/twentyFourHourInspectionService";
 import { usePortalSession } from "@/lib/portalSession";
 
-const TWENTY_FOUR_HOUR_AUTO_REFRESH_MS = 60_000;
+const TWENTY_FOUR_HOUR_AUTO_REFRESH_MS = 30_000;
 const TWENTY_FOUR_HOUR_EVENT_REFRESH_THROTTLE_MS = 2_000;
 
 function formatDateTime(value?: string | null): string {
@@ -400,6 +400,30 @@ export default function TwentyFourHourInspectionPage() {
   }, [reloadToken, status]);
 
   const facilityOptions = useMemo(() => buildReturnedFacilityOptions(data?.rows ?? []), [data?.rows]);
+  const summaryRows = useMemo(() => filterTwentyFourHourRows(data?.rows ?? [], {
+    search,
+    yard: facilityFilter,
+    recordFilter: "all",
+  }), [data?.rows, facilityFilter, search]);
+  const filteredSummary = useMemo(() => {
+    let needsInspected = 0;
+    let inspected = 0;
+    let critical = 0;
+    let overdue = 0;
+    for (const row of summaryRows) {
+      if (row.inspected) inspected += 1;
+      else needsInspected += 1;
+      if (row.severity === "critical") critical += 1;
+      if (row.severity === "overdue") overdue += 1;
+    }
+    return {
+      totalActive: summaryRows.length,
+      needsInspected,
+      inspected,
+      critical,
+      overdue,
+    };
+  }, [summaryRows]);
   const visibleRows = useMemo(() => orderTwentyFourHourRowsByPriority(filterTwentyFourHourRows(data?.rows ?? [], {
     search,
     yard: facilityFilter,
@@ -411,11 +435,11 @@ export default function TwentyFourHourInspectionPage() {
     count: number;
     filter: TwentyFourHourRecordFilter;
   }> = data ? [
-    { label: "Active", count: data.summary.total_active, filter: "all" },
-    { label: "Uninspected", count: data.summary.needs_inspected, filter: "uninspected" },
-    { label: "Inspected", count: data.summary.inspected, filter: "inspected" },
-    { label: "Critical", count: data.summary.critical, filter: "critical" },
-    { label: "Overdue", count: data.summary.overdue, filter: "overdue" },
+    { label: "Active", count: filteredSummary.totalActive, filter: "all" },
+    { label: "Uninspected", count: filteredSummary.needsInspected, filter: "uninspected" },
+    { label: "Inspected", count: filteredSummary.inspected, filter: "inspected" },
+    { label: "Critical", count: filteredSummary.critical, filter: "critical" },
+    { label: "Overdue", count: filteredSummary.overdue, filter: "overdue" },
   ] : [];
 
   if (status !== "success") {
@@ -427,7 +451,7 @@ export default function TwentyFourHourInspectionPage() {
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
           <div>
             <h2 className="text-base font-black text-slate-900">24 Hour Inspection Display</h2>
-            <p className="mt-1 text-xs text-slate-600">Current active inventory from the latest successfully completed development snapshot.</p>
+            <p className="mt-1 text-xs text-slate-600">Current active inventory from the latest successfully completed development snapshot. Refreshes every 30 seconds while this tab is visible.</p>
           </div>
           <div className="flex items-end justify-end">
             <Button variant="outline" size="sm" onClick={requestRefresh}>

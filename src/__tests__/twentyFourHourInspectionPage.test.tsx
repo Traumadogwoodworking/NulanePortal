@@ -131,6 +131,32 @@ describe("24-hour inspection page", () => {
     expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("updates the headline totals from the current search and facility filters", async () => {
+    const user = userEvent.setup();
+    serviceMocks.fetch.mockResolvedValue(response());
+    render(<TwentyFourHourInspectionPage />);
+
+    const active = await screen.findByRole("button", { name: "Filter records by Active" });
+    const uninspected = screen.getByRole("button", { name: "Filter records by Uninspected" });
+    const inspected = screen.getByRole("button", { name: "Filter records by Inspected" });
+    const overdue = screen.getByRole("button", { name: "Filter records by Overdue" });
+    expect(active).toHaveTextContent("2");
+    expect(uninspected).toHaveTextContent("1");
+    expect(inspected).toHaveTextContent("1");
+    expect(overdue).toHaveTextContent("1");
+
+    await user.selectOptions(screen.getByLabelText("Filter returned inventory by facility"), "JNAP");
+
+    expect(active).toHaveTextContent("1");
+    expect(uninspected).toHaveTextContent("0");
+    expect(inspected).toHaveTextContent("1");
+    expect(overdue).toHaveTextContent("0");
+
+    await user.type(screen.getByLabelText("Search inspected and uninspected records"), "missing-vin");
+    expect(active).toHaveTextContent("0");
+    expect(inspected).toHaveTextContent("0");
+  });
+
   it("searches both inspected and uninspected records", async () => {
     const user = userEvent.setup();
     serviceMocks.fetch.mockResolvedValue(response());
@@ -223,5 +249,22 @@ describe("24-hour inspection page", () => {
     });
 
     await waitFor(() => expect(serviceMocks.fetch).toHaveBeenCalledTimes(2));
+  });
+
+  it("refreshes an active tab every 30 seconds", async () => {
+    const setIntervalSpy = vi.spyOn(window, "setInterval");
+    serviceMocks.fetch.mockResolvedValue(response());
+    render(<TwentyFourHourInspectionPage />);
+
+    await screen.findByText("UNINSPECTEDVIN001");
+    const autoRefreshTimer = setIntervalSpy.mock.calls.find(([, delay]) => delay === 30_000);
+    expect(autoRefreshTimer).toBeDefined();
+    const refresh = autoRefreshTimer?.[0];
+    if (typeof refresh !== "function") throw new Error("Auto-refresh timer callback was not registered");
+
+    act(() => refresh());
+
+    await waitFor(() => expect(serviceMocks.fetch).toHaveBeenCalledTimes(2));
+    setIntervalSpy.mockRestore();
   });
 });
