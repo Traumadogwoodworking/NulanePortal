@@ -80,8 +80,7 @@ static_export:
   variables:
     NEXT_PUBLIC_PORTAL_DEV_SESSION_BYPASS: "1"
   script:
-    - npm run build
-    - npm run export:validate
+    - npm run ci:static
     - tar -czf portal-static-${CI_COMMIT_SHA}.tar.gz out
     - sha256sum portal-static-${CI_COMMIT_SHA}.tar.gz > portal-static-${CI_COMMIT_SHA}.tar.gz.sha256
     - sha256sum -c portal-static-${CI_COMMIT_SHA}.tar.gz.sha256

@@ -7,13 +7,14 @@
     "dev": "next dev --webpack --port 3000",
     "prebuild": "node scripts/ensure-native-deps.mjs",
     "build": "next build",
+    "export:finalize": "node scripts/finalize-static-export.mjs",
     "export:validate": "node scripts/validate-static-export.mjs",
     "start": "npx serve@latest out",
     "lint": "eslint --ext .ts,.tsx src",
     "lint:perf": "ESLINT_PERF=true eslint --ext .ts,.tsx src",
     "test": "vitest run",
     "ci": "npm run lint && vitest --coverage && playwright test",
-    "ci:static": "npm run build && npm run export:validate",
+    "ci:static": "npm run build && npm run export:finalize && npm run export:validate",
     "build:analyze": "ANALYZE=true next build --profile && next-bundle-analyzer --threshold 250 --threshold 350"
   },
   "dependencies": {

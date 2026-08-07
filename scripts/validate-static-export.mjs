@@ -1,4 +1,4 @@
-import { access, readdir } from "fs/promises";
+import { access, readFile, readdir } from "fs/promises";
 import { constants } from "fs";
 import path from "path";
 
@@ -44,6 +44,15 @@ async function assertPublicAssets() {
   }
 }
 
+async function assertFacilityRedirect() {
+  const notFoundPage = await readFile(path.join(outDir, "404.html"), "utf8");
+  const requiredMarkers = ["window.location.replace", "/join/", "?facility="];
+  const missingMarkers = requiredMarkers.filter((marker) => !notFoundPage.includes(marker));
+  if (missingMarkers.length > 0) {
+    throw new Error(`Static 404 page is missing facility redirect markers: ${missingMarkers.join(", ")}`);
+  }
+}
+
 async function listRouteFolders() {
   const entries = await readdir(outDir, { withFileTypes: true });
   return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
@@ -51,5 +60,6 @@ async function listRouteFolders() {
 
 await assertRequiredPaths();
 await assertPublicAssets();
+await assertFacilityRedirect();
 const routeFolders = await listRouteFolders();
 console.log(JSON.stringify({ outDir, routeFolders }, null, 2));
