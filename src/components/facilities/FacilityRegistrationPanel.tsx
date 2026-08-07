@@ -276,13 +276,16 @@ export function FacilityRegistrationPanel({
           <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-slate-600">Recent enrollment activity</summary>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="text-slate-500"><tr><th className="pb-2 pr-3">Started</th><th className="pb-2 pr-3">Status</th><th className="pb-2 pr-3">User</th><th className="pb-2">Last event</th></tr></thead>
+              <thead className="text-slate-500"><tr><th className="pb-2 pr-3">Started</th><th className="pb-2 pr-3">Status</th><th className="pb-2 pr-3">User</th><th className="pb-2">Last action</th></tr></thead>
               <tbody>{configuration.recentEnrollments.map((entry) => (
                 <tr key={entry.sessionId} className="border-t border-slate-100 text-slate-700">
                   <td className="py-2 pr-3 whitespace-nowrap">{displayTimestamp(entry.createdAt)}</td>
                   <td className="py-2 pr-3 font-bold">{entry.status}{entry.failureCode ? ` · ${entry.failureCode}` : ""}</td>
                   <td className="py-2 pr-3">{entry.userEmail || "Not authenticated"}</td>
-                  <td className="py-2">{entry.lastEventKey.replace("registration.", "") || "started"}</td>
+                  <td className="py-2">
+                    <span className="font-semibold">{entry.lastEventKey.replace("registration.", "") || "started"}</span>
+                    <span className="mt-0.5 block whitespace-nowrap text-slate-500">{displayTimestamp(entry.lastEventAt || entry.createdAt)}</span>
+                  </td>
                 </tr>
               ))}</tbody>
             </table>

@@ -22,6 +22,7 @@ export interface FacilityEnrollmentHistoryItem {
   roleName: string;
   lastEventKey: string;
   lastEventResult: string;
+  lastEventAt: string | null;
   createdAt: string | null;
   completedAt: string | null;
   expiresAt: string | null;
@@ -78,6 +79,7 @@ export interface FacilityEnrollmentResult {
     organizationMembershipCreated?: boolean;
     facilityMembershipCreated?: boolean;
     roleAssigned?: boolean;
+    facilitySelected?: boolean;
   };
   auth0: { status: "identity_only" };
 }
@@ -155,6 +157,7 @@ function normalizeHistoryItem(value: unknown): FacilityEnrollmentHistoryItem {
     roleName: text(row.role_name),
     lastEventKey: text(row.last_event_key),
     lastEventResult: text(row.last_event_result),
+    lastEventAt: text(row.last_event_at) || null,
     createdAt: text(row.created_at) || null,
     completedAt: text(row.completed_at) || null,
     expiresAt: text(row.expires_at) || null,
@@ -216,6 +219,7 @@ function normalizeEnrollmentResult(payload: unknown): FacilityEnrollmentResult {
       organizationMembershipCreated: membershipChanges.organizationMembershipCreated === true,
       facilityMembershipCreated: membershipChanges.facilityMembershipCreated === true,
       roleAssigned: membershipChanges.roleAssigned === true,
+      facilitySelected: membershipChanges.facilitySelected === true,
     } : undefined,
     auth0: { status: text(auth0.status) === "identity_only" ? "identity_only" : "identity_only" },
   };

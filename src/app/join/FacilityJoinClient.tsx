@@ -237,11 +237,26 @@ export function FacilityJoinClient() {
           {error ? (
             <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
               <div className="flex gap-2"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><p className="font-bold">{error}</p></div>
-              <p className="mt-2 text-xs">No facility assignment was silently created. Contact {support?.displayName || "Inspection-Trac Support"}{support?.email ? ` at ${support.email}` : ""}.</p>
+              {errorCode === "USER_EMAIL_UNVERIFIED" ? (
+                <p className="mt-2 text-xs">Open the verification email, verify the address, then return to this page. The button below retries this same secure registration.</p>
+              ) : (
+                <p className="mt-2 text-xs">No facility assignment was silently created. Contact {support?.displayName || "Inspection-Trac Support"}{support?.email ? ` at ${support.email}` : ""}.</p>
+              )}
               {supportReference ? <p className="mt-2 text-xs font-bold">Support reference: {supportReference}</p> : null}
               {errorCode === "REGISTRATION_EMAIL_MISMATCH" ? (
                 <button type="button" onClick={restartAuth} className="mt-3 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-black text-rose-950">
                   Use the facility-registration email
+                </button>
+              ) : null}
+              {errorCode === "USER_EMAIL_UNVERIFIED" && enrollmentToken ? (
+                <button
+                  type="button"
+                  onClick={() => void completeEnrollment(enrollmentToken)}
+                  disabled={enrolling}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-black text-rose-950 disabled:opacity-60"
+                >
+                  {enrolling ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {enrolling ? "Checking verification..." : "I verified my email - finish access"}
                 </button>
               ) : null}
             </div>

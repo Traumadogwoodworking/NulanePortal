@@ -21,9 +21,17 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/services/facilityOnboardingService", async () => {
   class FacilityRegistrationError extends Error {
-    code = "FACILITY_REGISTRATION_FAILED";
-    requestId = "";
-    status = 0;
+    code: string;
+    requestId: string;
+    status: number;
+
+    constructor(message: string, details: { code?: string; requestId?: string; status?: number } = {}) {
+      super(message);
+      this.name = "FacilityRegistrationError";
+      this.code = details.code || "FACILITY_REGISTRATION_FAILED";
+      this.requestId = details.requestId || "";
+      this.status = details.status || 0;
+    }
   }
   return {
     FacilityRegistrationError,
@@ -141,5 +149,39 @@ describe("FacilityJoinClient", () => {
     expect(await screen.findByText("You’re set up for Chicago Heights.")).toBeInTheDocument();
     expect(screen.getByText("Signed in as person@example.com")).toBeInTheDocument();
     expect(screen.getByText(/does not block facility access/i)).toBeInTheDocument();
+  });
+
+  it("resumes the same secure session after the user verifies their email", async () => {
+    mocks.query = "enrollment=opaque-enrollment-token-12345678901234567890";
+    mocks.hasPersistedPortalToken.mockReturnValue(true);
+    mocks.fetchFacilityEnrollmentSession.mockResolvedValue(session({ status: "auth_started", emailEntered: true }));
+    const { FacilityRegistrationError } = await import("@/lib/services/facilityOnboardingService");
+    mocks.enrollInFacility
+      .mockRejectedValueOnce(new FacilityRegistrationError(
+        "We sent a verification email. Verify it, then return here and finish facility access.",
+        { code: "USER_EMAIL_UNVERIFIED", requestId: "request-verify-1", status: 422 }
+      ))
+      .mockResolvedValueOnce({
+        success: true,
+        organization: { name: "Inspection-Trac" },
+        facility: { name: "Chicago Heights", slug: "chicago-heights" },
+        role: { name: "User", key: "user" },
+        onboardingStatus: "ready",
+        missingFields: [],
+        recommendedFields: [],
+        issues: [],
+        alreadyMember: false,
+        signedInEmail: "person@example.com",
+        auth0: { status: "identity_only" },
+      });
+
+    render(<FacilityJoinClient />);
+
+    const retry = await screen.findByRole("button", { name: "I verified my email - finish access" });
+    expect(screen.getByText("Support reference: request-verify-1")).toBeInTheDocument();
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(mocks.enrollInFacility).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("You’re set up for Chicago Heights.")).toBeInTheDocument();
   });
 });
