@@ -28,6 +28,7 @@ variables:
   NEXT_PUBLIC_API_BASE_URL: "https://api.nulanesystems.com/inspection-trac/api"
   GITHUB_PAGES_REPOSITORY: "Traumadogwoodworking/inspection-trac.git"
   GITHUB_PAGES_BRANCH: "gh-pages"
+  GITHUB_PAGES_DEPLOYMENT_BRANCH: "deploy/inspection-trac-pages"
 
 lint:
   stage: validate
@@ -140,6 +141,8 @@ deploy_github_pages:
     name: github-pages-production
     url: https://inspection-trac.com
   rules:
+    - if: '$CI_COMMIT_BRANCH == $GITHUB_PAGES_DEPLOYMENT_BRANCH'
+      when: on_success
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
     - when: never
@@ -161,3 +164,6 @@ deploy_github_pages:
     - git add --all
     - git diff --cached --quiet || git commit -m "Publish portal ${CI_COMMIT_SHA}"
     - git push origin "$GITHUB_PAGES_BRANCH"
+    - published_sha="$(git rev-parse HEAD)"
+    - remote_sha="$(git ls-remote origin "refs/heads/${GITHUB_PAGES_BRANCH}" | awk '{print $1}')"
+    - test "$published_sha" = "$remote_sha"

@@ -110,6 +110,9 @@ export class PortalApiHttpError extends Error {
   requestId: string;
   path: string;
   status: number;
+  bodyPreview: string;
+  code: string;
+  userMessage: string;
 
   constructor(details: { requestId: string; path: string; status: number; statusText: string; bodyPreview: string }) {
     super(
@@ -119,6 +122,18 @@ export class PortalApiHttpError extends Error {
     this.requestId = details.requestId;
     this.path = details.path;
     this.status = details.status;
+    this.bodyPreview = details.bodyPreview;
+    let payload: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(details.bodyPreview);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Non-JSON upstream errors retain the original diagnostic preview.
+    }
+    this.code = typeof payload.code === "string" ? payload.code.trim() : "";
+    this.userMessage = typeof payload.error === "string" ? payload.error.trim() : "";
   }
 }
 

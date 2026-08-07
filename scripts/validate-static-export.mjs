@@ -14,7 +14,7 @@ async function exists(filePath) {
 }
 
 async function assertRequiredPaths() {
-  const required = ["index.html", "_next"];
+  const required = ["index.html", "404.html", "join/index.html", "getting-started/index.html", "_next"];
   const missing = [];
   for (const entry of required) {
     if (!(await exists(path.join(outDir, entry)))) {

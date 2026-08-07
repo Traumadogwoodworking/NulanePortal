@@ -17,7 +17,9 @@ vi.mock("@/lib/services/twentyFourHourInspectionService", async (importOriginal)
 vi.mock("@/lib/portalSession", () => ({
   usePortalSession: () => ({
     status: "success",
+    assignedLocationIds: ["location-jnap"],
     selectedLocationId: "location-jnap",
+    locationLocked: true,
     twentyFourHourFacility: {
       location_id: "location-shap",
       location_label: "SHAP",
@@ -109,7 +111,7 @@ describe("24-hour inspection page", () => {
       "href",
       "/reports/damage?focus=report-inspected-1"
     );
-    expect(serviceMocks.fetch).toHaveBeenCalledWith(expect.not.objectContaining({ facility: expect.anything() }));
+    expect(serviceMocks.fetch).toHaveBeenCalledWith(expect.objectContaining({ facility: "location-jnap" }));
   });
 
   it("shows one facility selector sourced from the returned inventory and filters locally", async () => {

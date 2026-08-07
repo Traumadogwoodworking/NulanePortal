@@ -178,6 +178,30 @@ describe("startAuth0Login", () => {
   });
 });
 
+describe("startFacilityRegistrationAuth", () => {
+  it("binds password or SSO authentication to the Auth0 organization and entered email", async () => {
+    window.history.replaceState({}, "", "http://localhost:3000/join/?facility=chicago-heights");
+    const { startFacilityRegistrationAuth, AuthRedirectError } = await importPortalAuth();
+
+    await expect(startFacilityRegistrationAuth(
+      "/join/?facility=chicago-heights",
+      { email: " Person@Example.com ", signup: true }
+    )).rejects.toBeInstanceOf(AuthRedirectError);
+
+    expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appState: { returnTo: "/join/?facility=chicago-heights" },
+        authorizationParams: expect.objectContaining({
+          organization: "org_hgGvkUBSZuyEg9Mg",
+          login_hint: "person@example.com",
+          screen_hint: "signup",
+          prompt: "login",
+        }),
+      })
+    );
+  });
+});
+
 describe("logoutRejectedPortalSession", () => {
   it("clears local auth, logs out of Auth0, and returns through the auto-login route", async () => {
     window.localStorage.setItem("portal_token", "rejected-token");

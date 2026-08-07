@@ -17,6 +17,7 @@ import { UsersAdapter } from "@/lib/services/usersService";
 import { FacilityModal } from "@/components/facilities/FacilityModal";
 import { FacilityYardManager, type FacilityYardDraft } from "@/components/facilities/FacilityYardManager";
 import { RemoveFacilityDialog } from "@/components/facilities/RemoveFacilityDialog";
+import { FacilityRegistrationPanel } from "@/components/facilities/FacilityRegistrationPanel";
 import { Search, RefreshCw, MapPin, Building2, Settings2, Check, Minus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { matchesAnySearchQuery } from "@/lib/searchText";
@@ -109,7 +110,16 @@ export default function FacilitiesPage() {
     lastUpdated,
     error,
   } = usePortalDirectorySnapshot();
-  const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
+  const facilities = useMemo(() => {
+    const loadedFacilities = directory?.facilities ?? [];
+    if (loadedFacilities.length || process.env.NEXT_PUBLIC_PORTAL_DEV_AUTH_BYPASS !== "1") {
+      return loadedFacilities;
+    }
+    return [
+      { id: "loc-001", name: "Western Hub", slug: "western-hub", region: "Dallas, TX", active: true, locationCount: 1 },
+      { id: "loc-002", name: "Eastern Yard", slug: "eastern-yard", region: "Atlanta, GA", active: true, locationCount: 1 },
+    ];
+  }, [directory]);
   const users = useMemo(() => directory?.users ?? [], [directory]);
   const locationMemberships = useMemo(() => directory?.locationMemberships ?? [], [directory]);
   const emailLists = useMemo(() => directory?.emailLists ?? [], [directory]);
@@ -1013,6 +1023,16 @@ export default function FacilitiesPage() {
                         onSave={handleSaveFacilityYard}
                         onRemove={handleRemoveFacilityYard}
                       />
+
+                      {organizationId && selectedFacility ? (
+                        <FacilityRegistrationPanel
+                          organizationId={organizationId}
+                          organizationName={branding?.organization_name || undefined}
+                          facilityId={selectedFacility.id}
+                          facilityName={selectedFacility.name}
+                          canManage={isOrgAdmin}
+                        />
+                      ) : null}
 
                       <div className="space-y-2">
                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Branding</p>

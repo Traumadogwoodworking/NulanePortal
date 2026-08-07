@@ -311,6 +311,7 @@ export default function UsersPage() {
     role: string;
     facility_ids: string[];
     invite: boolean;
+    send_email: boolean;
   }) => {
     if (!organizationId) {
       throw new Error("Organization context missing.");
@@ -319,11 +320,15 @@ export default function UsersPage() {
     setPendingAction("invite");
     try {
       const result = await UsersAdapter.inviteUser(organizationId, payload);
-      setOperationMessage(`Invitation sent to ${result.email}.`);
+      setOperationMessage(
+        result.invitation.emailRequested
+          ? `Invite created for ${result.user.email}. Auth0 accepted the email request.`
+          : `User ${result.user.email} was created without an invitation email request.`
+      );
       await loadDirectory();
       await refreshControlPlaneBootstrap(organizationId);
-    } catch {
-      throw new Error("User invite failed.");
+    } catch (error) {
+      throw error instanceof Error ? error : new Error("User invite failed.");
     } finally {
       setPendingAction(null);
     }
@@ -335,6 +340,7 @@ export default function UsersPage() {
     role: string;
     facility_ids: string[];
     invite: boolean;
+    send_email: boolean;
   }) => {
     if (!organizationId || !selectedUser || !isOrgAdmin) {
       throw new Error("Organization admin permission is required.");

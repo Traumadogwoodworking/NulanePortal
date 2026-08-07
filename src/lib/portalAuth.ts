@@ -775,7 +775,10 @@ export function clearStalePortalSession(reason = "stale_session") {
   clearLocalInvalidAuthState();
 }
 
-async function performAuth0LoginRedirect(returnTo?: string): Promise<never> {
+async function performAuth0LoginRedirect(
+  returnTo?: string,
+  options: { signup?: boolean; loginHint?: string } = {}
+): Promise<never> {
   logAuthFlow("redirectToAuth0Login", {
     reason: "explicit_login_redirect",
     redirectTarget: resolveSafePortalReturnTo(returnTo),
@@ -816,6 +819,8 @@ async function performAuth0LoginRedirect(returnTo?: string): Promise<never> {
         audience: config.audience,
         redirect_uri: config.redirectUri,
         organization: config.organizationId,
+        ...(options.signup ? { screen_hint: "signup" } : {}),
+        ...(options.loginHint?.trim() ? { login_hint: options.loginHint.trim().toLowerCase() } : {}),
         prompt: "login",
       },
     });
@@ -845,6 +850,56 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   }
   loginRedirectKey = redirectKey;
   loginRedirectPromise = performAuth0LoginRedirect(safeReturnTo).catch((error) => {
+    if (!(error instanceof AuthRedirectError)) {
+      loginRedirectPromise = null;
+      loginRedirectKey = null;
+    }
+    throw error;
+  });
+  return loginRedirectPromise;
+}
+
+export async function startAuth0Signup(returnTo?: string): Promise<never> {
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
+  const redirectKey = `${isBrowser() ? window.location.origin : "server"}:signup:${safeReturnTo}`;
+  if (loginRedirectPromise && loginRedirectKey === redirectKey) {
+    return loginRedirectPromise;
+  }
+  if (loginRedirectPromise) {
+    throw new AuthLoopDetectedError();
+  }
+  loginRedirectKey = redirectKey;
+  loginRedirectPromise = performAuth0LoginRedirect(safeReturnTo, { signup: true }).catch((error) => {
+    if (!(error instanceof AuthRedirectError)) {
+      loginRedirectPromise = null;
+      loginRedirectKey = null;
+    }
+    throw error;
+  });
+  return loginRedirectPromise;
+}
+
+export async function startFacilityRegistrationAuth(
+  returnTo: string | undefined,
+  options: { email: string; signup: boolean }
+): Promise<never> {
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
+  const email = options.email.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new Error("Enter a valid email address before continuing.");
+  }
+  const redirectKey = `${isBrowser() ? window.location.origin : "server"}:facility:${options.signup ? "signup" : "login"}:${safeReturnTo}`;
+  if (loginRedirectPromise && loginRedirectKey === redirectKey) {
+    return loginRedirectPromise;
+  }
+  if (loginRedirectPromise) {
+    throw new AuthLoopDetectedError();
+  }
+  loginRedirectKey = redirectKey;
+  loginRedirectPromise = performAuth0LoginRedirect(safeReturnTo, {
+    signup: options.signup,
+    loginHint: email,
+  }).catch((error) => {
     if (!(error instanceof AuthRedirectError)) {
       loginRedirectPromise = null;
       loginRedirectKey = null;

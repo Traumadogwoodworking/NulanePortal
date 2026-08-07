@@ -6,7 +6,8 @@ The GitLab project `nulane/inspection-trac-portal` validates and builds the port
 
 - Feature branches and merge requests run lint, TypeScript, unit tests, and static-export validation.
 - `staging` runs the same validation without publishing production.
-- Protected `main` exposes the manually approved `deploy_github_pages` job.
+- Protected `deploy/inspection-trac-pages` is the promotion branch. A successful pipeline publishes its verified static artifact automatically.
+- Protected `main` retains a manual emergency publish path.
 
 ## Required protected GitLab variables
 
@@ -28,5 +29,12 @@ Public build settings such as `NEXT_PUBLIC_API_BASE` and `NEXT_PUBLIC_AUTH0_*` m
 5. `out/` is synchronized with `--delete`, excluding `.git`.
 6. CI verifies `CNAME=inspection-trac.com`, `.nojekyll`, `index.html`, and `_next`.
 7. The generated commit is pushed to the existing `gh-pages` branch.
+8. CI reads the remote branch back and verifies that GitHub accepted the exact generated commit.
 
 The dirty application checkout is never used as the publication directory.
+
+## Promotion and rollback
+
+Promote only reviewed commits to `deploy/inspection-trac-pages`. GitLab runs lint, TypeScript, unit tests, and static-export validation before the serialized publish job can start.
+
+Rollback is a normal forward publish: revert the bad promotion on `deploy/inspection-trac-pages` (or merge the last known-good source revision), then push. The same pipeline rebuilds that source and creates a new `gh-pages` commit, so rollback does not require force-pushing or workstation access to the production branch.

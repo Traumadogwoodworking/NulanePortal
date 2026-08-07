@@ -64,6 +64,7 @@ const portalRoutes: PortalRoute[] = [
     section: "core",
     icon: "rsa",
     moduleKey: "reports",
+    requiresShap: true,
   },
   {
     label: "24 Hour",

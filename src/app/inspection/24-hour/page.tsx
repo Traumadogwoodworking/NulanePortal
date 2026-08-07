@@ -331,7 +331,7 @@ function InspectionTable({
 }
 
 export default function TwentyFourHourInspectionPage() {
-  const { status } = usePortalSession();
+  const { status, assignedLocationIds = [], selectedLocationId, locationLocked } = usePortalSession();
   const [data, setData] = useState<TwentyFourHourInspectionResponse | null>(null);
   const [search, setSearch] = useState("");
   const [facilityFilter, setFacilityFilter] = useState("");
@@ -341,6 +341,11 @@ export default function TwentyFourHourInspectionPage() {
   const [reloadToken, setReloadToken] = useState(0);
   const requestSequence = useRef(0);
   const lastEventRefreshAt = useRef(0);
+  const requestFacility = useMemo(() => {
+    if (assignedLocationIds.length === 1) return assignedLocationIds[0];
+    if (locationLocked && selectedLocationId) return selectedLocationId;
+    return "";
+  }, [assignedLocationIds, locationLocked, selectedLocationId]);
 
   const requestRefresh = useCallback(() => {
     setLoading(true);
@@ -384,6 +389,7 @@ export default function TwentyFourHourInspectionPage() {
     const controller = new AbortController();
     void fetchTwentyFourHourInspectionDisplay({
       signal: controller.signal,
+      ...(requestFacility ? { facility: requestFacility } : {}),
     })
       .then((response) => {
         if (sequence !== requestSequence.current) return;
@@ -397,7 +403,7 @@ export default function TwentyFourHourInspectionPage() {
         if (sequence === requestSequence.current) setLoading(false);
       });
     return () => controller.abort();
-  }, [reloadToken, status]);
+  }, [reloadToken, requestFacility, status]);
 
   const facilityOptions = useMemo(() => buildReturnedFacilityOptions(data?.rows ?? []), [data?.rows]);
   const summaryRows = useMemo(() => filterTwentyFourHourRows(data?.rows ?? [], {
@@ -451,7 +457,7 @@ export default function TwentyFourHourInspectionPage() {
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
           <div>
             <h2 className="text-base font-black text-slate-900">24 Hour Inspection Display</h2>
-            <p className="mt-1 text-xs text-slate-600">Current active inventory from the latest successfully completed development snapshot. Refreshes every 30 seconds while this tab is visible.</p>
+            <p className="mt-1 text-xs text-slate-600">Current active inventory from the latest successfully completed snapshot, limited by the signed-in user&apos;s facility assignments. Refreshes every 30 seconds while this tab is visible.</p>
           </div>
           <div className="flex items-end justify-end">
             <Button variant="outline" size="sm" onClick={requestRefresh}>

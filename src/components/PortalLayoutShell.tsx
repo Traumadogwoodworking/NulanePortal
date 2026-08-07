@@ -13,6 +13,8 @@ import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalThemeMode } from "@/lib/portalTheme";
+import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 
 export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const { status, error, refetch, session } = usePortalSession();
@@ -135,6 +137,27 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel)] shadow-[var(--shadow-panel)]">
           <PortalTopBar pageTitle={pageMetadata.title} pageSubtitle={pageMetadata.subtitle} />
           <AlertStack />
+          {session?.onboardingStatus && session.onboardingStatus !== "ready" ? (
+            <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950" role="status">
+              <div className="flex min-w-0 gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-black">Your account setup needs attention.</p>
+                  <p className="mt-0.5 text-xs font-semibold">
+                    {session.onboardingStatus === "facility_unassigned"
+                      ? "A facility assignment is required before operational pages can show the correct data. An administrator can review the onboarding issue."
+                      : session.onboardingStatus === "role_unassigned"
+                        ? "An operational role is required before you can use facility workflows."
+                        : `Missing: ${(session.missingFields || []).map((field) => field.replace(/_/g, " ")).join(", ") || session.onboardingStatus.replace(/_/g, " ")}.`}
+                    {session.issues?.[0]?.reference_code ? ` Support reference: ${session.issues[0].reference_code}.` : ""}
+                  </p>
+                </div>
+              </div>
+              {session.onboardingStatus === "profile_incomplete" ? (
+                <Link href="/settings" className="rounded-lg border border-amber-400 bg-white px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-950">Complete profile</Link>
+              ) : null}
+            </div>
+          ) : null}
           <main className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.04)_140px,rgba(255,255,255,0)_280px)] p-4">
             <AccessGuardClient>{children}</AccessGuardClient>
           </main>

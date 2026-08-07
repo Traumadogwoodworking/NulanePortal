@@ -37,6 +37,8 @@ function isPublicBrandedPath(pathname: string | null) {
     "/workflow",
     "/definian-signal",
     "/get-app",
+    "/join",
+    "/getting-started",
   ].includes(path);
 }
 

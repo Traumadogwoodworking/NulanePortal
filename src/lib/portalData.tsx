@@ -47,8 +47,10 @@ import type {
 } from "@/lib/types";
 
 const STALE_TIME_MS = 1000 * 60 * 5;
-const REVALIDATE_ON_FOCUS = false;
-const REVALIDATE_ON_RECONNECT = false;
+const FOCUS_THROTTLE_MS = 15_000;
+const LOCATION_DATA_REFRESH_MS = 30_000;
+const REVALIDATE_ON_FOCUS = true;
+const REVALIDATE_ON_RECONNECT = true;
 const KEEP_PREVIOUS_DATA = true;
 const CACHE_TTL_MS = STALE_TIME_MS;
 
@@ -113,7 +115,7 @@ export function PortalDataProvider({ children }: { children: ReactNode }) {
     <SWRConfig
       value={{
         dedupingInterval: STALE_TIME_MS,
-        focusThrottleInterval: STALE_TIME_MS,
+        focusThrottleInterval: FOCUS_THROTTLE_MS,
         revalidateOnFocus: REVALIDATE_ON_FOCUS,
         revalidateOnReconnect: REVALIDATE_ON_RECONNECT,
         keepPreviousData: KEEP_PREVIOUS_DATA,
@@ -478,7 +480,12 @@ export function useControlPlaneBootstrap() {
     },
     {
       revalidateIfStale: true,
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      refreshInterval: LOCATION_DATA_REFRESH_MS,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      dedupingInterval: 5_000,
       keepPreviousData: true,
       fallbackData: undefined,
     }
@@ -727,6 +734,10 @@ export function usePortalDirectorySnapshot() {
       revalidateOnMount: true,
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
+      refreshInterval: LOCATION_DATA_REFRESH_MS,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      dedupingInterval: 5_000,
     }
   );
   return {

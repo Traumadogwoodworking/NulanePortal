@@ -41,6 +41,7 @@ interface InviteUserModalProps {
     role: string;
     facility_ids: string[];
     invite: boolean;
+    send_email: boolean;
   }) => Promise<void>;
 }
 
@@ -141,6 +142,7 @@ export function InviteUserModal({
         role: selectedRole,
         facility_ids: selectedFacilityIds,
         invite: mode === "invite",
+        send_email: mode === "invite",
       });
       setIsOpen(false);
       resetForm();
@@ -272,7 +274,7 @@ export function InviteUserModal({
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
             <span className="block font-medium text-slate-900">{mode === "update" ? "Save user changes" : "Send invite email"}</span>
-            <span className="block text-xs text-slate-500">{mode === "update" ? "This updates the selected user without sending an invite." : "Always enabled."}</span>
+            <span className="block text-xs text-slate-500">{mode === "update" ? "This updates the selected user without sending an invite." : "Auth0 is explicitly asked to send the invitation. The result below reports whether Auth0 accepted that request."}</span>
           </div>
           {!canInviteUser ? (
             <p className="text-sm text-slate-500">

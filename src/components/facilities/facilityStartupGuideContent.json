@@ -1,0 +1,24 @@
+{
+  "steps": [
+    {
+      "title": "Install Inspection-Trac",
+      "detail": "Use the iPhone or Android installation link on the registration page or in this guide."
+    },
+    {
+      "title": "Create or access your account",
+      "detail": "Enter the email that should receive access, then sign up or sign in securely through Auth0."
+    },
+    {
+      "title": "Confirm your assigned facility",
+      "detail": "Inspection-Trac verifies the signed-in email and assigns only this facility and its approved base role."
+    },
+    {
+      "title": "Start your first inspection",
+      "detail": "Open Inspection-Trac and sign in with the same account. Your current facility access loads during sign-in."
+    },
+    {
+      "title": "Get support",
+      "detail": "Use the support contact below and include the displayed support reference if your access needs attention."
+    }
+  ]
+}

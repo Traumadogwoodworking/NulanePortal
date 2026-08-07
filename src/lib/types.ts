@@ -115,11 +115,49 @@ export interface PortalSessionResponse {
   available_facilities?: PortalSessionLocation[];
   availableFacilities?: PortalSessionLocation[];
   selected_location?: PortalSessionLocation | null;
+  selectedLocation?: PortalSessionLocation | null;
+  facilityScope?: {
+    mode?: string;
+    organization_id?: string;
+    allowedLocationIds?: string[];
+  };
+  scope?: {
+    organizationId?: string;
+    user?: PortalUserRecord | null;
+    locations?: PortalSessionLocation[];
+    all_locations?: PortalSessionLocation[];
+    location_memberships?: LocationMembership[];
+    selected_location?: PortalSessionLocation | null;
+    location_locked?: boolean;
+    scope?: {
+      organization_id?: string;
+      is_admin?: boolean;
+      is_org_admin?: boolean;
+      is_location_scoped?: boolean;
+      accessible_location_ids?: string[];
+      selected_location_id?: string | null;
+    };
+  };
   location_locked?: boolean;
   branding_snapshot?: Record<string, unknown>;
   message?: string;
   timestamp?: string;
   is_admin?: boolean;
+  onboardingStatus?:
+    | "ready"
+    | "profile_incomplete"
+    | "facility_unassigned"
+    | "role_unassigned"
+    | "organization_conflict"
+    | "identity_conflict"
+    | "account_blocked";
+  missingFields?: string[];
+  recommendedFields?: string[];
+  issues?: Array<{
+    reference_code?: string;
+    issue_key?: string;
+    details?: Record<string, unknown>;
+  }>;
 }
 
 export interface OrganizationMembership {

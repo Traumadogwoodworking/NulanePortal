@@ -90,6 +90,8 @@ const DEV_SESSION_BYPASS_WARNING =
   "DEV SESSION BYPASS ACTIVE";
 let devSessionBypassWarningEmitted = false;
 const FRESH_CALLBACK_SESSION_RETRY_DELAY_MS = 750;
+const SESSION_BACKGROUND_REFRESH_MS = 30_000;
+const SESSION_EVENT_REFRESH_THROTTLE_MS = 2_000;
 
 type DevSessionWindow = Window & {
   __PORTAL_DEV_SESSION_BYPASS__?: boolean;
@@ -162,27 +164,54 @@ function buildDevSession(): PortalSessionResponse {
       {
         location_id: "loc-001",
         organization_id: "org-awct",
-        location_name: "Western Hub",
-        location_label: "A-Peak",
-        display_name: "Western Hub",
+        location_name: "Sterling Heights Assembly Plant",
+        location_label: "SHAP",
+        display_name: "Sterling Heights Assembly Plant",
         is_active: true,
       },
       {
         location_id: "loc-002",
         organization_id: "org-awct",
-        location_name: "Eastern Yard",
-        location_label: "B-Zone",
-        display_name: "Eastern Yard",
+        location_name: "Jefferson North Assembly Plant",
+        location_label: "JNAP",
+        display_name: "Jefferson North Assembly Plant",
         is_active: true,
       },
     ],
     selected_location: {
       location_id: "loc-001",
       organization_id: "org-awct",
-      location_name: "Western Hub",
-      location_label: "A-Peak",
-      display_name: "Western Hub",
+      location_name: "Sterling Heights Assembly Plant",
+      location_label: "SHAP",
+      display_name: "Sterling Heights Assembly Plant",
       is_active: true,
+    },
+    facilityScope: {
+      mode: "restricted",
+      organization_id: "org-awct",
+      allowedLocationIds: ["loc-001"],
+    },
+    scope: {
+      organizationId: "org-awct",
+      location_memberships: [
+        {
+          location_membership_id: "dev-location-membership-west",
+          location_id: "loc-001",
+          organization_id: "org-awct",
+          user_id: "dev-guest-user",
+          role: isLimited ? "member" : "super_admin",
+          is_active: true,
+          is_primary: true,
+        },
+      ],
+      scope: {
+        organization_id: "org-awct",
+        is_admin: !isLimited,
+        is_org_admin: !isLimited,
+        is_location_scoped: true,
+        accessible_location_ids: ["loc-001"],
+        selected_location_id: "loc-001",
+      },
     },
     location_locked: false,
     branding_snapshot: {
@@ -218,6 +247,7 @@ interface PortalSessionContextValue {
   planTier: string | null;
   requiresAds: boolean;
   locations: PortalSessionLocation[];
+  assignedLocationIds: string[];
   selectedLocation: PortalSessionLocation | null;
   selectedLocationId: string | null;
   selectedLocationLabel: string | null;
@@ -238,11 +268,10 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   const freshCallbackRetryCountRef = useRef(0);
   const pathname = usePathname() ?? "/";
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async (options: { background?: boolean } = {}) => {
     if (typeof window === "undefined") return;
     logAuthFlow("PortalSessionProvider.loadSession", {
       reason: "start",
-      status,
       tokenExists: hasPersistedPortalToken(),
     });
 
@@ -283,11 +312,42 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setStatus("loading");
-    setError(null);
+    if (!options.background) {
+      setStatus("loading");
+      setError(null);
+    }
 
     try {
-      const payload = await fetchPortalSession();
+      let payload: PortalSessionResponse;
+      while (true) {
+        try {
+          payload = await fetchPortalSession();
+          break;
+        } catch (fetchError: unknown) {
+          const fetchStatusCode = isSessionFetchError(fetchError) ? fetchError.status : undefined;
+          const tokenExists = hasPersistedPortalToken();
+          const shouldRetryFreshCallback =
+            fetchStatusCode === 401 &&
+            tokenExists &&
+            isFreshAuthCallback() &&
+            freshCallbackRetryCountRef.current < 2;
+          if (!shouldRetryFreshCallback) throw fetchError;
+
+          freshCallbackRetryCountRef.current += 1;
+          logAuthFlow("PortalSessionProvider.loadSession", {
+            reason: "fresh_callback_session_401_retry",
+            httpStatus: 401,
+            status: "authenticating",
+            tokenExists,
+            redirectTarget: pathname,
+            retryCount: freshCallbackRetryCountRef.current,
+          });
+          setStatus("authenticating");
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, FRESH_CALLBACK_SESSION_RETRY_DELAY_MS);
+          });
+        }
+      }
       persistPortalUser(payload.user);
       localStorage.removeItem("portalMockOrgId");
       localStorage.removeItem("portalMockOrgName");
@@ -327,6 +387,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (err instanceof AuthConfigError) {
+        if (options.background) return;
         setError(err);
         setStatus("fatal");
         return;
@@ -343,22 +404,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       }
       if (statusCode === 401) {
         const tokenExists = hasPersistedPortalToken();
-        if (tokenExists && isFreshAuthCallback() && freshCallbackRetryCountRef.current < 2) {
-          freshCallbackRetryCountRef.current += 1;
-          logAuthFlow("PortalSessionProvider.loadSession", {
-            reason: "fresh_callback_session_401_retry",
-            httpStatus: 401,
-            status,
-            tokenExists,
-            redirectTarget: pathname,
-            retryCount: freshCallbackRetryCountRef.current,
-          });
-          setStatus("authenticating");
-          await new Promise((resolve) => {
-            window.setTimeout(resolve, FRESH_CALLBACK_SESSION_RETRY_DELAY_MS);
-          });
-          return loadSession();
-        }
         freshCallbackRetryCountRef.current = 0;
         if (!tokenExists) {
           clearStalePortalSession("session_401");
@@ -367,7 +412,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         logAuthFlow("PortalSessionProvider.loadSession", {
           reason: "session_401",
           httpStatus: 401,
-          status,
           tokenExists,
           redirectTarget: pathname,
         });
@@ -396,6 +440,14 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       }
       const normalizedError =
         err instanceof Error ? err : new Error("Unable to load your session.");
+      if (options.background) {
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "background_refresh_failed",
+          status: "success",
+          tokenExists: hasPersistedPortalToken(),
+        });
+        return;
+      }
       setError(normalizedError);
       setStatus("transient-error");
     }
@@ -440,6 +492,31 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [loadSession]);
 
+  useEffect(() => {
+    if (status !== "success" || isDevSessionBypassEnabled()) return;
+    let lastRefreshAt = 0;
+    const refreshSession = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastRefreshAt < SESSION_EVENT_REFRESH_THROTTLE_MS) return;
+      lastRefreshAt = now;
+      void loadSession({ background: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshSession();
+    };
+    const intervalId = window.setInterval(refreshSession, SESSION_BACKGROUND_REFRESH_MS);
+    window.addEventListener("focus", refreshSession);
+    window.addEventListener("online", refreshSession);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshSession);
+      window.removeEventListener("online", refreshSession);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadSession, status]);
+
   const value = useMemo(() => {
     const sessionRoles = [
       normalizeRoleKey(session?.user?.role),
@@ -472,7 +549,28 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
           .map((location) => [location.location_id, location])
       ).values()
     );
-    const selectedLocation = session?.selected_location ?? null;
+    const directLocationMemberships = [
+      ...(Array.isArray(session?.user?.location_memberships) ? session.user.location_memberships : []),
+      ...(Array.isArray(session?.scope?.location_memberships) ? session.scope.location_memberships : []),
+    ];
+    const membershipLocationIds = Array.from(new Set(
+      directLocationMemberships
+        .filter((membership) => membership?.is_active !== false)
+        .map((membership) => membership?.location_id?.toString().trim() ?? "")
+        .filter(Boolean)
+    ));
+    const restrictedScopeLocationIds =
+      session?.facilityScope?.mode === "restricted" && Array.isArray(session.facilityScope.allowedLocationIds)
+        ? session.facilityScope.allowedLocationIds.map((locationId) => locationId.toString().trim()).filter(Boolean)
+        : [];
+    const assignedLocationIds = membershipLocationIds.length
+      ? membershipLocationIds
+      : Array.from(new Set(restrictedScopeLocationIds));
+    const assignedLocationIdSet = new Set(assignedLocationIds);
+    const directlyAssignedLocations = accessibleLocations.filter((location) =>
+      assignedLocationIdSet.has(location.location_id)
+    );
+    const selectedLocation = session?.selected_location ?? session?.selectedLocation ?? null;
     const selectedLocationId = selectedLocation?.location_id
       ? selectedLocation.location_id.toString()
       : null;
@@ -481,7 +579,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       selectedLocation?.display_name ||
       selectedLocation?.location_name ||
       null;
-    const locationLocked = Boolean(session?.location_locked);
+    const locationLocked = Boolean(session?.location_locked ?? session?.scope?.location_locked);
     const planTier = session?.plan_tier ?? null;
     const requiresAds = Boolean(session?.requires_ads);
     const portalAccess = session?.portal_access ?? true;
@@ -502,7 +600,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         .filter(Boolean)
         .map((value) => normalizeOrganizationKey(value?.toString() ?? ""));
     const twentyFourHourFacility =
-      assignedLocations.find((location) =>
+      directlyAssignedLocations.find((location) =>
         normalizedLocationLabels(location).some(
           (label) => label === "shap" || /(^|\s)shap($|\s)/.test(label)
         )
@@ -548,6 +646,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       planTier,
       requiresAds,
       locations: accessibleLocations,
+      assignedLocationIds,
       selectedLocation,
       selectedLocationId,
       selectedLocationLabel,

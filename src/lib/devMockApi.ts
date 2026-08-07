@@ -5,6 +5,87 @@ import { publicBranding } from "@/lib/publicBranding";
 let devFetchInstalled = false;
 const MOCK_BRAND_LOGO = publicBranding.logoPath;
 const MOCK_FROM_NAME = `${publicBranding.appName} Ops`;
+const MOCK_FACILITY_REGISTRATION_STORAGE_KEY = "inspection-trac.dev.facility-registrations.v1";
+const mockFacilityRegistrations = new Map<string, {
+  slug: string;
+  enabled: boolean;
+  roleKey: string;
+  roleName: string;
+}>([
+  ["loc-001", { slug: "western-hub", enabled: false, roleKey: "user", roleName: "User" }],
+  ["loc-002", { slug: "eastern-yard", enabled: false, roleKey: "user", roleName: "User" }],
+  ["6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c", { slug: "chicago-heights", enabled: true, roleKey: "user", roleName: "User" }],
+]);
+
+function syncMockFacilityRegistrationsFromStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(MOCK_FACILITY_REGISTRATION_STORAGE_KEY) || "[]");
+    if (!Array.isArray(stored)) return;
+    for (const entry of stored) {
+      if (!Array.isArray(entry) || typeof entry[0] !== "string" || !entry[1] || typeof entry[1] !== "object") continue;
+      const value = entry[1] as Record<string, unknown>;
+      if (typeof value.slug !== "string" || typeof value.enabled !== "boolean" || typeof value.roleKey !== "string") continue;
+      mockFacilityRegistrations.set(entry[0], {
+        slug: value.slug,
+        enabled: value.enabled,
+        roleKey: value.roleKey,
+        roleName: typeof value.roleName === "string" ? value.roleName : "User",
+      });
+    }
+  } catch {
+    // Corrupt local-only mock state falls back to deterministic defaults.
+  }
+}
+
+function persistMockFacilityRegistrations() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    MOCK_FACILITY_REGISTRATION_STORAGE_KEY,
+    JSON.stringify(Array.from(mockFacilityRegistrations.entries()))
+  );
+}
+
+function findMockFacilityRegistrationBySlug(slug: string) {
+  syncMockFacilityRegistrationsFromStorage();
+  return Array.from(mockFacilityRegistrations.entries()).find(([, value]) => value.slug === slug);
+}
+
+function mockFacilityName(locationId: string) {
+  if (locationId === "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c") return "Chicago Heights";
+  return locationId === "loc-002" ? "Eastern Yard" : "Western Hub";
+}
+
+function mockFacilityLabel(locationId: string) {
+  if (locationId === "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c") return "Chicago Heights";
+  return locationId === "loc-002" ? "B-Zone" : "A-Peak";
+}
+
+function mockRegistrationPayload(locationId: string) {
+  syncMockFacilityRegistrationsFromStorage();
+  const registration = mockFacilityRegistrations.get(locationId) || {
+    slug: locationId,
+    enabled: false,
+    roleKey: "user",
+    roleName: "User",
+  };
+  return {
+    organization_id: "org-awct",
+    organization_name: "American Wheel & Car",
+    location_id: locationId,
+    location_name: mockFacilityName(locationId),
+    location_label: mockFacilityLabel(locationId),
+    registration_slug: registration.slug,
+    registration_enabled: registration.enabled,
+    registration_available: registration.enabled,
+    registration_default_role_id: "dev-user-role",
+    registration_default_role_key: registration.roleKey,
+    registration_default_role_name: registration.roleName,
+    registration_url: "",
+    global_registration_enabled: true,
+    updated_at: mockTimestamp(),
+  };
+}
 
 function isExplicitDevSessionBypassEnabled(): boolean {
   if (process.env.NODE_ENV === "production") {
@@ -29,6 +110,107 @@ function normalizePath(input: string): string {
 
 function mockTimestamp(offsetMinutes = 0): string {
   return new Date(Date.now() - offsetMinutes * 60_000).toISOString();
+}
+
+function buildMockTwentyFourHourResponse(facility = "") {
+  const snapshotId = "dev-24-hour-snapshot";
+  const currentServerTime = mockTimestamp();
+  const rows = [
+    {
+      id: `${snapshotId}:shap-1`,
+      inventory_row_id: `${snapshotId}:shap-1`,
+      snapshot_id: snapshotId,
+      vin: "SHAPLOCALVIN00001",
+      bucket: "needs_inspected",
+      inspected: false,
+      severity: "overdue",
+      display_label: "Overdue · 2h 0m",
+      display_background_color: "#000000",
+      display_text_color: "#ffffff",
+      first_seen_at: mockTimestamp(26 * 60),
+      last_seen_at: mockTimestamp(5),
+      current_server_time: currentServerTime,
+      time_in_inventory_seconds: 93_600,
+      time_until_24h_seconds: 0,
+      overdue_seconds: 7_200,
+      facility: "SHAP",
+      facility_id: "loc-001",
+      location_id: "loc-001",
+      location: "SHAP/A12",
+      bay: "A12",
+    },
+    {
+      id: `${snapshotId}:jnap-1`,
+      inventory_row_id: `${snapshotId}:jnap-1`,
+      snapshot_id: snapshotId,
+      vin: "JNAPLOCALVIN00001",
+      bucket: "needs_inspected",
+      inspected: false,
+      severity: "normal",
+      display_label: "Needs inspected · 4h 0m",
+      display_background_color: "#ffffff",
+      display_text_color: "#0f172a",
+      first_seen_at: mockTimestamp(4 * 60),
+      last_seen_at: mockTimestamp(3),
+      current_server_time: currentServerTime,
+      time_in_inventory_seconds: 14_400,
+      time_until_24h_seconds: 72_000,
+      overdue_seconds: 0,
+      facility: "JNAP",
+      facility_id: "loc-002",
+      location_id: "loc-002",
+      location: "JNAP/B07",
+      bay: "B07",
+    },
+  ].filter((row) => {
+    const requested = facility.trim().toLowerCase();
+    if (!requested) return true;
+    return [row.facility, row.facility_id, row.location_id]
+      .some((value) => value.toLowerCase() === requested);
+  });
+  const inspected = rows.filter((row) => row.inspected).length;
+  return {
+    ok: true,
+    request_id: `dev-24-hour-${Date.now()}`,
+    inspection_type: "24_hour",
+    generated_at: currentServerTime,
+    current_server_time: currentServerTime,
+    archive_window_days: 3,
+    snapshot: {
+      id: snapshotId,
+      status: "completed",
+      capture_time: mockTimestamp(5),
+      completed_at: mockTimestamp(4),
+      filename: "local-facility-inventory.csv",
+      total_raw_rows: rows.length,
+      accepted_active_rows: rows.length,
+      excluded_stale_rows: 0,
+      rejected_malformed_rows: 0,
+      deduplicated_rows: 0,
+    },
+    summary: {
+      total_active: rows.length,
+      needs_inspected: rows.length - inspected,
+      normal: rows.filter((row) => row.severity === "normal").length,
+      due_12h: 0,
+      critical: 0,
+      overdue: rows.filter((row) => row.severity === "overdue").length,
+      inspected,
+    },
+    totals: { total_active: rows.length, needs_inspected: rows.length - inspected, inspected },
+    metadata: {
+      total_raw_rows: rows.length,
+      accepted_active_rows: rows.length,
+      excluded_stale_rows: 0,
+      rejected_malformed_rows: 0,
+      deduplicated_rows: 0,
+      client_rejected_rows: 0,
+      client_excluded_stale_rows: 0,
+      client_deduplicated_rows: 0,
+    },
+    rows,
+    warnings: [],
+  };
 }
 
 function buildMockReportRows() {
@@ -94,7 +276,7 @@ function buildMockDashboardAnalytics() {
       reportsThisYear: 3,
       vins: 2,
       entries: 1,
-      facilities: 2,
+      facilities: 3,
     },
     currentPeriod: {
       damageToday: 2,
@@ -372,6 +554,17 @@ function buildMockSession() {
         display_name: "Eastern Yard",
         is_active: true,
       },
+      {
+        location_id: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
+        organization_id: "org-awct",
+        location_name: "Chicago Heights",
+        location_label: "Chicago Heights",
+        display_name: "Chicago Heights",
+        is_active: true,
+        metadata: {
+          yards: [{ yard_id: "yard-ff39eedd-4630-467a-97f6-2149b4c6a6d3", yard_name: "Main", yard_code: "MAIN", is_active: true, areas: [] }],
+        },
+      },
     ],
     selected_location: {
       location_id: "loc-001",
@@ -403,6 +596,22 @@ function toJsonResponse(body: unknown): Response {
 }
 
 function resolveForcedDevResponse(path: string): Response | null {
+  const publicRegistrationMatch = path.match(/\/registration\/facilities\/([^/]+)$/);
+  if (publicRegistrationMatch) {
+    const slug = decodeURIComponent(publicRegistrationMatch[1]);
+    const entry = findMockFacilityRegistrationBySlug(slug);
+    if (!entry) return toJsonResponse({ error: "Facility registration was not found." });
+    const [locationId, registration] = entry;
+    return toJsonResponse({
+      facilityName: mockFacilityName(locationId),
+      facilityLabel: mockFacilityLabel(locationId),
+      organizationName: "American Wheel & Car",
+      registrationEnabled: registration.enabled,
+      branding: { companyName: publicBranding.appName, logoUrl: publicBranding.logoPath },
+      support: { displayName: "Inspection-Trac Support", email: publicBranding.supportEmail, phone: "" },
+    });
+  }
+
   if (path.includes("/dashboard/analytics")) {
     return toJsonResponse(buildMockDashboardAnalytics());
   }
@@ -412,7 +621,7 @@ function resolveForcedDevResponse(path: string): Response | null {
       organizationId: "org-awct",
       reports: { open: 0, review: 0, closed: 0 },
       users: 11,
-      facilities: 2,
+      facilities: 3,
       vehicles: 2,
       alerts: 0,
       lastUpdated: mockTimestamp(5),
@@ -470,6 +679,57 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
   if (!isDevMockEnabled()) return null;
   const path = normalizePath(url).replace(/\/+$/, "") || "/";
   const method = (init.method || "GET").toUpperCase();
+
+  const registrationAdminMatch = path.match(/\/admin\/organizations\/[^/]+\/locations\/([^/]+)\/registration$/);
+  if (registrationAdminMatch) {
+    const locationId = decodeURIComponent(registrationAdminMatch[1]);
+    if (method === "PUT") {
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
+      mockFacilityRegistrations.set(locationId, {
+        slug: body.registration_slug || locationId,
+        enabled: body.registration_enabled === true,
+        roleKey: body.registration_default_role_key || "user",
+        roleName: body.registration_default_role_key === "viewer" ? "Viewer" : "User",
+      });
+      persistMockFacilityRegistrations();
+    }
+    return { registration: mockRegistrationPayload(locationId) };
+  }
+
+  const registrationEnrollMatch = path.match(/\/registration\/facilities\/([^/]+)\/enroll$/);
+  if (registrationEnrollMatch && method === "POST") {
+    const slug = decodeURIComponent(registrationEnrollMatch[1]);
+    const entry = findMockFacilityRegistrationBySlug(slug);
+    if (!entry) return null;
+    const [locationId, registration] = entry;
+    return {
+      success: true,
+      organization: { name: "American Wheel & Car" },
+      facility: { name: mockFacilityName(locationId), label: mockFacilityLabel(locationId), slug },
+      role: { name: registration.roleName, key: registration.roleKey },
+      onboardingStatus: "ready",
+      missingFields: [],
+      recommendedFields: ["first_name", "last_name"],
+      issues: [],
+      auth0: { status: "skipped_local_authority" },
+    };
+  }
+
+  const publicRegistrationMatch = path.match(/\/registration\/facilities\/([^/]+)$/);
+  if (publicRegistrationMatch && method === "GET") {
+    const slug = decodeURIComponent(publicRegistrationMatch[1]);
+    const entry = findMockFacilityRegistrationBySlug(slug);
+    if (!entry) return null;
+    const [locationId, registration] = entry;
+    return {
+      facilityName: mockFacilityName(locationId),
+      facilityLabel: mockFacilityLabel(locationId),
+      organizationName: "American Wheel & Car",
+      registrationEnabled: registration.enabled,
+      branding: { companyName: publicBranding.appName, logoUrl: publicBranding.logoPath },
+      support: { displayName: "Inspection-Trac Support", email: publicBranding.supportEmail, phone: "" },
+    };
+  }
 
   if (path.endsWith("/status")) {
     const response: ControlOperationsStatus = {
@@ -529,6 +789,11 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
     return buildMockSession();
   }
 
+  if (path.endsWith("/inspection/24-hour/portal-display")) {
+    const facility = new URL(url, "http://localhost").searchParams.get("facility") ?? "";
+    return buildMockTwentyFourHourResponse(facility);
+  }
+
   if (path.includes("/dashboard/analytics")) {
     return buildMockDashboardAnalytics();
   }
@@ -538,7 +803,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
       organizationId: "org-awct",
       reports: { open: 1, review: 1, closed: 3 },
       users: 11,
-      facilities: 2,
+      facilities: 3,
       vehicles: 2,
       alerts: 1,
       lastUpdated: mockTimestamp(),
@@ -617,7 +882,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
   if (path.includes("/admin/organization-list")) {
     return {
       organizations: [
-        { id: "org-awct", name: "American Wheel & Car", users: 11, facilities: 2, flags: 0, status: "healthy" },
+        { id: "org-awct", name: "American Wheel & Car", users: 11, facilities: 3, flags: 0, status: "healthy" },
         { id: "org-demo", name: "Demo Logistics", users: 4, facilities: 1, flags: 1, status: "watch" },
       ],
     };
@@ -731,6 +996,16 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
       locations: [
         { location_id: "loc-001", location_name: "Western Hub", location_label: "A-Peak", metadata: { city: "Dallas", state: "TX" } },
         { location_id: "loc-002", location_name: "Eastern Yard", location_label: "B-Zone", metadata: { city: "Atlanta", state: "GA" } },
+        {
+          location_id: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
+          location_name: "Chicago Heights",
+          location_label: "Chicago Heights",
+          metadata: {
+            city: "Chicago Heights",
+            state: "IL",
+            yards: [{ yard_id: "yard-ff39eedd-4630-467a-97f6-2149b4c6a6d3", yard_name: "Main", yard_code: "MAIN", is_active: true, areas: [] }],
+          },
+        },
       ],
     };
   }
@@ -771,8 +1046,9 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
         user: cloneMockDirectoryUser(createdUser),
         invitation: {
           provider: "auth0",
-          status: body.invite === false ? "skipped" : "sent",
+          status: body.invite === false ? "skipped" : "requested",
           invitation_id: `inv-${createdUserId}`,
+          email_requested: body.invite !== false && body.send_email !== false,
         },
       };
     }
@@ -782,7 +1058,11 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
   }
 
   if (path.includes("/admin/organizations/") && path.endsWith("/roles")) {
-    return { roles: [{ role_key: "super_admin", role_name: "Super Admin", role_scope: "organization", is_active: true, permissions: ["portal.admin"] }] };
+    return { roles: [
+      { role_key: "super_admin", role_name: "Super Admin", role_scope: "organization", is_active: true, permissions: ["location:manage"] },
+      { role_key: "user", role_name: "User", role_scope: "organization", is_active: true, permissions: ["organization:read", "profile:edit"] },
+      { role_key: "viewer", role_name: "Viewer", role_scope: "organization", is_active: true, permissions: ["organization:read"] },
+    ] };
   }
 
   if (path.includes("/admin/organizations/") && path.endsWith("/memberships")) {

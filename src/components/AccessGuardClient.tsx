@@ -10,14 +10,13 @@ export function AccessGuardClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeRoute = getRouteByPath(pathname ?? "/");
   const isHydrated = typeof window !== "undefined";
-  const isLocalDev = process.env.NODE_ENV !== "production";
 
   if (!isHydrated) {
     return <>{children}</>;
   }
 
   const accessInfo = { isPortalAccessAllowed, isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isAwct, isShap, isSvl, hasPermission };
-  const accessBarrier = isLocalDev ? null : getAccessBarrier(activeRoute, accessInfo);
+  const accessBarrier = getAccessBarrier(activeRoute, accessInfo);
 
   if (accessBarrier?.type === "org-admin") {
     return (

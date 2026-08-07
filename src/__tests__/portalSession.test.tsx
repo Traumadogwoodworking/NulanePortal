@@ -178,7 +178,7 @@ describe("PortalSessionProvider", () => {
     expect(screen.getByTestId("access")).toHaveTextContent("true,true,true");
   });
 
-  it("enables SHAP access from the backend facility list, not the organization name", async () => {
+  it("enables SHAP access from an active direct facility assignment", async () => {
     sessionServiceMocks.fetchPortalSession.mockResolvedValue(
       makeSession({
         organization: {
@@ -195,6 +195,19 @@ describe("PortalSessionProvider", () => {
             is_active: true,
           },
         ],
+        scope: {
+          location_memberships: [
+            {
+              location_membership_id: "membership-shap",
+              location_id: "location-shap",
+              organization_id: "org-1",
+              user_id: "user-1",
+              role: "member",
+              is_active: true,
+              is_primary: true,
+            },
+          ],
+        },
       })
     );
 
@@ -202,6 +215,28 @@ describe("PortalSessionProvider", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("shap-access")).toHaveTextContent("true");
+    });
+  });
+
+  it("does not enable SHAP access from an accessible facility without a direct assignment", async () => {
+    sessionServiceMocks.fetchPortalSession.mockResolvedValue(
+      makeSession({
+        locations: [
+          {
+            location_id: "location-shap",
+            organization_id: "org-1",
+            location_name: "Sterling Heights Assembly Plant",
+            location_label: "SHAP",
+            is_active: true,
+          },
+        ],
+      })
+    );
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("shap-access")).toHaveTextContent("false");
     });
   });
 

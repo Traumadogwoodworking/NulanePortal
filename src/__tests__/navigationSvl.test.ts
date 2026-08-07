@@ -62,3 +62,23 @@ describe("24-hour inspection access", () => {
     expect(getAccessBarrier(route, buildAccessInfo({ isShap: false }))).toBeNull();
   });
 });
+
+describe("RSA report access", () => {
+  test("shows RSA only for users with a direct SHAP assignment", () => {
+    const shapPaths = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: true }))
+      .flatMap((section) => section.items.map((item) => item.href));
+    const otherPaths = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: false }))
+      .flatMap((section) => section.items.map((item) => item.href));
+
+    expect(shapPaths).toContain("/reports/rsa");
+    expect(otherPaths).not.toContain("/reports/rsa");
+  });
+
+  test("blocks direct RSA access without a SHAP assignment, including super admins", () => {
+    const route = getRouteByPath("/reports/rsa");
+
+    expect(getAccessBarrier(route, buildAccessInfo({ isShap: true }))).toBeNull();
+    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false }))).toEqual({ type: "permission" });
+    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false, isSuperAdmin: true }))).toEqual({ type: "permission" });
+  });
+});
