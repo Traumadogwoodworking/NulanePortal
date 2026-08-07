@@ -52,7 +52,6 @@ return (
                       path.indexOf("/reports/list") !== -1 ||
                       path.indexOf("/reports/rsa") !== -1 ||
                       path.indexOf("/report/pull") !== -1 ||
-                      path.indexOf("/registration/facilities/") !== -1 ||
                       (path.indexOf("/admin/organizations/") !== -1 && path.endsWith("/email-lists")) ||
                       path.indexOf("/admin/ledec/shipments") !== -1
                     );
@@ -65,18 +64,7 @@ return (
                   if (shouldMock(url)) {
                     var path = new URL(url, window.location.origin).pathname;
                     var body = {};
-                    if (path.indexOf("/registration/facilities/") !== -1) {
-                      var registrationParts = path.split("/").filter(Boolean);
-                      var registrationSlug = decodeURIComponent(registrationParts[registrationParts.length - 1] || "");
-                      body = {
-                        facilityName: registrationSlug === "eastern-yard" ? "Eastern Yard" : "Western Hub",
-                        facilityLabel: registrationSlug === "eastern-yard" ? "B-Zone" : "A-Peak",
-                        organizationName: "American Wheel & Car",
-                        registrationEnabled: false,
-                        branding: { companyName: "Inspection-Trac", logoUrl: "/media/inspection-trac-logo.png" },
-                        support: { displayName: "Inspection-Trac Support", email: "support@inspection-trac.com", phone: "" },
-                      };
-                    } else if (path.indexOf("/dashboard/analytics") !== -1) {
+                    if (path.indexOf("/dashboard/analytics") !== -1) {
                       body = {
                         totals: {
                           totalReports: 3,
