@@ -15,20 +15,24 @@ describe("facility quick-start guide", () => {
     const definition = buildFacilityGuidePdfDefinition({
       facilityName: "Chicago Heights",
       organizationName: "Inspection-Trac",
-      registrationUrl: "https://inspection-trac.com/join/chicago-heights",
-      qrDataUrl: "data:image/png;base64,example",
+      registrationUrl: "https://inspection-trac.com/join/?facility=chicago-heights",
       supportName: "Inspection-Trac Support",
       supportEmail: "support@inspection-trac.com",
       appName: "Inspection-Trac",
       appStoreUrl: "https://apps.apple.com/example",
       googlePlayUrl: "https://play.google.com/example",
+      packetRevision: 3,
     });
 
     const serialized = JSON.stringify(definition);
     expect(serialized).toContain("Chicago Heights");
-    expect(serialized).toContain("https://inspection-trac.com/join/chicago-heights");
+    expect(serialized).toContain("https://inspection-trac.com/join/?facility=chicago-heights");
     expect(serialized).toContain("https://apps.apple.com/example");
     expect(serialized).toContain("https://play.google.com/example");
     expect(serialized).toContain("support@inspection-trac.com");
+    expect(serialized).toContain('"pageBreak":"before"');
+    expect(serialized).toContain('"fit":144');
+    expect(JSON.stringify((definition.footer as (page: number, total: number) => unknown)(1, 2)))
+      .toContain("Revision 3");
   });
 });

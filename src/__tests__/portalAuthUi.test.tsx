@@ -29,6 +29,7 @@ const portalAuthMocks = vi.hoisted(() => ({
   logAuthFlow: vi.fn(),
   logoutRejectedPortalSession: vi.fn(),
   prepareExplicitAuthRetry: vi.fn(),
+  readStoredPortalLoginReturnTo: vi.fn(() => "/join/?enrollment=opaque-session-token"),
   startAuth0Login: vi.fn(),
 }));
 
@@ -55,6 +56,7 @@ vi.mock("@/lib/portalAuth", () => ({
   logAuthFlow: portalAuthMocks.logAuthFlow,
   logoutRejectedPortalSession: portalAuthMocks.logoutRejectedPortalSession,
   prepareExplicitAuthRetry: portalAuthMocks.prepareExplicitAuthRetry,
+  readStoredPortalLoginReturnTo: portalAuthMocks.readStoredPortalLoginReturnTo,
   startAuth0Login: portalAuthMocks.startAuth0Login,
 }));
 
@@ -155,7 +157,7 @@ describe("AuthCallbackClient", () => {
     await waitFor(() => {
       expect(portalAuthMocks.completeAuth0Callback).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByText(/\/auth\/callback\/?/)).toBeInTheDocument();
+    expect(screen.queryByText(/\/auth\/callback\/?/)).not.toBeInTheDocument();
     expect(screen.queryByText(/secret-code/)).not.toBeInTheDocument();
     expect(screen.queryByText(/secret-state/)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(window.location.href);

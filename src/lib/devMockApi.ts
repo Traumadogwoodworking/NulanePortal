@@ -11,11 +11,29 @@ const mockFacilityRegistrations = new Map<string, {
   enabled: boolean;
   roleKey: string;
   roleName: string;
+  displayName?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  iosStoreUrl?: string;
+  androidStoreUrl?: string;
+  packetRevision?: number;
 }>([
   ["loc-001", { slug: "western-hub", enabled: false, roleKey: "user", roleName: "User" }],
   ["loc-002", { slug: "eastern-yard", enabled: false, roleKey: "user", roleName: "User" }],
   ["6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c", { slug: "chicago-heights", enabled: true, roleKey: "user", roleName: "User" }],
 ]);
+const mockFacilityEnrollmentSessions = new Map<string, {
+  token: string;
+  locationId: string;
+  slug: string;
+  status: string;
+  source: string;
+  email?: string;
+  createdAt: string;
+  expiresAt: string;
+  completedAt?: string;
+  result?: Record<string, unknown>;
+}>();
 
 function syncMockFacilityRegistrationsFromStorage() {
   if (typeof window === "undefined") return;
@@ -31,6 +49,12 @@ function syncMockFacilityRegistrationsFromStorage() {
         enabled: value.enabled,
         roleKey: value.roleKey,
         roleName: typeof value.roleName === "string" ? value.roleName : "User",
+        displayName: typeof value.displayName === "string" ? value.displayName : undefined,
+        supportEmail: typeof value.supportEmail === "string" ? value.supportEmail : undefined,
+        supportPhone: typeof value.supportPhone === "string" ? value.supportPhone : undefined,
+        iosStoreUrl: typeof value.iosStoreUrl === "string" ? value.iosStoreUrl : undefined,
+        androidStoreUrl: typeof value.androidStoreUrl === "string" ? value.androidStoreUrl : undefined,
+        packetRevision: typeof value.packetRevision === "number" ? value.packetRevision : 1,
       });
     }
   } catch {
@@ -68,7 +92,31 @@ function mockRegistrationPayload(locationId: string) {
     enabled: false,
     roleKey: "user",
     roleName: "User",
+    displayName: mockFacilityName(locationId),
+    supportEmail: publicBranding.supportEmail,
+    supportPhone: "",
+    iosStoreUrl: publicBranding.appStoreUrl,
+    androidStoreUrl: publicBranding.googlePlayUrl,
+    packetRevision: 1,
   };
+  const recentEnrollments = Array.from(mockFacilityEnrollmentSessions.values())
+    .filter((session) => session.locationId === locationId)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 10)
+    .map((session) => ({
+      enrollment_session_id: session.token,
+      status: session.status,
+      source: session.source,
+      failure_code: "",
+      created_at: session.createdAt,
+      completed_at: session.completedAt || null,
+      expires_at: session.expiresAt,
+      user_email: session.email || "",
+      role_name: registration.roleName,
+      role_key: registration.roleKey,
+      last_event_key: session.status === "completed" ? "registration.completed" : "registration.session_created",
+      last_event_result: session.status === "completed" ? "success" : "recorded",
+    }));
   return {
     organization_id: "org-awct",
     organization_name: "American Wheel & Car",
@@ -81,9 +129,53 @@ function mockRegistrationPayload(locationId: string) {
     registration_default_role_id: "dev-user-role",
     registration_default_role_key: registration.roleKey,
     registration_default_role_name: registration.roleName,
-    registration_url: "",
+    registration_url: `http://localhost:3001/join/?facility=${encodeURIComponent(registration.slug)}`,
+    onboarding_display_name: registration.displayName || mockFacilityName(locationId),
+    support: {
+      displayName: "Inspection-Trac Support",
+      email: registration.supportEmail || publicBranding.supportEmail,
+      phone: registration.supportPhone || "",
+    },
+    stores: {
+      ios: registration.iosStoreUrl || publicBranding.appStoreUrl,
+      android: registration.androidStoreUrl || publicBranding.googlePlayUrl,
+    },
+    packet_revision: registration.packetRevision || 1,
+    packet_updated_at: mockTimestamp(),
+    last_successful_enrollment: recentEnrollments.find((entry) => entry.status === "completed") || null,
+    recent_enrollments: recentEnrollments,
     global_registration_enabled: true,
     updated_at: mockTimestamp(),
+  };
+}
+
+function mockEnrollmentSessionPayload(session: NonNullable<ReturnType<typeof mockFacilityEnrollmentSessions.get>>) {
+  const registration = mockFacilityRegistrations.get(session.locationId);
+  return {
+    enrollmentToken: session.token,
+    status: session.status,
+    expiresAt: session.expiresAt,
+    completedAt: session.completedAt || null,
+    failureCode: "",
+    organizationName: "American Wheel & Car",
+    facilityName: registration?.displayName || mockFacilityName(session.locationId),
+    facilityLabel: mockFacilityLabel(session.locationId),
+    registrationEnabled: registration?.enabled === true,
+    roleName: registration?.roleName || "User",
+    support: {
+      displayName: "Inspection-Trac Support",
+      email: registration?.supportEmail || publicBranding.supportEmail,
+      phone: registration?.supportPhone || "",
+    },
+    stores: {
+      ios: registration?.iosStoreUrl || publicBranding.appStoreUrl,
+      android: registration?.androidStoreUrl || publicBranding.googlePlayUrl,
+    },
+    branding: { companyName: publicBranding.appName, logoUrl: publicBranding.logoPath },
+    packetRevision: registration?.packetRevision || 1,
+    restartUrl: `http://localhost:3001/join/?facility=${encodeURIComponent(session.slug)}`,
+    emailEntered: Boolean(session.email),
+    enrollmentResult: session.result || undefined,
   };
 }
 
@@ -690,29 +782,92 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
         enabled: body.registration_enabled === true,
         roleKey: body.registration_default_role_key || "user",
         roleName: body.registration_default_role_key === "viewer" ? "Viewer" : "User",
+        displayName: body.onboarding_display_name || mockFacilityName(locationId),
+        supportEmail: body.support_email || publicBranding.supportEmail,
+        supportPhone: body.support_phone || "",
+        iosStoreUrl: body.ios_store_url || publicBranding.appStoreUrl,
+        androidStoreUrl: body.android_store_url || publicBranding.googlePlayUrl,
+        packetRevision: (mockFacilityRegistrations.get(locationId)?.packetRevision || 1) + 1,
       });
       persistMockFacilityRegistrations();
     }
     return { registration: mockRegistrationPayload(locationId) };
   }
 
-  const registrationEnrollMatch = path.match(/\/registration\/facilities\/([^/]+)\/enroll$/);
-  if (registrationEnrollMatch && method === "POST") {
-    const slug = decodeURIComponent(registrationEnrollMatch[1]);
+  const createRegistrationSessionMatch = path.match(/\/registration\/facilities\/([^/]+)\/session$/);
+  if (createRegistrationSessionMatch && method === "POST") {
+    const slug = decodeURIComponent(createRegistrationSessionMatch[1]);
     const entry = findMockFacilityRegistrationBySlug(slug);
     if (!entry) return null;
-    const [locationId, registration] = entry;
-    return {
+    const [locationId] = entry;
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
+    const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`.padEnd(43, "x").slice(0, 43);
+    const session = {
+      token,
+      locationId,
+      slug,
+      status: "started",
+      source: body.source === "portal_test" ? "portal_test" : "facility_qr",
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+    };
+    mockFacilityEnrollmentSessions.set(token, session);
+    return mockEnrollmentSessionPayload(session);
+  }
+
+  const registrationSessionEmailMatch = path.match(/\/registration\/sessions\/([^/]+)\/email$/);
+  if (registrationSessionEmailMatch && method === "POST") {
+    const token = decodeURIComponent(registrationSessionEmailMatch[1]);
+    const session = mockFacilityEnrollmentSessions.get(token);
+    if (!session) return null;
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
+    session.email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    session.status = "email_entered";
+    return mockEnrollmentSessionPayload(session);
+  }
+
+  const registrationSessionEventMatch = path.match(/\/registration\/sessions\/([^/]+)\/events$/);
+  if (registrationSessionEventMatch && method === "POST") {
+    const token = decodeURIComponent(registrationSessionEventMatch[1]);
+    const session = mockFacilityEnrollmentSessions.get(token);
+    if (!session) return null;
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
+    if (body.event_key === "registration.auth_started") session.status = "auth_started";
+    return { recorded: true, status: session.status };
+  }
+
+  const registrationSessionEnrollMatch = path.match(/\/registration\/sessions\/([^/]+)\/enroll$/);
+  if (registrationSessionEnrollMatch && method === "POST") {
+    const token = decodeURIComponent(registrationSessionEnrollMatch[1]);
+    const session = mockFacilityEnrollmentSessions.get(token);
+    if (!session) return null;
+    const registration = mockFacilityRegistrations.get(session.locationId);
+    if (!registration) return null;
+    const result = {
       success: true,
       organization: { name: "American Wheel & Car" },
-      facility: { name: mockFacilityName(locationId), label: mockFacilityLabel(locationId), slug },
+      facility: { name: registration.displayName || mockFacilityName(session.locationId), label: mockFacilityLabel(session.locationId), slug: session.slug },
       role: { name: registration.roleName, key: registration.roleKey },
       onboardingStatus: "ready",
       missingFields: [],
       recommendedFields: ["first_name", "last_name"],
       issues: [],
-      auth0: { status: "skipped_local_authority" },
+      alreadyMember: false,
+      signedInEmail: session.email,
+      membershipChanges: { userCreated: true, organizationMembershipCreated: true, facilityMembershipCreated: true, roleAssigned: true },
+      auth0: { status: "identity_only" },
     };
+    session.status = "completed";
+    session.completedAt = new Date().toISOString();
+    session.result = result;
+    return result;
+  }
+
+  const registrationSessionMatch = path.match(/\/registration\/sessions\/([^/]+)$/);
+  if (registrationSessionMatch && method === "GET") {
+    const token = decodeURIComponent(registrationSessionMatch[1]);
+    const session = mockFacilityEnrollmentSessions.get(token);
+    return session ? mockEnrollmentSessionPayload(session) : null;
   }
 
   const publicRegistrationMatch = path.match(/\/registration\/facilities\/([^/]+)$/);
@@ -728,6 +883,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
       registrationEnabled: registration.enabled,
       branding: { companyName: publicBranding.appName, logoUrl: publicBranding.logoPath },
       support: { displayName: "Inspection-Trac Support", email: publicBranding.supportEmail, phone: "" },
+      stores: { ios: publicBranding.appStoreUrl, android: publicBranding.googlePlayUrl },
     };
   }
 

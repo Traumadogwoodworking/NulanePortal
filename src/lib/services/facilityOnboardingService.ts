@@ -2,6 +2,31 @@ import { apiFetch, PortalApiHttpError } from "@/lib/apiClient";
 import { buildApiUrl } from "@/lib/config";
 import { isDevMockEnabled, resolveDevMockResponse } from "@/lib/devMockApi";
 
+export interface FacilitySupport {
+  displayName?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface FacilityStores {
+  ios?: string;
+  android?: string;
+}
+
+export interface FacilityEnrollmentHistoryItem {
+  sessionId: string;
+  status: string;
+  source: string;
+  failureCode: string;
+  userEmail: string;
+  roleName: string;
+  lastEventKey: string;
+  lastEventResult: string;
+  createdAt: string | null;
+  completedAt: string | null;
+  expiresAt: string | null;
+}
+
 export interface FacilityRegistrationConfiguration {
   organizationId: string;
   organizationName: string;
@@ -15,6 +40,13 @@ export interface FacilityRegistrationConfiguration {
   defaultRoleKey: string;
   defaultRoleName: string;
   registrationUrl: string;
+  onboardingDisplayName: string;
+  support: FacilitySupport;
+  stores: FacilityStores;
+  packetRevision: number;
+  packetUpdatedAt: string | null;
+  lastSuccessfulEnrollment: FacilityEnrollmentHistoryItem | null;
+  recentEnrollments: FacilityEnrollmentHistoryItem[];
   globalEnabled: boolean;
   updatedAt: string | null;
 }
@@ -25,7 +57,8 @@ export interface PublicFacilityRegistration {
   organizationName: string;
   registrationEnabled: boolean;
   branding: { companyName?: string; logoUrl?: string };
-  support: { displayName?: string; email?: string; phone?: string };
+  support: FacilitySupport;
+  stores: FacilityStores;
 }
 
 export interface FacilityEnrollmentResult {
@@ -37,7 +70,36 @@ export interface FacilityEnrollmentResult {
   missingFields: string[];
   recommendedFields: string[];
   issues: Array<{ reference_code?: string; issue_key?: string; details?: unknown }>;
-  auth0: { status: "synced" | "skipped_local_authority" | "needs_attention"; reason?: string };
+  alreadyMember: boolean;
+  signedInEmail?: string;
+  idempotentReplay?: boolean;
+  membershipChanges?: {
+    userCreated?: boolean;
+    organizationMembershipCreated?: boolean;
+    facilityMembershipCreated?: boolean;
+    roleAssigned?: boolean;
+  };
+  auth0: { status: "identity_only" };
+}
+
+export interface FacilityEnrollmentSession {
+  enrollmentToken: string;
+  status: string;
+  expiresAt: string | null;
+  completedAt: string | null;
+  failureCode: string;
+  organizationName: string;
+  facilityName: string;
+  facilityLabel: string;
+  registrationEnabled: boolean;
+  roleName: string;
+  support: FacilitySupport;
+  stores: FacilityStores;
+  branding: { companyName?: string; logoUrl?: string };
+  packetRevision: number;
+  restartUrl: string;
+  emailEntered: boolean;
+  enrollmentResult: FacilityEnrollmentResult | null;
 }
 
 export class FacilityRegistrationError extends Error {
@@ -68,8 +130,43 @@ function texts(value: unknown): string[] {
   return Array.isArray(value) ? value.map(text).filter(Boolean) : [];
 }
 
+function normalizeSupport(value: unknown): FacilitySupport {
+  const row = record(value);
+  return {
+    displayName: text(row.displayName) || undefined,
+    email: text(row.email) || undefined,
+    phone: text(row.phone) || undefined,
+  };
+}
+
+function normalizeStores(value: unknown): FacilityStores {
+  const row = record(value);
+  return { ios: text(row.ios) || undefined, android: text(row.android) || undefined };
+}
+
+function normalizeHistoryItem(value: unknown): FacilityEnrollmentHistoryItem {
+  const row = record(value);
+  return {
+    sessionId: text(row.enrollment_session_id),
+    status: text(row.status),
+    source: text(row.source),
+    failureCode: text(row.failure_code),
+    userEmail: text(row.user_email),
+    roleName: text(row.role_name),
+    lastEventKey: text(row.last_event_key),
+    lastEventResult: text(row.last_event_result),
+    createdAt: text(row.created_at) || null,
+    completedAt: text(row.completed_at) || null,
+    expiresAt: text(row.expires_at) || null,
+  };
+}
+
 function normalizeConfiguration(payload: unknown): FacilityRegistrationConfiguration {
   const row = record(record(payload).registration || payload);
+  const recentEnrollments = Array.isArray(row.recent_enrollments)
+    ? row.recent_enrollments.map(normalizeHistoryItem)
+    : [];
+  const lastSuccessful = record(row.last_successful_enrollment);
   return {
     organizationId: text(row.organization_id),
     organizationName: text(row.organization_name),
@@ -83,9 +180,99 @@ function normalizeConfiguration(payload: unknown): FacilityRegistrationConfigura
     defaultRoleKey: text(row.registration_default_role_key),
     defaultRoleName: text(row.registration_default_role_name),
     registrationUrl: text(row.registration_url),
+    onboardingDisplayName: text(row.onboarding_display_name),
+    support: normalizeSupport(row.support),
+    stores: normalizeStores(row.stores),
+    packetRevision: Number(row.packet_revision) || 1,
+    packetUpdatedAt: text(row.packet_updated_at) || null,
+    lastSuccessfulEnrollment: Object.keys(lastSuccessful).length ? normalizeHistoryItem(lastSuccessful) : null,
+    recentEnrollments,
     globalEnabled: row.global_registration_enabled !== false,
     updatedAt: text(row.updated_at) || null,
   };
+}
+
+function normalizeEnrollmentResult(payload: unknown): FacilityEnrollmentResult {
+  const response = record(payload);
+  const organization = record(response.organization);
+  const facility = record(response.facility);
+  const role = record(response.role);
+  const auth0 = record(response.auth0);
+  const membershipChanges = record(response.membershipChanges);
+  return {
+    success: true,
+    organization: { name: text(organization.name) },
+    facility: { name: text(facility.name), label: text(facility.label) || undefined, slug: text(facility.slug) },
+    role: { name: text(role.name), key: text(role.key) },
+    onboardingStatus: text(response.onboardingStatus) || "profile_incomplete",
+    missingFields: texts(response.missingFields),
+    recommendedFields: texts(response.recommendedFields),
+    issues: Array.isArray(response.issues) ? response.issues.map((issue) => record(issue)) : [],
+    alreadyMember: response.alreadyMember === true,
+    signedInEmail: text(response.signedInEmail) || undefined,
+    idempotentReplay: response.idempotentReplay === true || undefined,
+    membershipChanges: Object.keys(membershipChanges).length ? {
+      userCreated: membershipChanges.userCreated === true,
+      organizationMembershipCreated: membershipChanges.organizationMembershipCreated === true,
+      facilityMembershipCreated: membershipChanges.facilityMembershipCreated === true,
+      roleAssigned: membershipChanges.roleAssigned === true,
+    } : undefined,
+    auth0: { status: text(auth0.status) === "identity_only" ? "identity_only" : "identity_only" },
+  };
+}
+
+function normalizeSession(payload: unknown, knownToken = ""): FacilityEnrollmentSession {
+  const row = record(payload);
+  const result = record(row.enrollmentResult);
+  return {
+    enrollmentToken: text(row.enrollmentToken) || knownToken,
+    status: text(row.status) || "started",
+    expiresAt: text(row.expiresAt) || null,
+    completedAt: text(row.completedAt) || null,
+    failureCode: text(row.failureCode),
+    organizationName: text(row.organizationName),
+    facilityName: text(row.facilityName),
+    facilityLabel: text(row.facilityLabel),
+    registrationEnabled: row.registrationEnabled === true,
+    roleName: text(row.roleName),
+    support: normalizeSupport(row.support),
+    stores: normalizeStores(row.stores),
+    branding: {
+      companyName: text(record(row.branding).companyName) || undefined,
+      logoUrl: text(record(row.branding).logoUrl) || undefined,
+    },
+    packetRevision: Number(row.packetRevision) || 1,
+    restartUrl: text(row.restartUrl),
+    emailEntered: row.emailEntered === true || ["email_entered", "auth_started", "authenticated", "enrolling", "completed"].includes(text(row.status)),
+    enrollmentResult: Object.keys(result).length ? normalizeEnrollmentResult(result) : null,
+  };
+}
+
+async function publicRegistrationRequest(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  if (isDevMockEnabled()) {
+    return record(await resolveDevMockResponse(buildApiUrl(path), init));
+  }
+  const response = await fetch(buildApiUrl(path), {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers || {}),
+    },
+    cache: "no-store",
+  });
+  const payload = record(await response.json().catch(() => ({})));
+  if (!response.ok) {
+    throw new FacilityRegistrationError(
+      text(payload.error) || "Facility registration is unavailable.",
+      {
+        code: text(payload.code) || "REGISTRATION_REQUEST_FAILED",
+        requestId: response.headers.get("x-request-id") || "",
+        status: response.status,
+      }
+    );
+  }
+  return payload;
 }
 
 export async function fetchFacilityRegistration(
@@ -101,7 +288,16 @@ export async function fetchFacilityRegistration(
 export async function updateFacilityRegistration(
   organizationId: string,
   facilityId: string,
-  update: { slug: string; enabled: boolean; defaultRoleKey: string }
+  update: {
+    slug: string;
+    enabled: boolean;
+    defaultRoleKey: string;
+    onboardingDisplayName?: string;
+    supportEmail?: string;
+    supportPhone?: string;
+    iosStoreUrl?: string;
+    androidStoreUrl?: string;
+  }
 ): Promise<FacilityRegistrationConfiguration> {
   return normalizeConfiguration(await apiFetch(
     `/admin/organizations/${organizationId}/locations/${facilityId}/registration`,
@@ -111,6 +307,11 @@ export async function updateFacilityRegistration(
         registration_slug: update.slug,
         registration_enabled: update.enabled,
         registration_default_role_key: update.defaultRoleKey,
+        onboarding_display_name: update.onboardingDisplayName,
+        support_email: update.supportEmail,
+        support_phone: update.supportPhone,
+        ios_store_url: update.iosStoreUrl,
+        android_store_url: update.androidStoreUrl,
       }),
       portal: { callerLabel: "facility-registration.update" },
     }
@@ -118,48 +319,60 @@ export async function updateFacilityRegistration(
 }
 
 export async function fetchPublicFacilityRegistration(slug: string): Promise<PublicFacilityRegistration> {
-  let payload: Record<string, unknown>;
-  if (isDevMockEnabled()) {
-    payload = record(await resolveDevMockResponse(buildApiUrl(`/registration/facilities/${encodeURIComponent(slug)}`)));
-  } else {
-    const response = await fetch(buildApiUrl(`/registration/facilities/${encodeURIComponent(slug)}`), {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    payload = record(await response.json().catch(() => ({})));
-    if (!response.ok) {
-      throw new FacilityRegistrationError(
-        text(payload.error) || "Facility registration is unavailable.",
-        {
-          code: text(payload.code) || "REGISTRATION_LOOKUP_FAILED",
-          requestId: response.headers.get("x-request-id") || "",
-          status: response.status,
-        }
-      );
-    }
-  }
+  const payload = await publicRegistrationRequest(`/registration/facilities/${encodeURIComponent(slug)}`);
   const branding = record(payload.branding);
-  const support = record(payload.support);
   return {
     facilityName: text(payload.facilityName),
     facilityLabel: text(payload.facilityLabel),
     organizationName: text(payload.organizationName),
     registrationEnabled: payload.registrationEnabled === true,
     branding: { companyName: text(branding.companyName), logoUrl: text(branding.logoUrl) },
-    support: {
-      displayName: text(support.displayName),
-      email: text(support.email),
-      phone: text(support.phone),
-    },
+    support: normalizeSupport(payload.support),
+    stores: normalizeStores(payload.stores),
   };
 }
 
-export async function enrollInFacility(slug: string, expectedEmail: string): Promise<FacilityEnrollmentResult> {
+export async function createFacilityEnrollmentSession(
+  slug: string,
+  source: "facility_qr" | "portal_link" | "portal_test" = "facility_qr"
+): Promise<FacilityEnrollmentSession> {
+  const payload = await publicRegistrationRequest(
+    `/registration/facilities/${encodeURIComponent(slug)}/session`,
+    { method: "POST", body: JSON.stringify({ source }) }
+  );
+  return normalizeSession(payload);
+}
+
+export async function fetchFacilityEnrollmentSession(token: string): Promise<FacilityEnrollmentSession> {
+  return normalizeSession(await publicRegistrationRequest(
+    `/registration/sessions/${encodeURIComponent(token)}`
+  ), token);
+}
+
+export async function submitFacilityEnrollmentEmail(token: string, email: string): Promise<FacilityEnrollmentSession> {
+  return normalizeSession(await publicRegistrationRequest(
+    `/registration/sessions/${encodeURIComponent(token)}/email`,
+    { method: "POST", body: JSON.stringify({ email: email.trim().toLowerCase() }) }
+  ), token);
+}
+
+export async function recordFacilityEnrollmentEvent(
+  token: string,
+  eventKey: "registration.page_viewed" | "registration.auth_started" | "registration.app_open_clicked" | "registration.install_clicked",
+  details: Record<string, string | number | boolean> = {}
+): Promise<void> {
+  await publicRegistrationRequest(`/registration/sessions/${encodeURIComponent(token)}/events`, {
+    method: "POST",
+    body: JSON.stringify({ event_key: eventKey, details }),
+  });
+}
+
+export async function enrollInFacility(token: string): Promise<FacilityEnrollmentResult> {
   let response: Record<string, unknown>;
   try {
-    response = record(await apiFetch(`/registration/facilities/${encodeURIComponent(slug)}/enroll`, {
+    response = record(await apiFetch(`/registration/sessions/${encodeURIComponent(token)}/enroll`, {
       method: "POST",
-      body: JSON.stringify({ expected_email: expectedEmail.trim().toLowerCase() }),
+      body: JSON.stringify({}),
       portal: { callerLabel: "facility-registration.enroll", skipAuthRedirect: true },
     }));
   } catch (error) {
@@ -171,22 +384,5 @@ export async function enrollInFacility(slug: string, expectedEmail: string): Pro
     }
     throw error;
   }
-  const organization = record(response.organization);
-  const facility = record(response.facility);
-  const role = record(response.role);
-  const auth0 = record(response.auth0);
-  return {
-    success: true,
-    organization: { name: text(organization.name) },
-    facility: { name: text(facility.name), label: text(facility.label) || undefined, slug: text(facility.slug) },
-    role: { name: text(role.name), key: text(role.key) },
-    onboardingStatus: text(response.onboardingStatus) || "profile_incomplete",
-    missingFields: texts(response.missingFields),
-    recommendedFields: texts(response.recommendedFields),
-    issues: Array.isArray(response.issues) ? response.issues.map((issue) => record(issue)) : [],
-    auth0: {
-      status: (text(auth0.status) || "needs_attention") as FacilityEnrollmentResult["auth0"]["status"],
-      reason: text(auth0.reason) || undefined,
-    },
-  };
+  return normalizeEnrollmentResult(response);
 }

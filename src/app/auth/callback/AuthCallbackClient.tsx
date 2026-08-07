@@ -9,6 +9,7 @@ import {
   hasPersistedPortalToken,
   logAuthFlow,
   prepareExplicitAuthRetry,
+  readStoredPortalLoginReturnTo,
   startAuth0Login,
 } from "@/lib/portalAuth";
 
@@ -37,6 +38,8 @@ export function AuthCallbackClient() {
       const authError = callbackParams.get("error");
       const authErrorDescription = callbackParams.get("error_description");
       if (authError) {
+        const recoveryDestination = readStoredPortalLoginReturnTo("/home/");
+        setDestination(recoveryDestination);
         clearPortalAuthStorage();
         cleanAuthCallbackUrl();
         logAuthFlow("AuthCallbackClient.run", {
@@ -108,24 +111,19 @@ export function AuthCallbackClient() {
         <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-600" data-auth0-callback-error>
           {errorMessage || ""}
         </p>
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
-          <p className="font-black uppercase tracking-[0.24em] text-slate-400">Debug</p>
+        {status === "failed" ? <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
+          <p className="font-black uppercase tracking-[0.24em] text-slate-400">Sign-in recovery</p>
           <p className="mt-2">
-            Destination: <span className="font-semibold text-slate-800" data-auth0-callback-destination>{destination}</span>
+            Your original destination is preserved. Retrying sign-in will return you to the same registration or portal page.
           </p>
-          <p className="mt-1">
-            Path:{" "}
-            <span className="font-semibold text-slate-800" suppressHydrationWarning>
-              {typeof window !== "undefined" ? window.location.pathname : "server"}
-            </span>
-          </p>
+          <span className="sr-only" data-auth0-callback-destination>{destination}</span>
           <button
             type="button"
             onClick={() => {
               prepareExplicitAuthRetry();
               setStatus("processing");
               setErrorMessage(null);
-              void startAuth0Login("/home/").catch((error) => {
+              void startAuth0Login(destination).catch((error) => {
                 if (error instanceof AuthRedirectError) return;
                 setErrorMessage(error instanceof Error ? error.message : "Unable to restart sign in.");
                 setStatus("failed");
@@ -135,7 +133,7 @@ export function AuthCallbackClient() {
           >
             Try sign in again
           </button>
-        </div>
+        </div> : null}
       </div>
     </main>
   );

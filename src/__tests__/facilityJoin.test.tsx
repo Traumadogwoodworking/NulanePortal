@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FacilityJoinClient } from "@/app/join/FacilityJoinClient";
 
 const mocks = vi.hoisted(() => ({
-  fetchPublicFacilityRegistration: vi.fn(),
+  query: "facility=chicago-heights",
+  createFacilityEnrollmentSession: vi.fn(),
+  fetchFacilityEnrollmentSession: vi.fn(),
+  submitFacilityEnrollmentEmail: vi.fn(),
+  recordFacilityEnrollmentEvent: vi.fn(),
   enrollInFacility: vi.fn(),
   hasPersistedPortalToken: vi.fn(),
   startFacilityRegistrationAuth: vi.fn(),
@@ -12,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/join/",
-  useSearchParams: () => new URLSearchParams("facility=chicago-heights"),
+  useSearchParams: () => new URLSearchParams(mocks.query),
 }));
 
 vi.mock("@/lib/services/facilityOnboardingService", async () => {
@@ -23,7 +27,10 @@ vi.mock("@/lib/services/facilityOnboardingService", async () => {
   }
   return {
     FacilityRegistrationError,
-    fetchPublicFacilityRegistration: mocks.fetchPublicFacilityRegistration,
+    createFacilityEnrollmentSession: mocks.createFacilityEnrollmentSession,
+    fetchFacilityEnrollmentSession: mocks.fetchFacilityEnrollmentSession,
+    submitFacilityEnrollmentEmail: mocks.submitFacilityEnrollmentEmail,
+    recordFacilityEnrollmentEvent: mocks.recordFacilityEnrollmentEvent,
     enrollInFacility: mocks.enrollInFacility,
   };
 });
@@ -44,52 +51,73 @@ vi.mock("@/lib/publicBranding", () => ({
   },
 }));
 
+function session(overrides = {}) {
+  return {
+    enrollmentToken: "opaque-enrollment-token-12345678901234567890",
+    status: "started",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    completedAt: null,
+    failureCode: "",
+    organizationName: "Inspection-Trac",
+    facilityName: "Chicago Heights",
+    facilityLabel: "",
+    registrationEnabled: true,
+    roleName: "User",
+    support: { displayName: "Inspection-Trac Support", email: "support@inspection-trac.com" },
+    stores: {},
+    branding: {},
+    packetRevision: 1,
+    restartUrl: "https://inspection-trac.com/join/?facility=chicago-heights",
+    emailEntered: false,
+    enrollmentResult: null,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.query = "facility=chicago-heights";
   window.localStorage.clear();
   window.sessionStorage.clear();
   window.history.replaceState({}, "", "/join/?facility=chicago-heights");
   mocks.hasPersistedPortalToken.mockReturnValue(false);
-  mocks.fetchPublicFacilityRegistration.mockResolvedValue({
-    facilityName: "Chicago Heights",
-    facilityLabel: "",
-    organizationName: "Inspection-Trac",
-    registrationEnabled: true,
-    branding: {},
-    support: { displayName: "Inspection-Trac Support", email: "support@inspection-trac.com" },
-  });
+  mocks.createFacilityEnrollmentSession.mockResolvedValue(session());
+  mocks.submitFacilityEnrollmentEmail.mockResolvedValue(session({ status: "email_entered", emailEntered: true }));
+  mocks.recordFacilityEnrollmentEvent.mockResolvedValue(undefined);
   mocks.startFacilityRegistrationAuth.mockResolvedValue(undefined);
 });
 
 describe("FacilityJoinClient", () => {
-  it("requires an email and passes it to Auth0 as the facility-registration identity hint", async () => {
+  it("creates an opaque session, binds the email server-side, and returns Auth0 only to that session", async () => {
     render(<FacilityJoinClient />);
 
     await screen.findByRole("heading", { name: "Join Chicago Heights" });
+    expect(mocks.createFacilityEnrollmentSession).toHaveBeenCalledWith("chicago-heights", "facility_qr");
+    expect(window.location.search).toContain("enrollment=opaque-enrollment-token");
+    expect(window.location.search).not.toContain("facility=chicago-heights");
+
     const createButton = screen.getByRole("button", { name: "Create account" });
     expect(createButton).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Email address"), {
-      target: { value: " Person@Example.com " },
-    });
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: " Person@Example.com " } });
     fireEvent.click(createButton);
 
     await waitFor(() => {
+      expect(mocks.submitFacilityEnrollmentEmail).toHaveBeenCalledWith(
+        "opaque-enrollment-token-12345678901234567890",
+        "person@example.com"
+      );
       expect(mocks.startFacilityRegistrationAuth).toHaveBeenCalledWith(
-        "/join/?facility=chicago-heights",
+        "/join/?enrollment=opaque-enrollment-token-12345678901234567890",
         { email: "person@example.com", signup: true }
       );
     });
-    expect(window.sessionStorage.getItem("inspection-trac.facility-registration-email.chicago-heights"))
-      .toBe("person@example.com");
+    expect(window.sessionStorage.length).toBe(0);
   });
 
-  it("uses the stored email for idempotent enrollment after Auth0 returns", async () => {
-    window.sessionStorage.setItem(
-      "inspection-trac.facility-registration-email.chicago-heights",
-      "person@example.com"
-    );
+  it("restores the opaque session and idempotently enrolls after Auth0 returns", async () => {
+    mocks.query = "enrollment=opaque-enrollment-token-12345678901234567890";
     mocks.hasPersistedPortalToken.mockReturnValue(true);
+    mocks.fetchFacilityEnrollmentSession.mockResolvedValue(session({ status: "auth_started", emailEntered: true }));
     mocks.enrollInFacility.mockResolvedValue({
       success: true,
       organization: { name: "Inspection-Trac" },
@@ -99,18 +127,19 @@ describe("FacilityJoinClient", () => {
       missingFields: [],
       recommendedFields: ["first_name", "last_name"],
       issues: [],
-      auth0: { status: "synced" },
+      alreadyMember: false,
+      signedInEmail: "person@example.com",
+      auth0: { status: "identity_only" },
     });
 
     render(<FacilityJoinClient />);
 
     await waitFor(() => {
-      expect(mocks.enrollInFacility).toHaveBeenCalledWith(
-        "chicago-heights",
-        "person@example.com"
-      );
+      expect(mocks.fetchFacilityEnrollmentSession).toHaveBeenCalledWith("opaque-enrollment-token-12345678901234567890");
+      expect(mocks.enrollInFacility).toHaveBeenCalledWith("opaque-enrollment-token-12345678901234567890");
     });
     expect(await screen.findByText("You’re set up for Chicago Heights.")).toBeInTheDocument();
+    expect(screen.getByText("Signed in as person@example.com")).toBeInTheDocument();
     expect(screen.getByText(/does not block facility access/i)).toBeInTheDocument();
   });
 });

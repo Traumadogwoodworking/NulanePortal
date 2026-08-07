@@ -622,6 +622,15 @@ export function cleanAuthCallbackUrl() {
   window.history.replaceState({}, document.title, "/auth/callback/");
 }
 
+export function readStoredPortalLoginReturnTo(fallback = "/home/") {
+  if (!isBrowser()) return resolveSafePortalReturnTo(fallback);
+  try {
+    return resolveSafePortalReturnTo(window.sessionStorage.getItem("portal_login_return_to") || fallback);
+  } catch {
+    return resolveSafePortalReturnTo(fallback);
+  }
+}
+
 function isLocalDevOrigin() {
   if (!isBrowser() || process.env.NODE_ENV === "production") {
     return false;

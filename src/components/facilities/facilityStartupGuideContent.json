@@ -1,4 +1,14 @@
 {
+  "front": {
+    "eyebrow": "INSPECTION-TRAC FACILITY ACCESS",
+    "title": "Scan to get started",
+    "instruction": "Use your phone camera. Enter your work email, then create an account or sign in with that exact address.",
+    "privacy": "The QR code identifies this facility only. It contains no employee name, email, password, or permission."
+  },
+  "back": {
+    "title": "Your Inspection-Trac quick start",
+    "safety": "If the facility shown after scanning is not correct, stop and contact support. No assignment is created until your verified sign-in completes."
+  },
   "steps": [
     {
       "title": "Install Inspection-Trac",
