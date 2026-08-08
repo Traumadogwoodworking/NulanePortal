@@ -30,7 +30,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/embedded-login", {
+      const response = await fetch("/api/auth/embedded-login/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
