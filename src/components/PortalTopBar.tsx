@@ -8,9 +8,10 @@ import type { PortalOrganizationScopeKey } from "@/lib/portalOrganizations";
 interface PortalTopBarProps {
   pageTitle: string;
   pageSubtitle?: string;
+  showOrganizationScope?: boolean;
 }
 
-export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
+export function PortalTopBar({ pageTitle, pageSubtitle, showOrganizationScope = true }: PortalTopBarProps) {
   const {
     organizationScopes,
     selectedOrganizationScopeKey,
@@ -60,26 +61,28 @@ export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
           </div>
         </div>
 
-        <label className="flex min-w-0 max-w-56 flex-col gap-1 justify-self-end text-left">
-          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-800">
-            Organization view
-          </span>
-          <select
-            aria-label="Organization view"
-            value={selectedOrganizationScopeKey}
-            onChange={(event) =>
-              switchOrganizationScope(event.target.value as PortalOrganizationScopeKey)
-            }
-            className="h-9 max-w-full rounded-lg border border-white/80 bg-white px-2 text-xs font-bold text-slate-950 shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
-            style={{ colorScheme: "light" }}
-          >
-            {organizationScopes.map((scope) => (
-              <option key={scope.key} value={scope.key} className="bg-white text-slate-950">
-                {scope.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showOrganizationScope ? (
+          <label className="flex min-w-0 max-w-56 flex-col gap-1 justify-self-end text-left">
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-800">
+              Organization view
+            </span>
+            <select
+              aria-label="Organization view"
+              value={selectedOrganizationScopeKey}
+              onChange={(event) =>
+                switchOrganizationScope(event.target.value as PortalOrganizationScopeKey)
+              }
+              className="h-9 max-w-full rounded-lg border border-white/80 bg-white px-2 text-xs font-bold text-slate-950 shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+              style={{ colorScheme: "light" }}
+            >
+              {organizationScopes.map((scope) => (
+                <option key={scope.key} value={scope.key} className="bg-white text-slate-950">
+                  {scope.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : <div aria-hidden="true" className="min-h-9" />}
       </div>
     </header>
   );

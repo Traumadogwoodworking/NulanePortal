@@ -16,11 +16,11 @@ import {
   Legend,
   Pie,
   PieChart,
-  type PieLabelRenderProps,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  type PieLabelRenderProps,
 } from "recharts";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -249,11 +249,11 @@ type ExportCardContext = {
   cardRows: unknown[][];
 };
 const SEVERITY_LABELS: Record<number, string> = {
-  1: "≤1\" (≤3 cm)",
-  2: ">1\" to ≤3\" (3–8 cm)",
-  3: ">3\" to ≤6\" (8–15 cm)",
-  4: ">6\" to ≤12\" (15–30 cm)",
-  5: ">12\" (≥30 cm)",
+  1: "1 inch or less (3 centimeters or less)",
+  2: "More than 1 inch through 3 inches (3 through 8 centimeters)",
+  3: "More than 3 inches through 6 inches (8 through 15 centimeters)",
+  4: "More than 6 inches through 12 inches (15 through 30 centimeters)",
+  5: "More than 12 inches (30 centimeters or more)",
   6: "Missing / Major Damage",
 };
 
@@ -1013,12 +1013,23 @@ function buildTopBuckets(items: Map<string, number>): { name: string; count: num
 }
 
 const SEVERITY_PIE_COLORS: Record<string, string> = {
-  "1": "#10b981",
-  "2": "#fbbf24",
-  "3": "#f97316",
-  "4": "#ef4444",
-  "5": "#881337",
-  "6": "#64748b",
+  "1": "#16a34a",
+  "2": "#65a30d",
+  "3": "#d97706",
+  "4": "#ea580c",
+  "5": "#dc2626",
+  "6": "#7c2d12",
+};
+
+const AREA_PIE_COLORS = ["#2563eb", "#0f766e", "#d97706", "#7c3aed", "#db2777"] as const;
+
+const SEVERITY_SHORT_LABELS: Record<string, string> = {
+  "1": "1 in or less",
+  "2": "1–3 in",
+  "3": "3–6 in",
+  "4": "6–12 in",
+  "5": ">12 in",
+  "6": "Missing / major",
 };
 
 function buildPieData(items: { name: string; count: number }[]) {
@@ -1035,7 +1046,7 @@ function buildAllAreaPieData(items: { name: string; count: number }[]): PieAreaD
     .slice(0, 5)
     .map((item, index) => ({
       ...item,
-      fill: HOME_CHART_PALETTE[index % HOME_CHART_PALETTE.length],
+      fill: AREA_PIE_COLORS[index % AREA_PIE_COLORS.length],
     }));
 }
 
@@ -1070,10 +1081,21 @@ function buildSelectedSeverityPieData(items: DashboardSeverityItem[], selectedLe
   }));
 }
 
-const PIE_LABEL_RADIAN = Math.PI / 180;
+function getPieLegendLabel(name: string, kind: "severity" | "area"): string {
+  if (kind === "severity") {
+    const level = name.split(" - ")[0];
+    return SEVERITY_SHORT_LABELS[level] ?? name.replace(/^\d+\s*-\s*/, "");
+  }
+  return name;
+}
+
+type PieCalloutDatum = {
+  name: string;
+  count: number;
+};
 
 function wrapPieCalloutLabel(label: string): string[] {
-  const maxLineLength = label.length > 28 ? 11 : 14;
+  const maxLineLength = label.length > 22 ? 13 : 16;
   const words = label.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
 
@@ -1089,46 +1111,41 @@ function wrapPieCalloutLabel(label: string): string[] {
   return lines;
 }
 
-type PieCalloutDatum = {
-  name: string;
-  count: number;
-};
-
-function getPieCalloutFontSize(name: string, lineCount: number): number {
-  const preferredFontSize = name.length > 28 ? 9 : name.length > 18 ? 10 : 11;
-  const longestWordLength = Math.max(...name.trim().split(/\s+/).map((word) => word.length), 1);
-  const widthConstrainedFontSize = Math.floor(96 / (longestWordLength * 0.62));
-  return Math.max(
-    7,
-    Math.min(
-      preferredFontSize,
-      widthConstrainedFontSize,
-      Math.floor(44 / Math.max(lineCount, 1)) - 2
-    )
-  );
+function getPieCalloutFontSize(lineCount: number): number {
+  return lineCount > 2 ? 9 : 10;
 }
 
-function buildPieCalloutPositions(data: PieCalloutDatum[], cx: number, cy: number, outerRadius: number) {
+function buildPieCalloutPositions(
+  data: PieCalloutDatum[],
+  cx: number,
+  cy: number,
+  outerRadius: number,
+  kind: "severity" | "area"
+) {
   const total = data.reduce((sum, item) => sum + Math.max(Number(item.count) || 0, 0), 0);
   const positions = new Map<number, { labelY: number }>();
   if (!total) return positions;
 
   let cumulative = 0;
-  const candidates = data.map((item, index) => {
-    const count = Math.max(Number(item.count) || 0, 0);
-    const midAngle = 90 - ((cumulative + count / 2) / total) * 360;
-    cumulative += count;
-    const cosine = Math.cos(-midAngle * PIE_LABEL_RADIAN);
-    const sine = Math.sin(-midAngle * PIE_LABEL_RADIAN);
-    const lines = wrapPieCalloutLabel(item.name);
-    const fontSize = getPieCalloutFontSize(item.name, lines.length);
-    return {
-      index,
-      isRightSide: cosine >= 0,
-      naturalY: cy + (outerRadius + 26) * sine,
-      height: (lines.length + 1) * (fontSize + 2),
-    };
-  });
+  const candidates = data
+    .map((item, index) => {
+      const count = Math.max(Number(item.count) || 0, 0);
+      const midAngle = 90 - ((cumulative + count / 2) / total) * 360;
+      cumulative += count;
+      const cosine = Math.cos(-midAngle * (Math.PI / 180));
+      const sine = Math.sin(-midAngle * (Math.PI / 180));
+      const label = getPieLegendLabel(item.name, kind);
+      const lines = wrapPieCalloutLabel(label);
+      const fontSize = getPieCalloutFontSize(lines.length);
+      return {
+        index,
+        count,
+        isRightSide: cosine >= 0,
+        naturalY: cy + (outerRadius + 24) * sine,
+        height: fontSize + lines.length * (fontSize + 2) + 12,
+      };
+    })
+    .filter((candidate) => candidate.count > 0);
 
   [false, true].forEach((isRightSide) => {
     const side = candidates
@@ -1136,55 +1153,41 @@ function buildPieCalloutPositions(data: PieCalloutDatum[], cx: number, cy: numbe
       .sort((left, right) => left.naturalY - right.naturalY);
     if (!side.length) return;
 
-    const minimumY = cy - outerRadius * 1.08;
-    const maximumY = cy + outerRadius * 1.08;
-    const gap = 7;
+    const minimumY = cy - outerRadius * 1.16;
+    const maximumY = cy + outerRadius * 1.16;
+    const gap = 9;
     const adjusted: Array<(typeof side)[number] & { labelY: number }> = [];
     side.forEach((candidate) => {
-      const previousAdjusted = adjusted[adjusted.length - 1];
-      const minimumNextY = previousAdjusted
-        ? previousAdjusted.labelY + previousAdjusted.height / 2 + candidate.height / 2 + gap
+      const previous = adjusted[adjusted.length - 1];
+      const minimumNextY = previous
+        ? previous.labelY + previous.height / 2 + candidate.height / 2 + gap
         : minimumY + candidate.height / 2;
-      adjusted.push({
-        ...candidate,
-        labelY: Math.max(candidate.naturalY, minimumNextY),
-      });
+      adjusted.push({ ...candidate, labelY: Math.max(candidate.naturalY, minimumNextY) });
     });
 
-    const overflow = adjusted[adjusted.length - 1].labelY +
-      adjusted[adjusted.length - 1].height / 2 -
-      maximumY;
-    if (overflow > 0) {
-      adjusted.forEach((candidate) => {
-        candidate.labelY -= overflow;
-      });
-    }
+    const overflow = adjusted[adjusted.length - 1].labelY + adjusted[adjusted.length - 1].height / 2 - maximumY;
+    if (overflow > 0) adjusted.forEach((candidate) => { candidate.labelY -= overflow; });
 
     for (let index = adjusted.length - 2; index >= 0; index -= 1) {
       const current = adjusted[index];
       const next = adjusted[index + 1];
-      const maximumCurrentY = next.labelY - next.height / 2 - current.height / 2 - gap;
-      current.labelY = Math.min(current.labelY, maximumCurrentY);
+      current.labelY = Math.min(
+        current.labelY,
+        next.labelY - next.height / 2 - current.height / 2 - gap
+      );
     }
 
     const topOverflow = minimumY - (adjusted[0].labelY - adjusted[0].height / 2);
-    if (topOverflow > 0) {
-      adjusted.forEach((candidate) => {
-        candidate.labelY += topOverflow;
-      });
-    }
-
-    adjusted.forEach((candidate) => {
-      positions.set(candidate.index, {
-        labelY: candidate.labelY,
-      });
-    });
+    if (topOverflow > 0) adjusted.forEach((candidate) => { candidate.labelY += topOverflow; });
+    adjusted.forEach((candidate) => positions.set(candidate.index, { labelY: candidate.labelY }));
   });
 
   return positions;
 }
 
-function PieSliceCalloutLabel(props: PieLabelRenderProps & { data: PieCalloutDatum[] }) {
+function PieSliceCalloutLabel(
+  props: PieLabelRenderProps & { data: PieCalloutDatum[]; kind: "severity" | "area" }
+) {
   const cx = Number(props.cx);
   const cy = Number(props.cy);
   const innerRadius = Number(props.innerRadius ?? 0);
@@ -1193,73 +1196,109 @@ function PieSliceCalloutLabel(props: PieLabelRenderProps & { data: PieCalloutDat
   const percent = Number(props.percent ?? 0);
   const index = Number(props.index ?? -1);
   const name = String(props.name ?? props.payload?.name ?? "");
-  if (![cx, cy, innerRadius, outerRadius, midAngle, percent].every(Number.isFinite) || !name) {
+  const count = Number(props.payload?.count ?? 0);
+  if (![cx, cy, innerRadius, outerRadius, midAngle, percent, count].every(Number.isFinite) || !name || count <= 0) {
     return null;
   }
 
-  const cosine = Math.cos(-midAngle * PIE_LABEL_RADIAN);
-  const sine = Math.sin(-midAngle * PIE_LABEL_RADIAN);
+  const radians = Math.PI / 180;
+  const cosine = Math.cos(-midAngle * radians);
+  const sine = Math.sin(-midAngle * radians);
   const sliceCenterRadius = innerRadius + (outerRadius - innerRadius) * 0.62;
   const startX = cx + sliceCenterRadius * cosine;
   const startY = cy + sliceCenterRadius * sine;
-  const layout = buildPieCalloutPositions(props.data, cx, cy, outerRadius);
+  const layout = buildPieCalloutPositions(props.data, cx, cy, outerRadius, props.kind);
   const position = layout.get(index);
-  // The rendered slice angle is the source of truth for its side. The collision
-  // layout may move a label vertically, but it must never move it across the pie.
   const isRightSide = cosine >= 0;
-  const labelX = cx + (outerRadius + 32) * (isRightSide ? 1 : -1);
-  const labelY = position?.labelY ?? cy + (outerRadius + 26) * sine;
-  const lineEndX = labelX + (isRightSide ? -5 : 5);
+  const labelX = cx + (outerRadius + 22) * (isRightSide ? 1 : -1);
+  const labelY = position?.labelY ?? cy + (outerRadius + 24) * sine;
+  const lineEndX = labelX + (isRightSide ? -7 : 7);
   const textAnchor = isRightSide ? "start" : "end";
-  const labelLines = wrapPieCalloutLabel(name);
-  const fontSize = getPieCalloutFontSize(name, labelLines.length);
+  const label = getPieLegendLabel(name, props.kind);
+  const labelLines = wrapPieCalloutLabel(label);
+  const fontSize = getPieCalloutFontSize(labelLines.length);
   const percentage = `${percent < 0.1 ? (percent * 100).toFixed(1) : Math.round(percent * 100)}%`;
+  const countLabel = formatNumber(count);
   const textStartY = labelY - (labelLines.length * (fontSize + 2)) / 2;
-  const labelWidth = Math.max(
-    percentage.length * (fontSize + 1) * 0.62,
-    ...labelLines.map((line) => line.length * fontSize * 0.62)
-  ) + 12;
-  const labelHeight = fontSize + labelLines.length * (fontSize + 2) + 8;
-  const labelBoxX = isRightSide ? labelX - 5 : labelX - labelWidth + 5;
-  const labelBoxY = textStartY - fontSize + 1;
 
   return (
     <g aria-hidden="true" pointerEvents="none">
-      <path
-        d={`M${startX},${startY} L${lineEndX},${labelY}`}
-        fill="none"
-        stroke="#64748b"
-        strokeWidth={1.25}
-      />
-      <circle cx={startX} cy={startY} r={2.25} fill="#475569" />
-      <rect
-        x={labelBoxX}
-        y={labelBoxY}
-        width={labelWidth}
-        height={labelHeight}
-        rx={4}
-        fill="#ffffff"
-        stroke="#64748b"
-        strokeWidth={1.25}
-      />
-      <text
-        x={labelX}
-        y={textStartY}
-        textAnchor={textAnchor}
-        fill="#0f172a"
-        fontSize={fontSize}
-        fontWeight={700}
-      >
-        <tspan x={labelX} dy="0" fontSize={fontSize + 1} fontWeight={800}>
-          {percentage}
+      <path d={`M${startX},${startY} L${lineEndX},${labelY}`} fill="none" stroke="#94a3b8" strokeWidth={1.25} />
+      <circle cx={startX} cy={startY} r={2.25} fill="#64748b" />
+      <text x={labelX} y={textStartY} textAnchor={textAnchor} fill="#0f172a" fontSize={fontSize} fontWeight={700}>
+        <tspan x={labelX} dy="0" fontSize={fontSize + 2} fontWeight={900}>
+          {percentage} · {countLabel}
         </tspan>
         {labelLines.map((line, lineIndex) => (
-          <tspan key={`${line}-${lineIndex}`} x={labelX} dy={fontSize + 2}>
-            {line}
-          </tspan>
+          <tspan key={`${line}-${lineIndex}`} x={labelX} dy={fontSize + 2}>{line}</tspan>
         ))}
       </text>
     </g>
+  );
+}
+
+function PieMetricStrip({
+  value,
+  label,
+  detail,
+}: {
+  value: number;
+  label: string;
+  detail: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
+        <p className="mt-1 truncate text-xs font-medium text-slate-500">{detail}</p>
+      </div>
+      <span className="shrink-0 text-2xl font-black tracking-tight text-slate-950">{formatNumber(value)}</span>
+    </div>
+  );
+}
+
+function PieLegendList({
+  items,
+  total,
+  kind,
+  onSelect,
+}: {
+  items: Array<{ name: string; count: number; fill: string }>;
+  total: number;
+  kind: "severity" | "area";
+  onSelect: (name: string) => void;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3 px-1">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Breakdown</p>
+        <p className="text-[10px] font-semibold text-slate-400">Click to filter</p>
+      </div>
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {items.filter((item) => item.count > 0).map((item) => {
+          const percent = total > 0 ? (item.count / total) * 100 : 0;
+          const label = getPieLegendLabel(item.name, kind);
+          return (
+            <button
+              key={item.name}
+              type="button"
+              data-testid="pie-legend-item"
+              title={item.name}
+              aria-label={`${label}: ${formatNumber(item.count)} records`}
+              onClick={() => onSelect(item.name)}
+              className="flex min-h-10 w-full items-start gap-2.5 rounded-xl border border-transparent bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-white" style={{ backgroundColor: item.fill }} />
+              <span className="min-w-0 flex-1 text-[12px] font-semibold leading-4 text-slate-700">{label}</span>
+              <span className="shrink-0 text-[12px] font-black tabular-nums text-slate-950">{formatNumber(item.count)}</span>
+              <span className="w-10 shrink-0 text-right text-[11px] font-semibold tabular-nums text-slate-400">
+                {percent < 10 ? `${percent.toFixed(1)}%` : `${Math.round(percent)}%`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1652,9 +1691,10 @@ function ChartFooterTable({
                     <td className="border-y border-l border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900">
                       {showSeverityPills && row.severity ? (
                         <span
+                          title={resolveSeverityLabel(row.severity)}
                           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${severityPillClass(row.severity)}`}
                         >
-                          {resolveSeverityLabel(row.severity)}
+                          {SEVERITY_SHORT_LABELS[row.severity] ?? resolveSeverityLabel(row.severity)}
                         </span>
                       ) : rowIndex === 0 ? (
                         <span className="block text-xs font-black uppercase tracking-[0.18em] text-slate-500">{item.section}</span>
@@ -4812,8 +4852,9 @@ export default function HomeDashboard() {
             <Card className="relative overflow-visible hover:z-20">
               <CardHeader
                 title="Severity Detail"
+                subtitle="Damage submissions grouped by recorded measurement."
                 actions={
-                  <div className="flex min-w-[220px] flex-col items-end gap-1">
+                  <div className="flex min-w-[220px] flex-col items-end gap-2">
                     <select
                       aria-label="Filter pie charts by inspection type"
                       value={inspectionTypeFilter}
@@ -4827,7 +4868,6 @@ export default function HomeDashboard() {
                         </option>
                       ))}
                     </select>
-	                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{formatNumber(primaryDamageTotal)} {countNoun}</p>
                     <button
                       type="button"
                       onClick={() => void exportPieFacilityCsv(
@@ -4843,32 +4883,33 @@ export default function HomeDashboard() {
                       Export CSV
                     </button>
 	                  </div>
-	                }
+                }
               />
-              <CardContent className="flex h-[720px] flex-col p-0">
-	            <div className="flex min-h-0 flex-1 items-center justify-center px-2 pt-6 pb-4 sm:px-4">
-	              <div className="h-full min-h-[360px] w-full">
-                      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-	                    <PieChart margin={{ top: 18, right: 8, bottom: 18, left: 8 }}>
-	                      <Tooltip
-	                        content={
-	                          <PieSummaryTooltip
-	                            sectionLabel="Severity section"
-	                            facilityBreakdown={severityFacilityBreakdown}
-	                          />
-	                        }
-	                        active={hoveredSeverityIndex !== null}
-	                        defaultIndex={hoveredSeverityIndex ?? undefined}
-	                        allowEscapeViewBox={{ x: true, y: true }}
-	                        cursor={false}
-	                        isAnimationActive={false}
-	                        wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
-	                      />
+              <CardContent className="flex flex-col p-0">
+                <div className="space-y-5 px-6 pb-6 pt-5 sm:px-8">
+                  <PieMetricStrip value={severityPieTotal} label="Measured submissions" detail="Total records in the current view" />
+                  <div className="relative h-[360px] min-w-0 sm:h-[390px]">
+                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+                      <PieChart margin={{ top: 20, right: 42, bottom: 20, left: 42 }}>
+                        <Tooltip
+                          content={
+                            <PieSummaryTooltip
+                              sectionLabel="Severity section"
+                              facilityBreakdown={severityFacilityBreakdown}
+                            />
+                          }
+                          active={hoveredSeverityIndex !== null}
+                          defaultIndex={hoveredSeverityIndex ?? undefined}
+                          allowEscapeViewBox={{ x: true, y: true }}
+                          cursor={false}
+                          isAnimationActive={false}
+                          wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+                        />
                         <Pie
                           data={visibleSeverityPieData}
                           dataKey="count"
                           nameKey="name"
-	                      outerRadius="57%"
+                          outerRadius="70%"
                           cx="50%"
                           cy="50%"
                           startAngle={90}
@@ -4877,20 +4918,21 @@ export default function HomeDashboard() {
                             <PieSliceCalloutLabel
                               {...props}
                               data={visibleSeverityPieData}
+                              kind="severity"
                             />
                           )}
                           labelLine={false}
-                          paddingAngle={0}
-                          cornerRadius={0}
-                          stroke="none"
-                          strokeWidth={0}
+                          paddingAngle={2}
+                          cornerRadius={4}
+                          stroke="#ffffff"
+                          strokeWidth={3}
                           isAnimationActive={false}
-	                      onMouseEnter={(_, index) => {
-	                        setHoveredSeverityIndex(index);
-	                        const slice = visibleSeverityPieData[index];
-	                        if (slice) void loadPieFacilityBreakdown("severity", slice);
-	                      }}
-	                      onMouseLeave={() => setHoveredSeverityIndex(null)}
+                          onMouseEnter={(_, index) => {
+                            setHoveredSeverityIndex(index);
+                            const slice = visibleSeverityPieData[index];
+                            if (slice) void loadPieFacilityBreakdown("severity", slice);
+                          }}
+                          onMouseLeave={() => setHoveredSeverityIndex(null)}
                           onClick={(_, index) => {
                             const item = visibleSeverityPieData[index ?? -1];
                             if (item) {
@@ -4904,8 +4946,14 @@ export default function HomeDashboard() {
                           ))}
                         </Pie>
                       </PieChart>
-                      </ResponsiveContainer>
-	              </div>
+                    </ResponsiveContainer>
+                  </div>
+                  <PieLegendList
+                    items={visibleSeverityPieData}
+                    total={severityPieTotal}
+                    kind="severity"
+                    onSelect={selectSeverityFromChart}
+                  />
                 </div>
                 <ChartFooterTable
                   title={`${countNounTitle} by severity`}
@@ -4918,8 +4966,9 @@ export default function HomeDashboard() {
             <Card className="relative overflow-visible hover:z-20">
               <CardHeader
                 title="Top Damage Areas"
+                subtitle="Most frequent locations in the selected view."
                 actions={
-                  <div className="flex min-w-[220px] flex-col items-end gap-1">
+                  <div className="flex min-w-[220px] flex-col items-end gap-2">
                     <select
                       aria-label="Filter pie charts by inspection type"
                       value={inspectionTypeFilter}
@@ -4933,9 +4982,6 @@ export default function HomeDashboard() {
                         </option>
                       ))}
                     </select>
-	                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-	                      {formatNumber(primaryDamageTotal)} {countNoun}
-	                    </p>
                     <button
                       type="button"
                       onClick={() => void exportPieFacilityCsv(
@@ -4951,32 +4997,33 @@ export default function HomeDashboard() {
                       Export CSV
                     </button>
 	                  </div>
-	                }
+                }
               />
-              <CardContent className="flex h-[720px] flex-col p-0">
-	            <div className="flex min-h-0 flex-1 items-center justify-center px-2 pt-6 pb-4 sm:px-4">
-	              <div className="h-full min-h-[360px] w-full">
-                      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-	                    <PieChart margin={{ top: 18, right: 8, bottom: 18, left: 8 }}>
-	                      <Tooltip
-	                        content={
-	                          <PieSummaryTooltip
-	                            sectionLabel="Damage area"
-	                            facilityBreakdown={areaFacilityBreakdown}
-	                          />
-	                        }
-	                        active={hoveredAreaIndex !== null}
-	                        defaultIndex={hoveredAreaIndex ?? undefined}
-	                        allowEscapeViewBox={{ x: true, y: true }}
-	                        cursor={false}
-	                        isAnimationActive={false}
-	                        wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
-	                      />
+              <CardContent className="flex flex-col p-0">
+                <div className="space-y-5 px-6 pb-6 pt-5 sm:px-8">
+                  <PieMetricStrip value={areaPieTotal} label="Top-area submissions" detail="Records represented by the leading damage areas" />
+                  <div className="relative h-[360px] min-w-0 sm:h-[390px]">
+                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+                      <PieChart margin={{ top: 20, right: 42, bottom: 20, left: 42 }}>
+                        <Tooltip
+                          content={
+                            <PieSummaryTooltip
+                              sectionLabel="Damage area"
+                              facilityBreakdown={areaFacilityBreakdown}
+                            />
+                          }
+                          active={hoveredAreaIndex !== null}
+                          defaultIndex={hoveredAreaIndex ?? undefined}
+                          allowEscapeViewBox={{ x: true, y: true }}
+                          cursor={false}
+                          isAnimationActive={false}
+                          wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+                        />
                         <Pie
                           data={visibleAreaPieData}
                           dataKey="count"
                           nameKey="name"
-	                      outerRadius="57%"
+                          outerRadius="70%"
                           cx="50%"
                           cy="50%"
                           startAngle={90}
@@ -4985,20 +5032,21 @@ export default function HomeDashboard() {
                             <PieSliceCalloutLabel
                               {...props}
                               data={visibleAreaPieData}
+                              kind="area"
                             />
                           )}
                           labelLine={false}
-                          paddingAngle={0}
-                          cornerRadius={0}
-                          stroke="none"
-                          strokeWidth={0}
+                          paddingAngle={2}
+                          cornerRadius={4}
+                          stroke="#ffffff"
+                          strokeWidth={3}
                           isAnimationActive={false}
-	                      onMouseEnter={(_, index) => {
-	                        setHoveredAreaIndex(index);
-	                        const slice = visibleAreaPieData[index];
-	                        if (slice) void loadPieFacilityBreakdown("area", slice);
-	                      }}
-	                      onMouseLeave={() => setHoveredAreaIndex(null)}
+                          onMouseEnter={(_, index) => {
+                            setHoveredAreaIndex(index);
+                            const slice = visibleAreaPieData[index];
+                            if (slice) void loadPieFacilityBreakdown("area", slice);
+                          }}
+                          onMouseLeave={() => setHoveredAreaIndex(null)}
                           onClick={(_, index) => {
                             const item = visibleAreaPieData[index ?? -1];
                             if (item) {
@@ -5011,8 +5059,14 @@ export default function HomeDashboard() {
                           ))}
                         </Pie>
                       </PieChart>
-                      </ResponsiveContainer>
-	              </div>
+                    </ResponsiveContainer>
+                  </div>
+                  <PieLegendList
+                    items={visibleAreaPieData}
+                    total={areaPieTotal}
+                    kind="area"
+                    onSelect={selectAreaFromPie}
+                  />
                 </div>
                 <ChartFooterTable
                   title={`${countNounTitle} by damage area`}

@@ -135,7 +135,11 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
       <PortalSidebar />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden pl-4">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel)] shadow-[var(--shadow-panel)]">
-          <PortalTopBar pageTitle={pageMetadata.title} pageSubtitle={pageMetadata.subtitle} />
+          <PortalTopBar
+            pageTitle={pageMetadata.title}
+            pageSubtitle={pageMetadata.subtitle}
+            showOrganizationScope={!safePathname.startsWith("/resources")}
+          />
           <AlertStack />
           {session?.onboardingStatus && session.onboardingStatus !== "ready" ? (
             <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950" role="status">

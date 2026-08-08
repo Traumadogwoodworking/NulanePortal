@@ -137,6 +137,13 @@ const portalRoutes: PortalRoute[] = [
     icon: "support",
   },
   {
+    label: "Resources",
+    href: "/resources",
+    description: "Inspection-Trac resources and guidance",
+    section: "support",
+    icon: "reports",
+  },
+  {
     label: "Settings",
     href: "/settings",
     description: "Workspace and session settings",

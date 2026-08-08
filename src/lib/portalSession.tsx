@@ -266,9 +266,10 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   const [selectedOrganizationScopeKey, setSelectedOrganizationScopeKey] =
     useState<PortalOrganizationScopeKey>("all");
   const freshCallbackRetryCountRef = useRef(0);
+  const sessionLoadInFlightRef = useRef<Promise<void> | null>(null);
   const pathname = usePathname() ?? "/";
 
-  const loadSession = useCallback(async (options: { background?: boolean } = {}) => {
+  const loadSessionRequest = useCallback(async (options: { background?: boolean } = {}) => {
     if (typeof window === "undefined") return;
     logAuthFlow("PortalSessionProvider.loadSession", {
       reason: "start",
@@ -319,6 +320,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
 
     try {
       let payload: PortalSessionResponse;
+      let rateLimitRetryCount = 0;
       while (true) {
         try {
           payload = await fetchPortalSession();
@@ -326,11 +328,27 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         } catch (fetchError: unknown) {
           const fetchStatusCode = isSessionFetchError(fetchError) ? fetchError.status : undefined;
           const tokenExists = hasPersistedPortalToken();
+          const shouldRetryRateLimit = fetchStatusCode === 429 && rateLimitRetryCount < 2;
           const shouldRetryFreshCallback =
             fetchStatusCode === 401 &&
             tokenExists &&
             isFreshAuthCallback() &&
             freshCallbackRetryCountRef.current < 2;
+          if (shouldRetryRateLimit) {
+            const retryDelayMs = rateLimitRetryCount === 0 ? 1000 : 3000;
+            rateLimitRetryCount += 1;
+            logAuthFlow("PortalSessionProvider.loadSession", {
+              reason: "session_429_retry",
+              httpStatus: 429,
+              status: options.background ? "success" : "authenticating",
+              tokenExists,
+              redirectTarget: pathname,
+              retryCount: rateLimitRetryCount,
+            });
+            if (!options.background) setStatus("authenticating");
+            await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
+            continue;
+          }
           if (!shouldRetryFreshCallback) throw fetchError;
 
           freshCallbackRetryCountRef.current += 1;
@@ -452,6 +470,24 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       setStatus("transient-error");
     }
   }, [pathname]);
+
+  const loadSession = useCallback(async (options: { background?: boolean } = {}) => {
+    const inFlight = sessionLoadInFlightRef.current;
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
+    const request = loadSessionRequest(options);
+    sessionLoadInFlightRef.current = request;
+    try {
+      await request;
+    } finally {
+      if (sessionLoadInFlightRef.current === request) {
+        sessionLoadInFlightRef.current = null;
+      }
+    }
+  }, [loadSessionRequest]);
 
   const switchOrganization = useCallback(() => {
     // Dev session bypass uses a fixed tenant snapshot; switching is intentionally inert.

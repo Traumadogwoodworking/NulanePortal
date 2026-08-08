@@ -15,6 +15,7 @@ export function buildFacilityGuidePdfDefinition(input: {
   googlePlayUrl: string;
   packetRevision?: number;
 }): TDocumentDefinitions {
+  const personalize = (value: string) => value.replace(/Chicago Heights/g, input.facilityName);
   const steps: Content[] = facilityStartupSteps.map((step, index) => ({
     columns: [
       {
@@ -29,7 +30,7 @@ export function buildFacilityGuidePdfDefinition(input: {
         width: "*",
         stack: [
           { text: step.title, bold: true, fontSize: 12, margin: [0, 0, 0, 2] },
-          { text: step.detail, color: "#475569", fontSize: 10, lineHeight: 1.2 },
+          { text: personalize(step.detail), color: "#475569", fontSize: 10, lineHeight: 1.2 },
         ],
         margin: [0, 1, 0, 0],
       },
@@ -81,10 +82,10 @@ export function buildFacilityGuidePdfDefinition(input: {
         },
         margin: [0, 0, 0, 14],
       },
-      { text: guideContent.front.instruction, alignment: "center", color: "#334155", fontSize: 11, lineHeight: 1.25, margin: [36, 0, 36, 12] },
+      { text: personalize(guideContent.front.instruction), alignment: "center", color: "#334155", fontSize: 11, lineHeight: 1.25, margin: [36, 0, 36, 12] },
       { text: input.registrationUrl, link: input.registrationUrl, alignment: "center", color: "#1d4ed8", fontSize: 8.5, margin: [0, 0, 0, 20] },
       {
-        text: guideContent.front.privacy,
+        text: personalize(guideContent.front.privacy),
         alignment: "center",
         color: "#475569",
         fillColor: "#f1f5f9",
@@ -103,7 +104,7 @@ export function buildFacilityGuidePdfDefinition(input: {
       { text: `${input.facilityName} · ${input.organizationName}`, color: "#475569", fontSize: 11, margin: [0, 0, 0, 22] },
       ...steps,
       {
-        text: guideContent.back.safety,
+        text: personalize(guideContent.back.safety),
         color: "#7c2d12",
         fillColor: "#fff7ed",
         bold: true,
