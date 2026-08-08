@@ -6,6 +6,31 @@ const require = createRequire(import.meta.url);
 let withAnalyzer = (config) => config;
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
+function parseFrameAncestors() {
+  const raw = process.env.NEXT_PUBLIC_IFRAME_PARENT_ORIGINS;
+  if (!raw) return [];
+  return raw
+    .split(/[\s,]+/)
+    .map((origin) => origin.trim())
+    .filter((origin) => {
+      if (!origin) return false;
+      if (origin === "*") return true;
+      try {
+        const url = new URL(origin);
+        return url.protocol === "https:" || url.protocol === "http:";
+      } catch {
+        return false;
+      }
+    });
+}
+
+const iframeHeaders = [
+  {
+    key: "Content-Security-Policy",
+    value: `frame-ancestors ${["'self'", ...parseFrameAncestors()].join(" ")};`,
+  },
+];
+
 if (process.env.ANALYZE === "true") {
   try {
     const analyzer = require("@next/bundle-analyzer");
@@ -19,7 +44,6 @@ if (process.env.ANALYZE === "true") {
 
 const nextConfig = withAnalyzer({
   typedRoutes: false,
-  output: "export",
   trailingSlash: true,
   turbopack: {
     root: projectRoot,
@@ -47,6 +71,11 @@ const nextConfig = withAnalyzer({
         pathname: "**",
       },
     ],
+  },
+  async headers() {
+    return ["/login", "/login/:path*", "/portal", "/portal/:path*", "/home", "/home/:path*"].map(
+      (source) => ({ source, headers: iframeHeaders }),
+    );
   },
 });
 

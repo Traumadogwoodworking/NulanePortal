@@ -14,7 +14,7 @@ import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalThemeMode } from "@/lib/portalTheme";
 
 export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
-  const { status, error, refetch, session, signInEmbedded } = usePortalSession();
+  const { status, error, refetch, session } = usePortalSession();
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
@@ -58,26 +58,10 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   }, [branding, themeMode]);
 
   if (status === "unauthenticated") {
-    const embedded = typeof window !== "undefined" && window.top !== window.self;
     return (
       <PortalStatusScreen
-        title={embedded ? "Open secure sign-in" : "Signing you in"}
-        description={
-          embedded
-            ? error?.message || "Sign in securely without leaving Definian Signal."
-            : "Redirecting to Auth0 so you can access the portal."
-        }
-        actions={
-          embedded ? (
-            <button
-              type="button"
-              onClick={() => void signInEmbedded()}
-              className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:border-white hover:bg-white/20"
-            >
-              Sign in to Definian
-            </button>
-          ) : undefined
-        }
+        title="Opening Definian sign-in"
+        description="Loading the secure Definian login form."
       />
     );
   }

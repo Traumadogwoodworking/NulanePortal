@@ -463,8 +463,11 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
     throw new AuthRedirectError("Dev auth bypass redirect");
   }
   const safeReturnTo = resolveSafePortalReturnTo(returnTo);
-  if (isBrowser() && window.top && window.top !== window.self) {
-    throw new AuthRedirectError("Sign-in requires a top-level browser window");
+  if (isBrowser() && ACTIVE_PORTAL_BRANDING === "definianInspection") {
+    const loginUrl = new URL("/login/", window.location.origin);
+    loginUrl.searchParams.set("returnTo", safeReturnTo);
+    window.location.replace(loginUrl.toString());
+    throw new AuthRedirectError("Opening embedded Definian sign-in");
   }
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] redirectToAuth0Login invoked", {
@@ -500,32 +503,6 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   throw new AuthRedirectError();
 }
 
-export async function authenticatePortalInPopup(): Promise<void> {
-  if (isDevAuthBypassEnabled()) {
-    persistPortalToken(DEV_ACCESS_TOKEN);
-    return;
-  }
-  const client = await getAuth0Client();
-  const config = getAuthConfig();
-  clearPortalAuthStorage();
-  await client.loginWithPopup({
-    authorizationParams: {
-      audience: config.audience,
-      organization: config.organizationId,
-      prompt: "login",
-    },
-  });
-  const token = await waitForToken(
-    client.getTokenSilently({
-      authorizationParams: {
-        audience: config.audience,
-      },
-    }),
-    10000,
-  );
-  persistPortalToken(token);
-}
-
 export async function logoutPortal(): Promise<void> {
   if (isDevAuthBypassEnabled()) {
     clearPortalAuthStorage();
@@ -550,6 +527,13 @@ export async function getPortalAccessToken() {
   if (isDevAuthBypassEnabled()) {
     persistPortalToken(DEV_ACCESS_TOKEN);
     return DEV_ACCESS_TOKEN;
+  }
+  if (ACTIVE_PORTAL_BRANDING === "definianInspection") {
+    const storedToken = getLocalStorage()?.getItem(STORAGE_KEYS.token)?.trim();
+    if (storedToken) {
+      return storedToken;
+    }
+    return redirectToAuth0Login();
   }
   const client = await getAuth0Client();
   await handleRedirectCallbackIfNeeded();
