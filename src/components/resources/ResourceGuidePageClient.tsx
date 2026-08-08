@@ -102,11 +102,18 @@ export default function ResourceGuidePageClient() {
 
   const selectedGuide = task === "location-entry" && facility
     ? { ...guide, title: `Select the Correct Yard and Bay at ${guide.facilityName}`, description: `Use the configured location options for ${guide.facilityName} before completing an inspection.`, sections: guide.sections.filter((section) => section.title === "Location entry") }
-    : guide;
+    : task === "facility-start" && facility
+      ? {
+          ...guide,
+          title: `Start Inspection-Trac at ${guide.facilityName}`,
+          description: `Use this short path when you are already at ${guide.facilityName}: confirm the facility, choose the enabled workflow, and verify the working location before starting.`,
+          sections: guide.sections.filter((section) => ["Getting started", "Already inside the facility", "What to expect in the app", "Help"].includes(section.title)),
+        }
+      : guide;
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-5 px-4 pb-12 pt-5 sm:px-6">
-      <Link href={guideHref({ guide: guideId || undefined, facility: facilityId || undefined })} className="inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900">
+      <Link href="/resources" className="inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900">
         <ArrowLeft className="h-4 w-4" />Back to Resources & Training
       </Link>
       <GuideView guide={selectedGuide} />

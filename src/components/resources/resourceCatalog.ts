@@ -213,6 +213,157 @@ export const generalResourceGuides: ResourceGuideDefinition[] = [
       },
     ],
   }),
+  published({
+    id: "mobile-app-screen-map",
+    title: "Inspection-Trac App Screen Map",
+    description: "A screen-by-screen map of the mobile app, including what to expect before, during, and after an inspection.",
+    audience: "field",
+    keywords: ["app", "mobile", "screen", "dashboard", "vin", "inspection", "review", "settings", "offline", "scanner"],
+    sections: [
+      {
+        title: "Sign-in and session",
+        steps: [
+          "Open Inspection-Trac. A signed-out user starts at the branded sign-in screen; a signed-in user is taken to the Dashboard.",
+          "Use the same verified account that was used for facility registration. If authentication expires, sign in again before resuming work.",
+          "If the app sends you back to sign-in, do not create a second account. Sign in with the existing verified account and allow the app to reload access.",
+        ],
+      },
+      {
+        title: "Dashboard",
+        steps: [
+          "The Dashboard is the app home screen. It shows the inspection modules enabled for the current organization and facility.",
+          "Damage Submission starts the standard vehicle damage flow. Interchange, 24 Hour Inspection, Rail Ship Approved, and other modules appear only when their configuration makes them available.",
+          "The Reports area groups submitted, queued, and partial work. Open a report card to review it or resume an incomplete workflow.",
+          "Use Settings for the current facility, account, support, legal pages, tutorial replay, and scanner-mode preferences.",
+        ],
+      },
+      {
+        title: "VIN capture",
+        steps: [
+          "The VIN Scanner is the first screen for the standard damage flow and other scanner-led workflows.",
+          "Use the camera or configured hardware scanner when available. If scanning cannot produce a usable value, choose manual entry in the same screen.",
+          "Confirm the VIN before continuing. The app expects a valid 17-character VIN and rejects I, O, and Q characters.",
+          "If the app asks for a facility, choose the facility where the vehicle is physically being inspected; do not select a substitute location.",
+        ],
+      },
+      {
+        title: "Inspection screen",
+        steps: [
+          "The guided tutorial may walk through Choose the damaged area, Select the damage type, Set the severity level, Capture supporting photos, and Review everything.",
+          "For damage, complete the area, damage type, severity, and photo requirements before saving the entry. Add another damage entry when the vehicle has more than one issue.",
+          "For no damage, explicitly choose the no-damage path when the app asks. Do not leave the damage decision blank.",
+          "Save an entry for later when the inspection is not complete. The app keeps the report in a resumable state instead of forcing a partial submission.",
+        ],
+      },
+      {
+        title: "Review and submission",
+        steps: [
+          "Use Review Report after the required entries are saved. Review the VIN, facility, location, damage rows, photos, notes, and signature requirements shown by the workflow.",
+          "If validation identifies a missing field or file, return to the identified step and correct it before submitting.",
+          "Submit sends the report through the delivery queue. Keep the app open long enough to see whether it completed, queued, needs authentication, or needs user action.",
+          "If a report is queued or interrupted, return to the Dashboard and resume it from the report status instead of starting a duplicate report.",
+        ],
+      },
+      {
+        title: "Settings and recovery",
+        steps: [
+          "In Settings, Current Facility is the source of truth for where new inspections are assigned. Change it only after saving or safely leaving active work.",
+          "Replay Inspection Tutorial resets the guided tips for the next inspection; it does not delete reports or change facility access.",
+          "VIN scanner mode controls the available scanner input on supported devices. iOS and web use the supported camera/input path instead of the hardware-scanner setting.",
+          "Use Contact Support for access, workflow, or delivery problems and include the facility, VIN/report ID, and the message shown by the app.",
+        ],
+      },
+    ],
+  }),
+  published({
+    id: "mobile-app-workflow-inventory",
+    title: "Mobile App Workflow Inventory",
+    description: "The launchable app workflows and the screens they open, with configuration limits called out clearly.",
+    audience: "field",
+    keywords: ["interchange", "24 hour", "rsa", "rail", "module", "workflow", "inspection code", "feature flag"],
+    sections: [
+      {
+        title: "Launchable dashboard workflows",
+        steps: [
+          "Damage Submission opens the standard VIN-led vehicle damage report at /vin-scan.",
+          "Interchange opens the interchange inspection at /pad-vin-scan. Its availability is controlled by organization and feature configuration.",
+          "24 Hour Inspection opens the 24-hour VIN flow at /twenty-four-hour-vin-scan and continues to its confirmation screen.",
+          "Rail Ship Approved opens the railcar/deck scan flow at /rsa-car-scan when the RSA module is enabled for the user and facility.",
+        ],
+      },
+      {
+        title: "Shared report screens",
+        steps: [
+          "Inspection is the guided data-entry screen at /inspection. It supports damage/no-damage decisions, entries, photos, notes, and review navigation.",
+          "Report Review is the final review and submission screen at /report-review. It also handles queued or saved report recovery.",
+          "The Dashboard at /dashboard is the report lookup and recovery surface for submitted, queued, and partial local work.",
+        ],
+      },
+      {
+        title: "Conditional and backend-driven modules",
+        steps: [
+          "Generic and module routes are configuration-driven. Their form fields, workflow steps, and visibility come from the enabled module manifest rather than a single fixed screen.",
+          "Official inspection codes without a dedicated launch route should be treated as unavailable until the backend manifest and facility access make them visible.",
+          "Do not promise a module from a guide when it is not present on the current Dashboard; feature flags, organization settings, facility scope, and permissions can change what appears.",
+        ],
+      },
+      {
+        title: "Screens that are not normal field entry points",
+        steps: [
+          "App Control is an admin/runtime diagnostics surface, not a normal inspection step.",
+          "POD Proof and export-related surfaces are app-side or backend-dependent and should not be presented as a guaranteed field workflow.",
+          "Authentication callback routes are internal sign-in handling and are not user destinations.",
+        ],
+      },
+    ],
+  }),
+  published({
+    id: "portal-page-map",
+    title: "Inspection-Trac Portal Page Map",
+    description: "A complete map of the portal pages, what each page is for, and which access level controls it.",
+    audience: "portal",
+    keywords: ["portal", "home", "reports", "organizations", "facilities", "users", "branding", "email", "support", "resources", "settings", "page map"],
+    sections: [
+      {
+        title: "Core pages",
+        steps: [
+          "Home (/home) is the operational overview. Use it for the filtered inspection totals, severity and damage-area charts, and current-view analytics.",
+          "Damage Reports (/reports/damage) is the main report list. Filter and open reports, inspect evidence, and use the available PDF/CSV export actions.",
+          "RSA Reports (/reports/rsa) is the Rail Safe Audit report surface and is shown only to the access scope that supports RSA.",
+          "24 Hour (/inspection/24-hour) is the portal view for 24-hour inventory inspection reporting when the reports module is enabled.",
+          "Dashboard (/dashboard) is a hidden/admin dashboard route retained for compatibility; normal navigation uses Home.",
+        ],
+      },
+      {
+        title: "Apps and facility operations",
+        steps: [
+          "Inspection-Trac (/docudent) is the linked app/product surface for the mobile inspection workflow.",
+          "Organizations (/organizations) manages tenant and subscription data and requires organization-admin access.",
+          "Facilities (/facilities) manages operational locations, yards, areas, facility access, and enrollment configuration and requires facility-admin access.",
+          "Users (/users) manages users and roles for the organization/facilities and requires facility-admin access.",
+        ],
+      },
+      {
+        title: "Administration and support",
+        steps: [
+          "Branding (/branding) customizes portal appearance and is restricted to the super-admin scope.",
+          "Email (/email) manages notifications and requires facility-admin access.",
+          "Support Tickets (/support) is where access, workflow, and report problems are submitted for follow-up.",
+          "Resources & Training (/resources) is the starting point for facility guides, app screen explanations, portal page inventory, app links, and access PDFs.",
+          "Settings (/settings) is the workspace/session settings surface.",
+        ],
+      },
+      {
+        title: "How to use the portal day to day",
+        steps: [
+          "Start at Home to understand the current filtered view, then move to Damage Reports when a specific report needs review.",
+          "Use Facilities and Users for access/configuration work; do not use reports as a substitute for changing facility membership or yard setup.",
+          "Return to Resources & Training for the facility-specific guide before starting a new facility workflow or handing an app user their setup instructions.",
+          "If a page is missing from the navigation, check the account role, required permission, module flag, and facility/organization scope before treating it as a broken link.",
+        ],
+      },
+    ],
+  }),
 ];
 
 export function guideHref(input: { guide?: string; facility?: string; task?: string }) {
@@ -281,6 +432,22 @@ export function buildFacilityGuide(
         steps: [
           "Use the shared task guides on Resources & Training for VIN capture, damage or no-damage inspection, saved work, and submission.",
           "If the workflow shown in the app differs from a shared guide, stop and contact support so the facility instructions can be confirmed.",
+        ],
+      },
+      {
+        title: "Already inside the facility",
+        steps: [
+          "Do not reopen registration just because you are already on site. Open Settings in the app and confirm Current Facility matches this facility.",
+          "Return to the Dashboard and choose the workflow enabled for this facility. The visible module cards are the source of truth for what you can start.",
+          "Before capturing the VIN, confirm the yard and bay/area shown by the facility process. Stop and ask the facility administrator if the correct location is not available.",
+        ],
+      },
+      {
+        title: "What to expect in the app",
+        steps: [
+          "The app opens with a Dashboard, then moves through VIN capture, inspection entry, review, and submission for a standard damage report.",
+          "During inspection, expect prompts for the damage decision, area, type, severity, supporting photos, notes, and signature when required by the enabled workflow.",
+          "After submit, expect a completed, queued, authentication-paused, or user-action-needed status. Use the Dashboard to continue a queued or partial report.",
         ],
       },
       {

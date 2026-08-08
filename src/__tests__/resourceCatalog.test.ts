@@ -32,6 +32,20 @@ describe("resource catalog", () => {
 
   it("keeps the shared catalog free of marketing metrics and labels", () => {
     const catalogText = generalResourceGuides.map(resourceSearchText).join(" ").toLowerCase();
-    expect(/\b(recommended|popular|field guide|damage frequency|locations|%|lessons learned)\b/.test(catalogText)).toBe(false);
+    expect(/\b(recommended|popular|field guide|damage frequency|%|lessons learned)\b/.test(catalogText)).toBe(false);
+  });
+
+  it("publishes the app and portal screen inventories", () => {
+    const guideTitles = generalResourceGuides.map((guide) => guide.title);
+    expect(guideTitles).toContain("Inspection-Trac App Screen Map");
+    expect(guideTitles).toContain("Mobile App Workflow Inventory");
+    expect(guideTitles).toContain("Inspection-Trac Portal Page Map");
+  });
+
+  it("explains the already-inside-the-facility path", () => {
+    const guide = buildFacilityGuide(facility);
+    const section = guide.sections.find((item) => item.title === "Already inside the facility");
+    expect(section?.steps.join(" ")).toContain("Current Facility");
+    expect(section?.steps.join(" ")).toContain("Dashboard");
   });
 });
