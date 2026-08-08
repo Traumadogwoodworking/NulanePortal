@@ -3,6 +3,8 @@ import {
   PORTAL_BRANDING_PRESETS,
   type PortalBrandingMode,
 } from "@/lib/brandingPresets";
+import { definianProduct } from "@/portal/products/definian/config";
+import { inspectionTracProduct } from "@/portal/products/inspection-trac/config";
 
 export interface PublicBrandingConfig {
   mode: PortalBrandingMode;
@@ -47,44 +49,14 @@ function normalizePublicPortalUrl(value: string | null | undefined): string | nu
 
 const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">> = {
   inspectionTrac: {
-    companyName: "Inspection-Trac",
-    appName: "Inspection-Trac",
-    shortDescription: "Vehicle inspection and condition reporting portal.",
-    landingHeadline: "THE EXPERIENCE",
-    landingSubheadline: "Built for Fast, Clear, and Consistent Inspections",
-    landingExplainer:
-      "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
-    supportEmail: "support@inspection-trac.com",
-    reportsEmail: "reports@inspection-trac.com",
-    logoPath: "/media/inspection-trac-logo.png",
-    footerLegalOwner: "Inspection-Trac",
+    ...inspectionTracProduct.publicBranding,
     primaryColor: PORTAL_BRANDING_PRESETS.inspectionTrac.portalBrandColor,
     accentColor: PORTAL_BRANDING_PRESETS.inspectionTrac.portalBrandAccentColor,
-    loginButtonLabel: "Log In",
-    openPortalButtonLabel: "Open Portal",
-    portalUrl: "/home",
-    appStoreUrl: "https://apps.apple.com/us/app/inspection-trac/id6774376762",
-    googlePlayUrl: "#",
   },
   definianInspection: {
-    companyName: "Definian Inspection",
-    appName: "Definian Inspection",
-    shortDescription: "Vehicle inspection and condition reporting portal.",
-    landingHeadline: "THE EXPERIENCE",
-    landingSubheadline: "Built for Fast, Clear, and Consistent Inspections",
-    landingExplainer:
-      "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
-    supportEmail: "support@definian.com",
-    reportsEmail: "reports@definian.com",
-    logoPath: "/media/definian-sidebar-logo-white.png",
-    footerLegalOwner: "Definian Inspection",
+    ...definianProduct.publicBranding,
     primaryColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandColor,
     accentColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandAccentColor,
-    loginButtonLabel: "Log In",
-    openPortalButtonLabel: "Open Portal",
-    portalUrl: "/login",
-    appStoreUrl: "https://apps.apple.com/app/definian-inspection",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.definian.inspection",
   },
   nulaneSystems: {
     companyName: "Nulane Systems",

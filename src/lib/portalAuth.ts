@@ -32,6 +32,17 @@ type AuthConfig = {
 const DEBUG_AUTH0 = process.env.NODE_ENV !== "production";
 let cachedAuthConfig: AuthConfig | null = null;
 
+export function logAuthFlow(functionName: string, fields: Record<string, unknown> = {}) {
+  if (!DEBUG_AUTH0 && process.env.NEXT_PUBLIC_DEBUG_AUTH_FLOW !== "true") {
+    return;
+  }
+  console.info("[auth-flow]", {
+    functionName,
+    pathname: isBrowser() ? window.location.pathname : "server",
+    ...fields,
+  });
+}
+
 function maskSecret(value: string, leading = 3, trailing = 3) {
   if (!value) {
     return value;
@@ -521,6 +532,15 @@ export async function logoutPortal(): Promise<void> {
   if (isBrowser()) {
     window.location.assign("/");
   }
+}
+
+export async function logoutRejectedPortalSession(returnTo?: string): Promise<void> {
+  logAuthFlow("logoutRejectedPortalSession", {
+    reason: "backend_rejected_session",
+    redirectTarget: resolveSafePortalReturnTo(returnTo),
+  });
+  clearPortalAuthStorage({ includeAuth0Sdk: ACTIVE_PORTAL_BRANDING !== "definianInspection" });
+  await redirectToAuth0Login(returnTo);
 }
 
 export async function getPortalAccessToken() {

@@ -20,6 +20,12 @@ import {
   redirectToAuth0Login,
 } from "@/lib/portalAuth";
 import { publicBranding } from "@/lib/publicBranding";
+import {
+  PORTAL_ORGANIZATION_SCOPES,
+  getPortalOrganizationScope,
+  type PortalOrganizationScope,
+  type PortalOrganizationScopeKey,
+} from "@/lib/portalOrganizations";
 
 type PortalSessionStatus =
   | "loading"
@@ -199,12 +205,18 @@ interface PortalSessionContextValue {
   selectedLocationLabel: string | null;
   locationLocked: boolean;
   switchOrganization: (orgId: string, orgName: string) => void;
+  organizationScopes: readonly PortalOrganizationScope[];
+  selectedOrganizationScopeKey: PortalOrganizationScopeKey;
+  selectedOrganizationScope: PortalOrganizationScope;
+  switchOrganizationScope: (key: PortalOrganizationScopeKey) => void;
 }
 
 export function PortalSessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<PortalSessionStatus>("loading");
   const [session, setSession] = useState<PortalSessionResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [selectedOrganizationScopeKey, setSelectedOrganizationScopeKey] =
+    useState<PortalOrganizationScopeKey>("all");
   const pathname = usePathname() ?? "/";
 
   const loadSession = useCallback(async () => {
@@ -309,6 +321,10 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     // Dev session bypass uses a fixed tenant snapshot; switching is intentionally inert.
   }, []);
 
+  const switchOrganizationScope = useCallback((key: PortalOrganizationScopeKey) => {
+    setSelectedOrganizationScopeKey(key);
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => {
       void loadSession();
@@ -342,6 +358,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     const planTier = session?.plan_tier ?? null;
     const requiresAds = Boolean(session?.requires_ads);
     const portalAccess = session?.portal_access ?? true;
+    const selectedOrganizationScope = getPortalOrganizationScope(selectedOrganizationScopeKey);
 
     const normalizedOrganizationName = normalizeOrganizationKey(session?.organization?.name ?? null);
     const isAwct =
@@ -384,8 +401,20 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       selectedLocationLabel,
       locationLocked,
       switchOrganization,
+      organizationScopes: PORTAL_ORGANIZATION_SCOPES,
+      selectedOrganizationScopeKey,
+      selectedOrganizationScope,
+      switchOrganizationScope,
     };
-  }, [status, session, error, loadSession, switchOrganization]);
+  }, [
+    status,
+    session,
+    error,
+    loadSession,
+    switchOrganization,
+    selectedOrganizationScopeKey,
+    switchOrganizationScope,
+  ]);
 
   return (
     <PortalSessionContext.Provider value={value}>
