@@ -1,4 +1,5 @@
 import type {
+  PortalSessionLocation,
   ReportDamageApiRow,
   ReportSeverity,
   RsaReportApiRow,
@@ -310,6 +311,80 @@ export function getDamageReportFacilityMatchKeys(report: ReportDamageApiRow): st
   return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean)));
 }
 
+function getSessionLocationMatchKeys(location: PortalSessionLocation): string[] {
+  const metadata = location.metadata ?? {};
+  const values = [
+    location.location_id,
+    location.location_label,
+    location.location_name,
+    location.display_name,
+    metadata.location_id,
+    metadata.locationId,
+    metadata.facility_id,
+    metadata.facilityId,
+    metadata.location_label,
+    metadata.locationLabel,
+    metadata.location_name,
+    metadata.locationName,
+    metadata.facility,
+    metadata.facility_name,
+    metadata.facilityName,
+  ];
+  const keys = values.flatMap((value) => {
+    const normalized = normalizedString(value).toLowerCase();
+    if (!normalized) return [];
+    return [normalized, slugForFacilityLabel(normalized)];
+  });
+  return Array.from(new Set(keys.filter(Boolean)));
+}
+
+/** Fill a report's facility label when the API only returned its identifier. */
+export function enrichDamageReportFacility(
+  report: ReportDamageApiRow,
+  locations: readonly PortalSessionLocation[]
+): ReportDamageApiRow {
+  const existingLabel = resolveDamageReportLocationName(report);
+  if (existingLabel && existingLabel !== "Other") return report;
+
+  const reportKeys = new Set(
+    getDamageReportFacilityMatchKeys(report).map((key) => key.toLowerCase())
+  );
+  if (reportKeys.size === 0) return report;
+
+  const match = locations.find((location) =>
+    getSessionLocationMatchKeys(location).some((key) => reportKeys.has(key))
+  );
+  if (!match) return report;
+
+  const label = firstString(
+    match.location_label,
+    match.display_name,
+    match.location_name,
+    match.location_id
+  );
+  if (!label) return report;
+
+  const locationId = firstString(report.location_id, report.facility_id, match.location_id);
+  return {
+    ...report,
+    location_id: locationId,
+    facility_id: firstString(report.facility_id, report.location_id, match.location_id),
+    location_label: label,
+    location_name: label,
+    facility: label,
+    navigation: label,
+    location: {
+      ...(report.location ?? {}),
+      location_id: firstString(report.location?.location_id, locationId),
+      facility_id: firstString(report.location?.facility_id, locationId),
+      location_label: label,
+      location_name: label,
+      facility: label,
+      navigation: label,
+    },
+  };
+}
+
 export function getRsaReportFacilityMatchKeys(report: RsaReportApiRow): string[] {
   const values = [
     report.facility_id,
@@ -376,4 +451,3 @@ export function resolveCarDisplayInfo(car: unknown) {
       isUnverified: allVins.length === 0
   };
 }
-

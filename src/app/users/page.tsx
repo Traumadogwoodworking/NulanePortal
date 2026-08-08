@@ -1,25 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageSection } from "@/components/ui/PageSection";
 import { StatCard } from "@/components/ui/StatCard";
 import { FacilitySelector } from "@/components/ui/FacilitySelector";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DataTableShell } from "@/components/ui/DataTableShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorPanel } from "@/components/ui/ErrorPanel";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { ConfirmActionDialog } from "@/components/ui/ConfirmActionDialog";
 import { InviteUserModal } from "@/components/users/InviteUserModal";
 import { ResetPasswordDialog } from "@/components/users/ResetPasswordDialog";
 import { UsersAdapter } from "@/lib/services/usersService";
 import { usePortalSession } from "@/lib/portalSession";
-import { refreshControlPlaneBootstrap, useControlPlaneBootstrap, usePortalDirectorySnapshot } from "@/lib/portalData";
-import { RefreshCw, UserPlus, Search, Shield, ChevronDown, User, Pencil } from "lucide-react";
+import { refreshControlPlaneBootstrap, usePortalDirectorySnapshot } from "@/lib/portalData";
+import { RefreshCw, UserPlus, Search, Shield, ChevronDown, User } from "lucide-react";
 import type { ChangeEvent } from "react";
 import type { DeletedUserSummary, FacilitySummary } from "@/lib/types";
 import { selectedRowStrokeClass } from "@/lib/severityTheme";
@@ -83,10 +80,20 @@ type DeletedUserDetailSnapshot = DeletedUserSummary & {
 };
 
 export default function UsersPage() {
-  const { organizationId, isOrgAdmin } = usePortalSession();
+  const {
+    organizationId,
+    isFacilityAdmin: isOrgAdmin,
+    selectedOrganizationScopeKey,
+  } = usePortalSession();
   const searchParams = useSearchParams();
-  const { data: bootstrap } = useControlPlaneBootstrap();
-  const { data: directory, mutate: refreshDirectory, isLoading, error } = usePortalDirectorySnapshot();
+  const {
+    data: directory,
+    mutate: refreshDirectory,
+    isLoading,
+    isRefreshing,
+    lastUpdated,
+    error,
+  } = usePortalDirectorySnapshot();
   const [viewMode, setViewMode] = useState<typeof VIEW_ACTIVE | typeof VIEW_DELETED>(VIEW_ACTIVE);
   const [facilityFilter, setFacilityFilter] = useState<string>(FACILITY_ALL);
   const [searchTerm, setSearchTerm] = useState("");
@@ -95,41 +102,67 @@ export default function UsersPage() {
   const [deletedUsersLoading, setDeletedUsersLoading] = useState(true);
   const [deletedUsersError, setDeletedUsersError] = useState<string | null>(null);
   const [selectedDeletedUserId, setSelectedDeletedUserId] = useState<string | null>(null);
+  const didMountOrganizationScopeRef = useRef(false);
   const [restoreCandidate, setRestoreCandidate] = useState<DeletedUserSummary | null>(null);
   const [restorePendingUserId, setRestorePendingUserId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"invite" | "identity" | "status" | "password-reset" | null>(null);
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [selectedAssignmentFacilityId, setSelectedAssignmentFacilityId] = useState<string>("");
-  const [selectedAssignmentRole, setSelectedAssignmentRole] = useState("user");
-  const [assignError, setAssignError] = useState<string | null>(null);
   const users = useMemo(() => directory?.users ?? [], [directory]);
   const facilities = useMemo(() => directory?.facilities ?? [], [directory]);
   const locationMemberships = useMemo(() => directory?.locationMemberships ?? [], [directory]);
   const directoryPartialError = directory?.partialError ?? null;
-  const capabilities = bootstrap?.capabilities;
   const inviteDisabledReason = !isOrgAdmin ? "Organization admin permission is required to add users." : null;
   const assignDisabledReason = !isOrgAdmin ? "Organization admin permission is required to assign facilities." : null;
 
   const loadDirectory = async () => {
     setStatusMessage(null);
-    await refreshDirectory();
+    try {
+      const refreshedDirectory = await refreshDirectory();
+      const refreshProblem = refreshedDirectory?.partialError;
+      if (refreshProblem && /users:|facility assignments:/i.test(refreshProblem)) {
+        setStatusMessage(refreshProblem);
+        throw new Error(refreshProblem);
+      }
+    } catch (refreshError) {
+      setStatusMessage(refreshError instanceof Error ? refreshError.message : "Unable to refresh the user directory.");
+      throw refreshError;
+    }
+  };
+
+  const refreshCurrentView = async () => {
+    setOperationMessage(null);
+    try {
+      if (viewMode === VIEW_DELETED) {
+        const refreshed = await loadDeletedUsers();
+        setOperationMessage(refreshed ? "Deleted users refreshed from the server." : "Deleted users refresh failed.");
+      } else {
+        await loadDirectory();
+        setOperationMessage("User directory refreshed from the server.");
+      }
+    } catch (refreshError) {
+      setOperationMessage(refreshError instanceof Error ? refreshError.message : "Refresh failed.");
+    }
   };
 
   const loadDeletedUsers = async () => {
     if (!organizationId) {
       setDeletedUsers([]);
-      return;
+      return true;
     }
     setDeletedUsersLoading(true);
     setDeletedUsersError(null);
     try {
-      const records = await UsersAdapter.getDeletedUsers(organizationId);
+      const records = await UsersAdapter.getDeletedUsers(
+        organizationId,
+        selectedOrganizationScopeKey
+      );
       setDeletedUsers(records);
+      return true;
     } catch (error) {
       setDeletedUsersError(error instanceof Error ? error.message : "Deleted users could not be loaded.");
       setDeletedUsers([]);
+      return false;
     } finally {
       setDeletedUsersLoading(false);
     }
@@ -159,7 +192,18 @@ export default function UsersPage() {
 
   useEffect(() => {
     void loadDeletedUsers();
-  }, [organizationId]);
+  }, [organizationId, selectedOrganizationScopeKey]);
+
+  useEffect(() => {
+    if (!didMountOrganizationScopeRef.current) {
+      didMountOrganizationScopeRef.current = true;
+      return;
+    }
+    setFacilityFilter(FACILITY_ALL);
+    setSelectedUserId(null);
+    setSelectedDeletedUserId(null);
+    setDeletedUsers([]);
+  }, [selectedOrganizationScopeKey]);
 
   const userFacilityIdsByUserId = useMemo(() => {
     const assignments = new Map<string, Set<string>>();
@@ -258,6 +302,8 @@ export default function UsersPage() {
   ];
 
   const showEmptyState = !filteredUsers.length && !isLoading && !statusMessage;
+  const refreshPending = viewMode === VIEW_DELETED ? deletedUsersLoading : isRefreshing;
+  const operationFailed = Boolean(operationMessage && /failed|unable|error/i.test(operationMessage));
 
   const handleInviteUser = async (payload: {
     email: string;
@@ -265,6 +311,7 @@ export default function UsersPage() {
     role: string;
     facility_ids: string[];
     invite: boolean;
+    send_email: boolean;
   }) => {
     if (!organizationId) {
       throw new Error("Organization context missing.");
@@ -273,11 +320,15 @@ export default function UsersPage() {
     setPendingAction("invite");
     try {
       const result = await UsersAdapter.inviteUser(organizationId, payload);
-      setOperationMessage(`Invitation sent to ${result.email}.`);
+      setOperationMessage(
+        result.invitation.emailRequested
+          ? `Invite created for ${result.user.email}. Auth0 accepted the email request.`
+          : `User ${result.user.email} was created without an invitation email request.`
+      );
       await loadDirectory();
       await refreshControlPlaneBootstrap(organizationId);
-    } catch {
-      throw new Error("User invite failed.");
+    } catch (error) {
+      throw error instanceof Error ? error : new Error("User invite failed.");
     } finally {
       setPendingAction(null);
     }
@@ -289,6 +340,7 @@ export default function UsersPage() {
     role: string;
     facility_ids: string[];
     invite: boolean;
+    send_email: boolean;
   }) => {
     if (!organizationId || !selectedUser || !isOrgAdmin) {
       throw new Error("Organization admin permission is required.");
@@ -391,32 +443,6 @@ export default function UsersPage() {
     }
   };
 
-  const handleAddFacilityAssignment = async () => {
-    if (!organizationId || !selectedUser || !isOrgAdmin) return;
-    if (!selectedAssignmentFacilityId.trim()) return;
-    setPendingAction("identity");
-    try {
-      const nextFacilityIds = Array.from(new Set([...selectedUserFacilityIds, selectedAssignmentFacilityId.trim()]));
-      await UsersAdapter.updateUser(organizationId, selectedUser.id, {
-        display_name: selectedUser.name,
-        email: selectedUser.email,
-        role: selectedUser.role,
-        facility_ids: nextFacilityIds,
-      });
-      setOperationMessage(`Assigned ${selectedUser.name} to ${selectedAssignmentFacilityId.trim()}.`);
-      await loadDirectory();
-      await refreshControlPlaneBootstrap(organizationId);
-      setIsAssignDialogOpen(false);
-      setSelectedAssignmentFacilityId("");
-      setSelectedAssignmentRole("user");
-    } catch {
-      setAssignError("Facility assignment failed.");
-      setOperationMessage("Facility assignment failed.");
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
   const handleRemoveFacilityAssignment = async (assignment: UserFacilityAssignmentDisplay) => {
     if (!organizationId || !isOrgAdmin || !selectedUser) return;
     setPendingAction("identity");
@@ -460,6 +486,19 @@ export default function UsersPage() {
           error={directoryError}
           action={<button type="button" onClick={() => void loadDirectory()} className="rounded-full border border-current/20 px-4 py-2 text-sm font-black uppercase tracking-widest">Retry</button>}
         />
+      ) : null}
+      {operationMessage ? (
+        <div
+          role={operationFailed ? "alert" : "status"}
+          aria-live="polite"
+          className={`rounded-xl border px-4 py-3 text-sm font-bold ${
+            operationFailed
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {operationMessage}
+        </div>
       ) : null}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {summaryDeck.map((stat) => (
@@ -507,12 +546,14 @@ export default function UsersPage() {
               <FacilitySelector facilities={facilities} value={facilityFilter} onChange={setFacilityFilter} />
             ) : null}
             <button
-              onClick={() => void loadDirectory()}
-              disabled={isLoading}
-              title={isLoading ? "Directory refresh already in progress" : "Refresh user directory"}
-              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-900 transition-all shadow-sm"
+              onClick={() => void refreshCurrentView()}
+              disabled={refreshPending}
+              aria-label={refreshPending ? "Refreshing users" : "Refresh users"}
+              title={refreshPending ? "User refresh already in progress" : "Refresh users"}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:text-slate-900 transition-all shadow-sm disabled:cursor-wait disabled:opacity-70"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshPending ? 'animate-spin' : ''}`} />
+              <span className="text-sm font-bold">{refreshPending ? "Refreshing…" : "Refresh"}</span>
             </button>
             {viewMode === VIEW_ACTIVE ? (
               <InviteUserModal
@@ -536,8 +577,12 @@ export default function UsersPage() {
           </div>
         }
       >
-        <div className="grid gap-4 lg:grid-cols-4">
-          <div className="lg:col-span-3">
+        <div className="mb-3 flex min-h-5 items-center justify-between gap-3 text-sm text-slate-500" aria-live="polite">
+          <span>{refreshPending && directory ? "Checking the server for user updates…" : "User data is synced from the server."}</span>
+          <span>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}` : "Not synced yet"}</span>
+        </div>
+        <div className="grid min-w-0 gap-4 lg:grid-cols-4">
+          <div className="min-w-0 lg:col-span-3">
             {viewMode === VIEW_ACTIVE && isLoading ? (
               <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-slate-400" /></div>
             ) : viewMode === VIEW_ACTIVE && statusMessage ? (
@@ -673,7 +718,7 @@ export default function UsersPage() {
             )}
           </div>
 
-          <aside className="lg:border-l border-slate-100 pl-4 py-2">
+          <aside className="min-w-0 border-slate-100 py-2 lg:border-l lg:pl-4">
              <div className="sticky top-4 space-y-6">
                 {viewMode === VIEW_ACTIVE && selectedUser ? (
                   <>
@@ -708,14 +753,14 @@ export default function UsersPage() {
                                >
                                <div className="min-w-0">
                                  <span className="block text-sm font-bold text-slate-800 truncate">{assignment.facility.name}</span>
-                                 <span className="block text-[10px] text-slate-500 truncate">{assignment.facility.slug}</span>
+                                 <span className="block text-xs text-slate-500 truncate">{assignment.facility.slug}</span>
                                </div>
                                <button
                                  type="button"
                                  onClick={() => void handleRemoveFacilityAssignment(assignment)}
                                  disabled={!isOrgAdmin || pendingAction !== null}
                                  title={!isOrgAdmin ? "Organization admin permission is required." : "Remove facility assignment"}
-                                 className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                                 className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                                >
                                  Unassign
                                </button>
@@ -732,16 +777,30 @@ export default function UsersPage() {
                           Organization admin permission is required for user changes.
                         </p>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setIsAssignDialogOpen(true)}
-                        disabled={!isOrgAdmin || pendingAction !== null}
-                        title={assignDisabledReason ?? "Edit user facilities"}
-                        className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 text-sm font-black uppercase tracking-widest text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
-                      >
-                        Edit
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
+                      <InviteUserModal
+                        facilities={facilities}
+                        canInviteUser={isOrgAdmin}
+                        mode="update"
+                        initialUser={{
+                          email: selectedUser.email,
+                          displayName: selectedUser.name,
+                          role: selectedUser.role,
+                          facilityIds: selectedUserFacilityIds,
+                        }}
+                        organizationMissingReason={!organizationId ? "Organization context missing." : null}
+                        onInvite={handleUpdateSelectedUser}
+                        trigger={
+                          <button
+                            type="button"
+                            disabled={!isOrgAdmin || pendingAction !== null}
+                            title={assignDisabledReason ?? "Edit user profile, role, and facility access"}
+                            className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 text-sm font-black uppercase tracking-widest text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
+                          >
+                            Edit User
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        }
+                      />
                       <ResetPasswordDialog
                         organizationId={organizationId}
                         user={selectedUser}
@@ -784,103 +843,7 @@ export default function UsersPage() {
                              </select>
                           </div>
                        </div>
-                       <InviteUserModal
-                         facilities={facilities}
-                         canInviteUser={isOrgAdmin}
-                         mode="update"
-                         initialUser={{
-                           email: selectedUser.email,
-                           displayName: selectedUser.name,
-                           role: selectedUser.role,
-                           facilityIds: selectedUserFacilityIds,
-                         }}
-                         organizationMissingReason={!organizationId ? "Organization context missing." : null}
-                         onInvite={handleUpdateSelectedUser}
-                         trigger={
-                           <button
-                             type="button"
-                             disabled={!isOrgAdmin || pendingAction !== null}
-                             title={assignDisabledReason ?? "Update user facilities"}
-                             className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 text-sm font-black uppercase tracking-widest text-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50"
-                           >
-                             Add Facility Assignment
-                             <ChevronDown className="w-3.5 h-3.5" />
-                           </button>
-                         }
-                       />
-                       {operationMessage && (
-                         <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-black text-slate-700 uppercase tracking-widest text-center animate-in fade-in zoom-in-95">
-                           {operationMessage}
-                         </div>
-                       )}
                     </footer>
-                    <Dialog open={isAssignDialogOpen} onOpenChange={(open) => {
-                      setIsAssignDialogOpen(open);
-                      if (!open) {
-                        setAssignError(null);
-                        setPendingAction(null);
-                      }
-                    }}>
-                      <DialogContent className="sm:max-w-[520px]">
-                        <DialogHeader>
-                          <DialogTitle>Assign Facility</DialogTitle>
-                          <DialogDescription>
-                            Select a facility and attach it to the currently selected user.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-2">
-                          {assignError ? (
-                            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                              {assignError}
-                            </div>
-                          ) : null}
-                          <div className="grid gap-2">
-                            <Label className="text-[11px] font-black uppercase tracking-widest text-slate-500">Facility</Label>
-                            <FacilitySelector
-                              facilities={facilities}
-                              value={selectedAssignmentFacilityId}
-                              onChange={setSelectedAssignmentFacilityId}
-                              includeAllOption={false}
-                              emptyLabel="No facilities available for assignment."
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="assignment-role">Role</Label>
-                            <select
-                              id="assignment-role"
-                              value={selectedAssignmentRole}
-                              onChange={(event) => setSelectedAssignmentRole(event.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
-                            >
-                              <option value="user">User</option>
-                              <option value="admin">Admin</option>
-                              <option value="org_admin">Org Admin</option>
-                              <option value="super_admin">Super Admin</option>
-                              <option value="viewer">Viewer</option>
-                            </select>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsAssignDialogOpen(false)}
-                            disabled={pendingAction !== null}
-                            className="border-slate-300 bg-slate-700 text-white hover:bg-slate-600 hover:text-white focus-visible:ring-slate-500/30"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={() => void handleAddFacilityAssignment()}
-                            disabled={!selectedAssignmentFacilityId || pendingAction !== null || capabilities?.canAssignFacilities === false}
-                            className="bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:ring-emerald-500/30"
-                          >
-                            {pendingAction === "identity" ? "Assigning..." : "Assign User"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
                   </>
                 ) : viewMode === VIEW_DELETED && deletedUserDetails ? (
                   <section className="space-y-4">
@@ -956,4 +919,3 @@ export default function UsersPage() {
     </article>
   );
 }
-

@@ -2,11 +2,6 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { publicBranding } from "@/lib/publicBranding";
 
-const TABLET_WEBP = "/media/inspection-trac/device-tablet-cutout.webp";
-const TABLET_PNG = "/media/inspection-trac/device-tablet-cutout.png";
-const PHONE_WEBP = "/media/inspection-trac/device-phone-cutout.webp";
-const PHONE_PNG = "/media/inspection-trac/device-phone-cutout.png";
-
 export function DevicePicture({
   webp,
   png,
@@ -42,83 +37,7 @@ export function DevicePicture({
 }
 
 export function RibbonField() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      {/* Soft radial glow behind the logo */}
-      <div
-        className="absolute left-1/2 top-[28%] h-[55%] w-[55%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-3xl"
-        style={{
-          background:
-            "radial-gradient(circle, rgba(37,99,235,0.16) 0%, rgba(13,44,113,0.08) 45%, transparent 72%)",
-        }}
-      />
-
-      {/* Shield watermark */}
-      <img
-        src={publicBranding.logoPath}
-        alt=""
-        className="absolute left-1/2 top-[28%] h-[42%] w-auto -translate-x-1/2 -translate-y-1/2 select-none opacity-[0.045] blur-xl"
-        draggable={false}
-      />
-
-      {/* Streamer / ribbon layer */}
-      <svg
-        className="absolute inset-0 h-full w-full animate-sway"
-        viewBox="0 0 1440 600"
-        preserveAspectRatio="xMidYMid slice"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <defs>
-          <linearGradient id="navyStream" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#0d2c71" stopOpacity="0" />
-            <stop offset="35%" stopColor="#0d2c71" stopOpacity="0.55" />
-            <stop offset="65%" stopColor="#0d2c71" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#0d2c71" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="royalStream" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#2563eb" stopOpacity="0" />
-            <stop offset="40%" stopColor="#2563eb" stopOpacity="0.5" />
-            <stop offset="60%" stopColor="#7c3aed" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#7c3aed" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="goldStream" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#fbbf24" stopOpacity="0" />
-            <stop offset="35%" stopColor="#fbbf24" stopOpacity="0.55" />
-            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* Navy arc sweeping behind tablet toward center */}
-        <path
-          d="M -40 380 Q 260 120 720 280 T 1520 180"
-          stroke="url(#navyStream)"
-          strokeWidth="28"
-          strokeLinecap="round"
-          opacity="0.9"
-        />
-
-        {/* Royal/purple arc rising behind phone toward center */}
-        <path
-          d="M -40 220 Q 320 420 720 260 T 1520 320"
-          stroke="url(#royalStream)"
-          strokeWidth="24"
-          strokeLinecap="round"
-          opacity="0.85"
-        />
-
-        {/* Gold accent swoosh below devices */}
-        <path
-          d="M -40 480 Q 360 360 720 440 T 1520 400"
-          stroke="url(#goldStream)"
-          strokeWidth="16"
-          strokeLinecap="round"
-          opacity="0.8"
-        />
-      </svg>
-    </div>
-  );
+  return null;
 }
 
 export function ExperienceHero() {
@@ -127,7 +46,7 @@ export function ExperienceHero() {
   return (
     <section
       id="experience"
-      className="relative bg-white px-4 py-14 text-center sm:px-6 sm:py-20 lg:px-8 lg:py-28"
+      className="relative bg-[#e9ebf2] px-4 py-14 text-center sm:px-6 sm:py-20 lg:px-8 lg:py-28"
     >
       <RibbonField />
 
@@ -137,20 +56,19 @@ export function ExperienceHero() {
           THE EXPERIENCE
         </p>
 
-        {/* Device + logo composition */}
-        <div className="relative mt-8 grid items-center gap-6 md:mt-10 lg:grid-cols-[1fr_minmax(20rem,36rem)_1fr] lg:gap-10">
-          {/* Center logo and heading */}
-          <div className="relative z-20 order-1 mx-auto flex max-w-xl flex-col items-center lg:order-2">
-            <div className="relative rounded-[2rem] border border-slate-200 bg-white/90 px-6 py-5 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:px-8 sm:py-6">
-              <img
-                src={brand.logoPath}
-                alt={brand.appName}
-                className="h-40 w-auto max-w-full object-contain sm:h-52 lg:h-60"
-                draggable={false}
-              />
-            </div>
+        <div className="relative mx-auto mt-8 flex max-w-[84rem] flex-col items-center gap-10 md:mt-10">
+          <div className="relative w-full max-w-[82rem]">
+            <div className="absolute inset-0 -z-10 rounded-[3rem] bg-[radial-gradient(circle_at_center,rgba(37,99,235,0.12),rgba(233,235,242,0.96)_45%),radial-gradient(circle_at_left,rgba(59,130,246,0.12),rgba(233,235,242,0.96)_28%),radial-gradient(circle_at_right,rgba(245,158,11,0.1),rgba(233,235,242,0.96)_28%)] blur-2xl" />
+            <img
+              src="/media/inspection-trac-center-logo.png"
+              alt="Inspection-Trac splash screen"
+              draggable={false}
+              className="mx-auto w-full max-w-[1760px] select-none object-contain"
+            />
+          </div>
 
-            <h1 className="mt-7 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
+          <div className="relative z-20 flex max-w-4xl flex-col items-center">
+            <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
               Built for Fast, Clear, and Consistent Inspections
             </h1>
 
@@ -166,52 +84,11 @@ export function ExperienceHero() {
                 Open Portal
               </Link>
               <Link
-                href="/get-app/"
+                href="/#get-app"
                 className="inline-flex min-w-[10rem] items-center justify-center rounded-full border-2 border-slate-200 bg-white px-7 py-3.5 text-base font-extrabold text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md no-underline"
               >
                 Get the App
               </Link>
-            </div>
-          </div>
-
-          {/* Phone - right */}
-          <div className="relative z-10 order-2 flex justify-center lg:order-3 lg:justify-start">
-            <div
-              className="w-[64%] max-w-[320px] drop-shadow-2xl sm:w-[58%] lg:w-[78%] lg:max-w-none"
-              style={{
-                transform: "perspective(1200px) rotateY(-14deg) rotateZ(5deg)",
-                transformOrigin: "center center",
-              }}
-            >
-              <DevicePicture
-                webp={PHONE_WEBP}
-                png={PHONE_PNG}
-                alt="Inspection-Trac phone app showing inspection options"
-                width={1122}
-                height={1402}
-                className="animate-float"
-                style={{ animationDelay: "1.2s" }}
-              />
-            </div>
-          </div>
-
-          {/* Tablet - left */}
-          <div className="relative z-10 order-3 flex justify-center lg:order-1 lg:justify-end">
-            <div
-              className="w-[88%] max-w-[520px] drop-shadow-2xl lg:w-[115%] lg:max-w-none"
-              style={{
-                transform: "perspective(1200px) rotateY(14deg) rotateZ(-5deg) scale(1.25)",
-                transformOrigin: "center center",
-              }}
-            >
-              <DevicePicture
-                webp={TABLET_WEBP}
-                png={TABLET_PNG}
-                alt="Inspection-Trac tablet app showing vehicle damage reports"
-                width={1448}
-                height={1086}
-                className="animate-float"
-              />
             </div>
           </div>
         </div>

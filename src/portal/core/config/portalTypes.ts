@@ -534,4 +534,3 @@ export interface BrandingSnapshot {
   custom_theme_data?: Record<string, unknown>;
   email_templates?: Record<string, unknown>;
 }
-

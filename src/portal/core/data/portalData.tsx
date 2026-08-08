@@ -618,10 +618,10 @@ export function usePortalDirectorySnapshot() {
       const ENABLE_ADMIN_DATA = true;
       const [usersResult, facilitiesResult, membershipsResult, emailListsResult] = await Promise.allSettled([
         ENABLE_ADMIN_DATA
-          ? UsersAdapter.getUsers(resolvedOrgId)
+          ? UsersAdapter.getUsers(resolvedOrgId, selectedOrganizationScopeKey)
           : Promise.resolve([]),
         ENABLE_ADMIN_DATA
-          ? FacilitiesAdapter.getFacilities(resolvedOrgId)
+          ? FacilitiesAdapter.getFacilities(resolvedOrgId, selectedOrganizationScopeKey)
           : Promise.resolve([]),
         ENABLE_ADMIN_DATA ? UsersAdapter.getLocationMemberships(resolvedOrgId) : Promise.resolve([]),
         fetchEmailLists(resolvedOrgId),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CirclePlus, Lock, Search, Trash2 } from "lucide-react";
+import { CirclePlus, Lock, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -95,8 +95,15 @@ function triggerSummary(rule: DeliveryRule, options: DeliveryRuleOptions | null)
   return `Facility + Damage: ${(facilityName || "Selected facility").toUpperCase()} + ${[area, damageType, severity].filter(Boolean).join(" / ") || "Any damage"}`;
 }
 
-function buildAssignedUserLabels(emails: string[]) {
-  return emails
+function getRuleRecipients(rule: DeliveryRule) {
+  return {
+    cc: Array.isArray(rule.actions?.cc) ? rule.actions.cc : [],
+    bcc: Array.isArray(rule.actions?.bcc) ? rule.actions.bcc : [],
+  };
+}
+
+function buildAssignedUserLabels(emails?: string[]) {
+  return (emails ?? [])
     .map((email) => email.trim())
     .filter(Boolean)
     .map((email) => ({ email, label: email }));
@@ -147,10 +154,12 @@ function validateDraft(draft: RuleDraft) {
 }
 
 function sameSelection(a: DeliveryRule | ReturnType<typeof buildPayload>, b: DeliveryRule | ReturnType<typeof buildPayload>) {
-  const aCc = a.actions.cc.join("|");
-  const bCc = b.actions.cc.join("|");
-  const aBcc = a.actions.bcc.join("|");
-  const bBcc = b.actions.bcc.join("|");
+  const aRecipients = getRuleRecipients(a as DeliveryRule);
+  const bRecipients = getRuleRecipients(b as DeliveryRule);
+  const aCc = aRecipients.cc.join("|");
+  const bCc = bRecipients.cc.join("|");
+  const aBcc = aRecipients.bcc.join("|");
+  const bBcc = bRecipients.bcc.join("|");
   return (
     a.category === b.category &&
     a.triggerKind === b.triggerKind &&
@@ -198,6 +207,33 @@ export default function DeliveryRulesPage() {
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [ccEntry, setCcEntry] = useState("");
+  const [mutationPending, setMutationPending] = useState(false);
+
+  const refreshDeliveryRules = async () => {
+    if (!organizationId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [ruleResponse, optionResponse] = await Promise.all([
+        fetchDeliveryRules(),
+        fetchDeliveryRuleOptions(),
+      ]);
+      const nextRules = ruleResponse.delivery_rules || [];
+      setRules(nextRules);
+      setOptions(optionResponse);
+      setSelectedId((current) =>
+        current && nextRules.some((rule) => rule.id === current)
+          ? current
+          : nextRules[0]?.id ?? null
+      );
+      setSaveMessage("Delivery rules refreshed from the server.");
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Unable to load delivery rules.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!organizationId) return;
@@ -235,9 +271,10 @@ export default function DeliveryRulesPage() {
     const needle = search.trim().toLowerCase();
     return rules.filter((rule) => {
       const matchesKind = kindFilter === "all" || rule.category === kindFilter;
+      const recipients = getRuleRecipients(rule);
       const matchesSearch =
         !needle ||
-        [rule.name, rule.source?.displayLabel, rule.facilityTrigger?.facilityName, rule.damageTrigger?.area?.label, rule.damageTrigger?.damageType?.label, rule.damageTrigger?.severity?.label, ...rule.actions.cc, ...rule.actions.bcc]
+        [rule.name, rule.source?.displayLabel, rule.facilityTrigger?.facilityName, rule.damageTrigger?.area?.label, rule.damageTrigger?.damageType?.label, rule.damageTrigger?.severity?.label, ...recipients.cc, ...recipients.bcc]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(needle));
       return matchesKind && matchesSearch;
@@ -246,7 +283,7 @@ export default function DeliveryRulesPage() {
 
   const selectedRule = useMemo(() => rules.find((rule) => rule.id === selectedId) ?? null, [rules, selectedId]);
   const selectedRuleLocked = isLockedRule(selectedRule);
-  const draftDirty = isDraftDirty(draft, selectedRule);
+  const draftDirty = isDraftDirty(draft, selectedRule) || Boolean(ccEntry.trim());
   useEffect(() => {
     if (draft || !selectedRule) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -301,20 +338,24 @@ export default function DeliveryRulesPage() {
     };
     setSelectedId(null);
     setDraft(next);
+    setCcEntry("");
     setEditorError(null);
     setSaveMessage(null);
   };
 
-  const commitCcInput = (value: string) => {
-    if (!draft) return;
-    const nextEmails = normalizeEmailList(value);
-    setDraft({ ...draft, ccInput: nextEmails.join(", ") });
-  };
-
   const addCcValue = (value: string) => {
-    if (!draft) return;
-    const nextEmails = normalizeEmailList([draft.ccInput, value].join("\n"));
+    if (!draft) return false;
+    const addedEmails = normalizeEmailList(value);
+    if (!addedEmails.length) return false;
+    if (addedEmails.some((email) => !emailIsValid(email))) {
+      setEditorError("Enter a valid email address before adding it.");
+      return false;
+    }
+    const nextEmails = normalizeEmailList([draft.ccInput, ...addedEmails].join("\n"));
     setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+    setCcEntry("");
+    setEditorError(null);
+    return true;
   };
 
   const removeCcEmail = (email: string) => {
@@ -324,9 +365,13 @@ export default function DeliveryRulesPage() {
   };
 
   const persistDraft = async (mode: "create" | "update") => {
-    if (!draft) return;
+    if (!draft || mutationPending) return;
     if (selectedRuleLocked) {
       setEditorError("Locked rules are managed by platform support and cannot be modified here.");
+      return;
+    }
+    if (ccEntry.trim()) {
+      setEditorError("Press Enter or Add to include the email you are typing before saving.");
       return;
     }
     setEditorError(null);
@@ -340,6 +385,7 @@ export default function DeliveryRulesPage() {
       return;
     }
     const payload = buildPayload({ ...draft, ccInput: validation.cc.join(", ") });
+    setMutationPending(true);
     try {
       const result =
         mode === "create"
@@ -351,32 +397,62 @@ export default function DeliveryRulesPage() {
       });
       setSelectedId(result.id);
       setDraft(makeDraft(result));
-      setSaveMessage(mode === "create" ? "Rule created." : "Rule updated.");
+      setCcEntry("");
+      try {
+        const refreshed = await fetchDeliveryRules();
+        const verifiedRule = refreshed.delivery_rules.find((rule) => rule.id === result.id);
+        if (!verifiedRule) {
+          setEditorError(
+            `${result.name} was saved, but it was not returned by the refreshed delivery-rule list.`
+          );
+          setSaveMessage(mode === "create" ? "Rule created; refresh needs attention." : "Rule updated; refresh needs attention.");
+        } else {
+          setRules(refreshed.delivery_rules);
+          setDraft(makeDraft(verifiedRule));
+          setSaveMessage(mode === "create" ? "Rule created and verified." : "Rule updated and verified.");
+        }
+      } catch (refreshError) {
+        setEditorError(
+          `${result.name} was saved, but the delivery-rule list could not be refreshed: ${
+            refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+          }`
+        );
+        setSaveMessage(mode === "create" ? "Rule created; refresh needs attention." : "Rule updated; refresh needs attention.");
+      }
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save delivery rule.";
       if (message.toLowerCase().includes("read-only") || message.toLowerCase().includes("cannot be edited")) {
-        setEditorError("This existing source cannot be edited from this screen yet.");
+        setEditorError("This legacy source is read-only in the delivery-rules API. Create a replacement rule to change it.");
       } else {
         setEditorError(message);
       }
+    } finally {
+      setMutationPending(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!selectedRule) return;
+    if (!selectedRule || mutationPending) return;
     if (selectedRuleLocked) {
       setEditorError("Locked rules are managed by platform support and cannot be deleted here.");
       return;
     }
     if (!window.confirm(`Delete "${selectedRule.name}"?`)) return;
+    setMutationPending(true);
     try {
-      await deleteDeliveryRule(selectedRule.id);
-      setRules((current) => current.filter((rule) => rule.id !== selectedRule.id));
-      setSelectedId(null);
-      setDraft(null);
+      setEditorError(null);
+      setSaveMessage(null);
+      const refreshed = await deleteDeliveryRule(selectedRule.id);
+      const nextRule = refreshed.delivery_rules[0] ?? null;
+      setRules(refreshed.delivery_rules);
+      setSelectedId(nextRule?.id ?? null);
+      setDraft(nextRule ? makeDraft(nextRule) : null);
+      setCcEntry("");
       setSaveMessage("Rule deleted.");
     } catch (deleteError) {
       setEditorError(deleteError instanceof Error ? deleteError.message : "Unable to delete delivery rule.");
+    } finally {
+      setMutationPending(false);
     }
   };
 
@@ -387,11 +463,15 @@ export default function DeliveryRulesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" onClick={handleNewRule} className="bg-slate-900 text-white hover:bg-slate-800">
+        <Button type="button" onClick={handleNewRule} disabled={mutationPending} className="bg-slate-900 text-white hover:bg-slate-800">
           <CirclePlus className="h-4 w-4" />
           + New Rule
         </Button>
-        {saveMessage ? <span className="text-sm text-emerald-700">{saveMessage}</span> : null}
+        <Button type="button" variant="outline" onClick={() => void refreshDeliveryRules()} disabled={loading || mutationPending}>
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "Refreshing…" : "Refresh"}
+        </Button>
+        {saveMessage ? <span role="status" aria-live="polite" className="text-sm text-emerald-700">{saveMessage}</span> : null}
       </div>
 
       <Card className="border-slate-200 bg-white shadow-sm">
@@ -401,7 +481,7 @@ export default function DeliveryRulesPage() {
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search delivery rules" className="pl-9" />
           </div>
           <div className="w-56 space-y-1">
-            <Label className="text-[11px] font-black uppercase tracking-widest text-slate-500">Delivery Type</Label>
+            <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Delivery Type</Label>
             <Select value={kindFilter} onValueChange={(value) => setKindFilter(value as "all" | DeliveryRuleCategory)}>
               <SelectTrigger className="w-full bg-white">
                 <SelectValue placeholder="Type" />
@@ -432,54 +512,47 @@ export default function DeliveryRulesPage() {
 	                  key={rule.id}
 	                  type="button"
 	                  onClick={() => {
-	                    if (locked) return;
 	                    if (draftDirty && !window.confirm("You have unsaved changes. Continue to this rule and discard your current changes?")) {
 	                      return;
 	                    }
                     setSelectedId(rule.id);
                     setDraft(makeDraft(rule));
+                    setCcEntry("");
                     setEditorError(null);
                   }}
-	                  aria-disabled={locked}
 	                  className={`relative w-full rounded-2xl border px-4 py-3 text-left transition ${
-	                    locked
-	                      ? "cursor-not-allowed border-blue-200 bg-blue-50/30"
-	                      : selectedId === rule.id
+	                    selectedId === rule.id
 	                        ? "border-slate-900 bg-slate-50"
-	                        : "border-slate-200 hover:border-slate-300"
+	                        : locked
+	                          ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
+	                          : "border-slate-200 hover:border-slate-300"
 	                  }`}
                 >
-                  {locked ? (
-                    <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-blue-700">
-                      <Lock className="h-3 w-3" />
-                      LOCKED RULES
-                    </span>
-                  ) : null}
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-slate-900">{rule.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${rule.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${rule.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                           {rule.enabled ? "Enabled" : "Disabled"}
                         </span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{displayCategory(rule.category)}</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{displayCategory(rule.category)}</span>
                       </div>
                       <p className="text-sm text-slate-600">{triggerSummary(rule, options)}</p>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                         Email recipients: {recipientCount(rule)}
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {buildAssignedUserLabels(rule.actions.cc).map((user) => (
-                          <span key={`${rule.id}-${user.email}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                        {buildAssignedUserLabels(getRuleRecipients(rule).cc).map((user) => (
+                          <span key={`${rule.id}-${user.email}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
                             {user.label}
                           </span>
                         ))}
                       </div>
                     </div>
-	                    <div className="flex flex-col items-end gap-2 pr-28">
+	                    <div className="flex flex-col items-end gap-2">
 	                      <div className="flex flex-wrap justify-end gap-2">
-	                        {!locked && rule.source?.migrationRequired ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Existing source</span> : null}
-	                        {!locked && rule.source?.kind === "email_delivery_rules" ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Delivery rule</span> : null}
+	                        {!locked && rule.source?.migrationRequired ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Existing source</span> : null}
+	                        {!locked && rule.source?.kind === "email_delivery_rules" ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Delivery rule</span> : null}
 	                      </div>
                     </div>
                   </div>
@@ -500,30 +573,62 @@ export default function DeliveryRulesPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rule editor</p>
-                          <p className="mt-1 text-sm text-slate-500">Changes are saved explicitly from the top-right action.</p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {selectedRuleLocked
+                              ? "This legacy rule can be reviewed here but is not writable through the delivery-rules API."
+                              : "Changes are saved explicitly from the top-right action."}
+                          </p>
                           {selectedRuleLocked ? (
-                            <p className="mt-2 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black uppercase tracking-widest text-blue-700">
+                            <p className="mt-2 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-black uppercase tracking-widest text-blue-700">
                               <Lock className="h-3 w-3" />
                               Locked rule
                             </p>
                           ) : null}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => persistDraft(draft.id === EMPTY_RULE_ID ? "create" : "update")} disabled={selectedRuleLocked} className="border-slate-200 bg-white">
-                      Save
-                    </Button>
-                    {selectedRule ? (
-                      <Button type="button" variant="destructive" onClick={handleDelete} disabled={selectedRuleLocked}>
-                        <Trash2 className="h-4 w-4" />
-                        Delete
+                  {!selectedRuleLocked ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={() => persistDraft(draft.id === EMPTY_RULE_ID ? "create" : "update")} disabled={mutationPending} className="border-slate-200 bg-white">
+                        {mutationPending ? "Saving…" : "Save"}
                       </Button>
-                    ) : null}
-                  </div>
+                      {selectedRule ? (
+                        <Button type="button" variant="destructive" onClick={handleDelete} disabled={mutationPending}>
+                          <Trash2 className="h-4 w-4" />
+                          {mutationPending ? "Working…" : "Delete"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
-                {editorError ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{editorError}</div> : null}
+                {editorError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{editorError}</div> : null}
                 {duplicateWarning ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{duplicateWarning}</div> : null}
 
+                {selectedRuleLocked ? (
+                  <div className="space-y-4 rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{draft.name}</p>
+                      <p className="mt-1 text-sm text-slate-600">{ruleTypeFromDraft(draft)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Trigger</p>
+                      <p className="mt-1 text-sm text-slate-700">{selectedRule ? triggerSummary(selectedRule, options) : "Legacy trigger"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recipients</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {draftCcChipLabels.length ? draftCcChipLabels.map((entry) => (
+                          <span key={entry.email} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                            {entry.label}
+                          </span>
+                        )) : <span className="text-sm text-slate-500">No recipients configured.</span>}
+                      </div>
+                    </div>
+                    <p className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-blue-900">
+                      To change this rule, create a new delivery rule with the same trigger and recipients, then have platform support retire the legacy source.
+                    </p>
+                  </div>
+                ) : (
+                  <>
                 <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="space-y-2">
                     <Label htmlFor="rule-name">Rule name</Label>
@@ -536,7 +641,7 @@ export default function DeliveryRulesPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <Button
                       type="button"
                       className="bg-emerald-600 text-white hover:bg-emerald-700"
@@ -742,37 +847,46 @@ export default function DeliveryRulesPage() {
                           </button>
                         </span>
                       ))}
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <input
                         id="cc-emails"
-                        value={draft.ccInput}
-                        onChange={(event) => setDraft({ ...draft, ccInput: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === "," || event.key === ";") {
-                            event.preventDefault();
-                            addCcValue(event.currentTarget.value.replace(/[\n,;]+/g, " ").trim());
-                            commitCcInput("");
-                          }
+                        type="email"
+                        value={ccEntry}
+                        onChange={(event) => {
+                          setCcEntry(event.target.value);
+                          if (editorError?.startsWith("Enter a valid email")) setEditorError(null);
                         }}
-                        onBlur={(event) => {
-                          const value = event.currentTarget.value.trim();
-                          if (!value) return;
-                          addCcValue(value);
-                          commitCcInput("");
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addCcValue(ccEntry);
+                          }
                         }}
                         onPaste={(event) => {
                           const paste = event.clipboardData.getData("text");
-                          if (!paste) return;
+                          if (!/[\n,;]/.test(paste)) return;
                           event.preventDefault();
-                          const nextEmails = normalizeEmailList([draft?.ccInput || "", paste].join("\n"));
-                          setDraft({ ...draft, ccInput: nextEmails.join(", ") });
+                          addCcValue(paste);
                         }}
                         placeholder="claims@example.com"
-                        className="min-w-[14rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-slate-400"
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
                       />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addCcValue(ccEntry)}
+                        disabled={!ccEntry.trim()}
+                        className="h-10 shrink-0"
+                      >
+                        Add email
+                      </Button>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">Press Enter, comma, or semicolon to add each email. Use x to remove one.</p>
+                    <p className="mt-2 text-xs text-slate-500">Type one email and press Enter or Add email. Added recipients appear above; use x to remove one.</p>
                   </div>
                 </div>
+                  </>
+                )}
               </>
             )}
           </CardContent>

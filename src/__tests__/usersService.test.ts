@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resetUserPassword } from "@/lib/services/usersService";
+import { createUser, resetUserPassword } from "@/lib/services/usersService";
 
 const apiClientMocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
@@ -53,5 +53,43 @@ describe("resetUserPassword", () => {
     await expect(resetUserPassword("org-1", "user-1")).rejects.toThrow(
       "You do not have permission to send password reset emails."
     );
+  });
+});
+
+describe("createUser invitation status", () => {
+  it("preserves Auth0 acceptance separately from inbox delivery", async () => {
+    apiClientMocks.apiFetch.mockResolvedValue({
+      user: {
+        user_id: "user-2",
+        email: "invitee@example.com",
+        display_name: "Invitee",
+        role: "user",
+        is_active: true,
+      },
+      invitation: {
+        id: "invite-1",
+        email_requested: true,
+        created_at: "2026-08-06T16:19:38.527Z",
+        expires_at: "2026-08-13T16:19:38.527Z",
+      },
+    });
+
+    const result = await createUser("org-1", {
+      email: "invitee@example.com",
+      role: "user",
+      facility_ids: ["location-shap"],
+      invite: true,
+      send_email: true,
+    });
+
+    expect(result.user.email).toBe("invitee@example.com");
+    expect(result.invitation).toEqual({
+      id: "invite-1",
+      status: "requested",
+      emailRequested: true,
+      createdAt: "2026-08-06T16:19:38.527Z",
+      expiresAt: "2026-08-13T16:19:38.527Z",
+      reason: null,
+    });
   });
 });

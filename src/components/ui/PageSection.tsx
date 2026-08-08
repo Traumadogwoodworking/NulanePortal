@@ -17,17 +17,17 @@ export function PageSection({ title, description, actions, children, badge, vari
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-2">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
-            <h2 className="mb-0.5 text-sm font-extrabold uppercase tracking-[0.28em] text-slate-900">
+            <h2 className="mb-0.5 text-lg font-bold tracking-tight text-slate-950">
               {title}
             </h2>
             {badge && (
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[8px] font-black uppercase tracking-widest leading-none">
+              <span className="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-semibold leading-none text-slate-700">
                 {badge}
               </span>
             )}
           </div>
           {description && (
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700">
+            <p className="max-w-3xl text-sm font-medium leading-6 text-slate-600">
               {description}
             </p>
           )}

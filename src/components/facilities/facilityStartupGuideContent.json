@@ -1,0 +1,34 @@
+{
+  "front": {
+    "eyebrow": "INSPECTION-TRAC FACILITY ACCESS",
+    "title": "Scan to get started",
+    "instruction": "Use your phone camera to open the secure Chicago Heights registration page. Enter your work email, then create an account or sign in with that exact address.",
+    "privacy": "Safe to post and print: the QR code identifies Chicago Heights only. It contains no employee name, email, password, invitation, or permission."
+  },
+  "back": {
+    "title": "Your Inspection-Trac quick start",
+    "safety": "If the facility shown after scanning is not Chicago Heights, stop and contact support. No assignment is created until your verified sign-in completes."
+  },
+  "steps": [
+    {
+      "title": "Install Inspection-Trac",
+      "detail": "Use the iPhone or Android installation link on the registration page or in this guide."
+    },
+    {
+      "title": "Create or access your account",
+      "detail": "Existing users choose Sign in. New users choose Create account and verify the email Auth0 sends."
+    },
+    {
+      "title": "Confirm your assigned facility",
+      "detail": "Return to the registration page after sign-in. Confirm it says Chicago Heights before continuing."
+    },
+    {
+      "title": "Start your first inspection",
+      "detail": "Open Inspection-Trac and sign in with the same verified account. Your Chicago Heights access loads during sign-in."
+    },
+    {
+      "title": "Get support",
+      "detail": "Use the support contact below and include the displayed support reference if your access needs attention."
+    }
+  ]
+}

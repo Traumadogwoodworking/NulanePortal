@@ -53,4 +53,3 @@ export function DamageMapCard({ report }: { report?: ReportDamageApiRow | null }
     </Card>
   );
 }
-

@@ -1,15 +1,24 @@
-# Inspection-Trac Portal (portal-next)
+# Definian Portal
 
-Next.js 16/TypeScript SPA for the Inspection-Trac portal.
+Next.js 16/TypeScript portal for Definian Inspection. This worktree is the canonical Definian portal; it consumes shared Inspection-Trac portal features while keeping Definian branding, authentication, and deployment configuration product-specific.
 
-This branch ships the quick Inspection-Trac branded portal path. Branding is centralized in the current preset/navigation seams so the visible shell can be replaced later by a proper config-driven white-label build without rewriting stable portal code.
+## Source layout
 
-## Quick branding switch
+- `src/portal/core/`: shared portal data, services, UI, and feature implementations.
+- `src/portal/products/definian/`: Definian-only branding and product configuration.
+- `src/portal/products/inspection-trac/`: Inspection-Trac product configuration used to keep shared behavior portable.
+- `src/app/`: Next.js routes and server endpoints. Routes should delegate reusable behavior to `src/portal/core/`.
+- `src/lib/` and `src/components/`: compatibility entry points and application shell code. Shared implementations should not be duplicated here.
 
-Inspection-Trac is the default for this branch.
+When moving a newer Inspection-Trac feature into Definian, merge the implementation into `src/portal/core/` and retain the Definian product/auth configuration at the edge. Do not copy a second independent damage, report, session, or API-client implementation into the Definian product folder.
+
+## Branding
+
+Definian is the default for this branch.
 
 ```bash
 npm run build
+NEXT_PUBLIC_PORTAL_BRANDING=definianInspection npm run build
 NEXT_PUBLIC_PORTAL_BRANDING=inspectionTrac npm run build
 NEXT_PUBLIC_PORTAL_BRANDING=nulaneSystems npm run build
 NEXT_PUBLIC_PORTAL_BRANDING=docudent npm run build
@@ -38,8 +47,8 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_DOCUDENT_EMBED_URL` | Absolute URL to the Flutter web bundle embedded on `/docudent` | `https://nulanesystems.com/portal/app/index.html` |
 | `NEXT_PUBLIC_AUTH0_DOMAIN` | Auth0 tenant domain that backs the portal SSO | `nulanesystems.us.auth0.com` |
 | `NEXT_PUBLIC_AUTH0_CLIENT_ID` | Auth0 application client ID used when redirecting to login | `WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc` |
-| `NEXT_PUBLIC_AUTH0_AUDIENCE` | Auth0 audience expected by the portal API | `https://api.nulanesystems.com` |
-| `NEXT_PUBLIC_AUTH0_REDIRECT_URI` | Auth0 redirect target (defaults to the portal root) | `https://nulanesystems.com/portal` |
+| `NEXT_PUBLIC_AUTH0_AUDIENCE` | Auth0 audience registered for this portal | `https://api.nulanesystems.com` |
+| `NEXT_PUBLIC_AUTH0_REDIRECT_URI` | Auth0 callback target | `<portal-origin>/auth/callback/` |
 
 The Auth0 values above mirror the legacy portal; override them via `.env.local` when you run staging or local builds that point at a different Auth0 tenant or redirect URI.
 
@@ -50,80 +59,45 @@ The default API base mirrors the legacy `resolveApiBase()` helper in `nulane_sys
 ## Local development and validation
 
 ```bash
-npm run dev             # Next.js development server
+nulane-dev status       # inspect the managed runner first
+nulane-dev logs next-site
 npm run lint            # ESLint
-npx tsc --noEmit        # TypeScript checks when needed
-npm run build           # Static export build
+npm test                # full Vitest suite
+npm run build           # Next.js server build
+npm run export:validate # validates required server routes (or a static export when configured)
 ```
-The portal now refuses to initialize on `localhost` unless `NEXT_PUBLIC_API_BASE_URL` points at a non-production backend. Set that env (and the matching Auth0 overrides above) before running these commands so you do not accidentally hit `https://api.nulanesystems.com/api` during development.
 
-### Local Auth0 notes
+Recurring local development is owned by the `next-site` Process Compose runner. Its active profile must be `definian-portal`; do not start a second unmanaged Next.js server. Runtime variables live outside the repository under `/Users/home/.nulane/dev/env/`.
 
-The local portal runs under the `/portal` base path. With the default local redirect behavior, the Auth0 application must allow:
+### Embedded Auth0 notes
 
-- Allowed Callback URLs: `http://localhost:3000/portal/`
-- Allowed Logout URLs: `http://localhost:3000/portal/`
+Definian uses the branded embedded login route at `/login/`. The SPA still completes the OAuth callback at `/auth/callback/`; it does not replace the Definian login page with Auth0 Universal Login.
+
+- Allowed Callback URLs: `http://localhost:3000/auth/callback/`
+- Allowed Logout URLs: `http://localhost:3000/`
 - Allowed Web Origins: `http://localhost:3000`
 - Allowed Origins / CORS: `http://localhost:3000` when the API tenant enforces browser origins for local API calls
 
 Keep the production URLs in the same Auth0 application when validating production:
 
-- `https://nulanesystems.com/portal/`
-- `https://nulanesystems.com`
+- `https://definian.com/auth/callback/`
+- the active Vercel deployment callback URL
+- logout and web origins for `https://definian.com`
 
-PowerShell local run:
-
-```powershell
-$env:NEXT_PUBLIC_PORTAL_BRANDING = "inspectionTrac"
-$env:NEXT_PUBLIC_PORTAL_BASE_PATH = "/portal"
-npm run dev
-```
-
-Open a clean local browser profile when Auth0 has stale localhost tokens:
-
-```powershell
-$profile = Join-Path $env:TEMP "inspection-trac-portal-auth-clean"
-Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
-Start-Process msedge -ArgumentList "--user-data-dir=$profile", "http://localhost:3000/portal/home/"
-```
-
-If using Chrome instead of Edge:
-
-```powershell
-$profile = Join-Path $env:TEMP "inspection-trac-portal-auth-clean"
-Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
-Start-Process chrome -ArgumentList "--user-data-dir=$profile", "http://localhost:3000/portal/home/"
-```
-
-Localhost `invalid_token`, `login_required`, and `interaction_required` silent-auth failures clear the portal cache and Auth0 SDK cache before redirecting to login. Production keeps the normal Auth0 redirect behavior.
+An invalid or backend-rejected token is cleared before the branded embedded login is opened again. Do not add a second automatic Universal Login redirect path.
 
 
-## Static export pipeline
+## Deployment model
 
-This repo is configured to export a static site into `out/`.
+The Definian build includes `/api/auth/embedded-login` and `/api/portal/[...path]`, so production requires a Next.js server deployment (Vercel is supported). The same-origin `/api/portal` proxy is intentional: it forwards authenticated API requests and avoids browser CORS drift.
 
 ```bash
+npm ci
+npm run lint
+npm test
 npm run build
 npm run export:validate
 ```
-
-The export should produce:
-
-- `out/index.html`
-- `out/_next/`
-- route folders with trailing slashes
-- public asset copies used by the static site
-
-The `out/` directory can be uploaded directly to a static host, cPanel `public_html`, or a CI artifact destination.
-
-## Production validation (run outside the sandbox)
-
-```bash
-npm run build           # Next.js production build (Turbopack)
-npm run start           # Serve the static out/ export locally
-```
-
-If Turbopack build hangs in restricted environments (as seen in this sandbox), run these commands on a machine/CI that can execute `npm run build` and capture the standard `next build` output. For this static export workflow, validate the generated `out/` folder with `npm run export:validate` and publish the contents of `out/` rather than running a Node server. `npm run start` serves the exported `out/` directory directly.
 
 ## Workflow philosophy
 
@@ -136,10 +110,6 @@ If Turbopack build hangs in restricted environments (as seen in this sandbox), r
 - Favor additive edits over rewrite-heavy refactors.
 - Keep future debugging fast: fewer layers, fewer hidden side effects, and fewer places where a change can be lost.
 
-## Rollback guidance
+## Release discipline
 
-If `portal-next` fails to boot or the config is invalid, revert the gateway/traffic routing back to the legacy portal entry point:
-
-1. Point the reverse proxy / CDN origin to `https://nulanesystems.com/portal/index.html`.
-2. Keep `nulane_systems_site/index.html` live as the fallback shell.
-3. Any flows still tied to the legacy DOM (DocuDent embed, DocuFit uploads) continue running there until the new routes are battle-tested.
+Local runner health, tests, and a production build are required before release, but they are not proof that production has been deployed. Verify the Vercel deployment, custom domain, Auth0 callbacks/origins, authenticated `/user/me`, and a real damage-report facility label after every production release.

@@ -11,7 +11,7 @@ import {
 export const sampleFacilities: FacilitySummary[] = [
   {
     id: "awct",
-    name: "AWCT Inc. Logistics",
+    name: "AWCT Logistics",
     slug: "awct",
     region: "Northeast",
     active: true,
@@ -46,7 +46,7 @@ export const sampleReports: ReportSummary[] = [
     id: "report-damage-1",
     title: "Damage Report 7234",
     facilityId: "awct",
-    facilityName: "AWCT Inc. Logistics",
+    facilityName: "AWCT Logistics",
     type: "damage",
     status: "open",
     locationName: "Bay 4",
@@ -68,7 +68,7 @@ export const sampleReports: ReportSummary[] = [
     id: "report-rsa-1",
     title: "RSA Inspection 2026-03-16",
     facilityId: "awct",
-    facilityName: "AWCT Inc. Logistics",
+    facilityName: "AWCT Logistics",
     type: "rsa",
     status: "closed",
     locationName: "Track A",

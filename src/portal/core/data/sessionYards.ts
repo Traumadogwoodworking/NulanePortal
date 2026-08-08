@@ -122,4 +122,3 @@ export function getSessionYardOptions(session: PortalSessionResponse | null | un
     `${left.facilityLabel ?? ""} ${left.label}`.localeCompare(`${right.facilityLabel ?? ""} ${right.label}`)
   );
 }
-

@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { fetchPortalSession } from "@/lib/services/sessionService";
@@ -10,27 +18,34 @@ import type {
   PortalUserRecord,
 } from "@/lib/types";
 import type { PermissionKey } from "@/lib/access";
-import { portalConfig } from "@/lib/config";
 import {
   AuthConfigError,
   AuthRedirectError,
+  clearFreshAuthCallbackMarker,
+  clearStalePortalSession,
   clearPortalAuthStorage,
+  hasPersistedPortalToken,
+  isFreshAuthCallback,
+  isEmbeddedPortalContext,
+  logAuthFlow,
   logoutPortal,
   persistPortalUser,
-  redirectToAuth0Login,
 } from "@/lib/portalAuth";
 import { publicBranding } from "@/lib/publicBranding";
 import {
-  PORTAL_ORGANIZATION_SCOPES,
   getPortalOrganizationScope,
+  normalizePortalOrganizationScope,
+  PORTAL_ORGANIZATION_SCOPES,
   type PortalOrganizationScope,
   type PortalOrganizationScopeKey,
 } from "@/lib/portalOrganizations";
 
 type PortalSessionStatus =
   | "loading"
+  | "authenticating"
   | "success"
   | "unauthenticated"
+  | "session_error"
   | "transient-error"
   | "forbidden"
   | "fatal";
@@ -71,11 +86,12 @@ function isDevSessionBypassEnabled() {
   );
 }
 
-const LOCAL_DEV_ERROR =
-  "Local portal builds must override NEXT_PUBLIC_API_BASE_URL (for example http://localhost:4000/api) before reaching the production API.";
 const DEV_SESSION_BYPASS_WARNING =
   "DEV SESSION BYPASS ACTIVE";
 let devSessionBypassWarningEmitted = false;
+const FRESH_CALLBACK_SESSION_RETRY_DELAY_MS = 750;
+const SESSION_BACKGROUND_REFRESH_MS = 30_000;
+const SESSION_EVENT_REFRESH_THROTTLE_MS = 2_000;
 
 type DevSessionWindow = Window & {
   __PORTAL_DEV_SESSION_BYPASS__?: boolean;
@@ -148,27 +164,54 @@ function buildDevSession(): PortalSessionResponse {
       {
         location_id: "loc-001",
         organization_id: "org-awct",
-        location_name: "Western Hub",
-        location_label: "A-Peak",
-        display_name: "Western Hub",
+        location_name: "Sterling Heights Assembly Plant",
+        location_label: "SHAP",
+        display_name: "Sterling Heights Assembly Plant",
         is_active: true,
       },
       {
         location_id: "loc-002",
         organization_id: "org-awct",
-        location_name: "Eastern Yard",
-        location_label: "B-Zone",
-        display_name: "Eastern Yard",
+        location_name: "Jefferson North Assembly Plant",
+        location_label: "JNAP",
+        display_name: "Jefferson North Assembly Plant",
         is_active: true,
       },
     ],
     selected_location: {
       location_id: "loc-001",
       organization_id: "org-awct",
-      location_name: "Western Hub",
-      location_label: "A-Peak",
-      display_name: "Western Hub",
+      location_name: "Sterling Heights Assembly Plant",
+      location_label: "SHAP",
+      display_name: "Sterling Heights Assembly Plant",
       is_active: true,
+    },
+    facilityScope: {
+      mode: "restricted",
+      organization_id: "org-awct",
+      allowedLocationIds: ["loc-001"],
+    },
+    scope: {
+      organizationId: "org-awct",
+      location_memberships: [
+        {
+          location_membership_id: "dev-location-membership-west",
+          location_id: "loc-001",
+          organization_id: "org-awct",
+          user_id: "dev-guest-user",
+          role: isLimited ? "member" : "super_admin",
+          is_active: true,
+          is_primary: true,
+        },
+      ],
+      scope: {
+        organization_id: "org-awct",
+        is_admin: !isLimited,
+        is_org_admin: !isLimited,
+        is_location_scoped: true,
+        accessible_location_ids: ["loc-001"],
+        selected_location_id: "loc-001",
+      },
     },
     location_locked: false,
     branding_snapshot: {
@@ -192,14 +235,19 @@ interface PortalSessionContextValue {
   hasPermission: (key: PermissionKey) => boolean;
   isAdmin: boolean;
   isOrgAdmin: boolean;
+  isFacilityAdmin: boolean;
   isSuperAdmin: boolean;
   organizationId: string | null;
   isPortalAccessAllowed: boolean;
   portalAccess: boolean;
   isAwct: boolean;
+  isShap: boolean;
+  twentyFourHourFacility: PortalSessionLocation | null;
+  isSvl: boolean;
   planTier: string | null;
   requiresAds: boolean;
   locations: PortalSessionLocation[];
+  assignedLocationIds: string[];
   selectedLocation: PortalSessionLocation | null;
   selectedLocationId: string | null;
   selectedLocationLabel: string | null;
@@ -217,10 +265,15 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const [selectedOrganizationScopeKey, setSelectedOrganizationScopeKey] =
     useState<PortalOrganizationScopeKey>("all");
+  const freshCallbackRetryCountRef = useRef(0);
   const pathname = usePathname() ?? "/";
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async (options: { background?: boolean } = {}) => {
     if (typeof window === "undefined") return;
+    logAuthFlow("PortalSessionProvider.loadSession", {
+      reason: "start",
+      tokenExists: hasPersistedPortalToken(),
+    });
 
     const sessionMode = new URLSearchParams(window.location.search).get("portalDevSession");
     if (
@@ -259,32 +312,82 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (
-      portalConfig.environment !== "production" &&
-      portalConfig.usesDefaultApiBase &&
-      isLocalhostHost(window.location.hostname)
-    ) {
-      setError(new Error(LOCAL_DEV_ERROR));
-      setStatus("fatal");
-      return;
+    if (!options.background) {
+      setStatus("loading");
+      setError(null);
     }
 
-    setStatus("loading");
-    setError(null);
-
     try {
-      const payload = await fetchPortalSession();
+      let payload: PortalSessionResponse;
+      while (true) {
+        try {
+          payload = await fetchPortalSession();
+          break;
+        } catch (fetchError: unknown) {
+          const fetchStatusCode = isSessionFetchError(fetchError) ? fetchError.status : undefined;
+          const tokenExists = hasPersistedPortalToken();
+          const shouldRetryFreshCallback =
+            fetchStatusCode === 401 &&
+            tokenExists &&
+            isFreshAuthCallback() &&
+            freshCallbackRetryCountRef.current < 2;
+          if (!shouldRetryFreshCallback) throw fetchError;
+
+          freshCallbackRetryCountRef.current += 1;
+          logAuthFlow("PortalSessionProvider.loadSession", {
+            reason: "fresh_callback_session_401_retry",
+            httpStatus: 401,
+            status: "authenticating",
+            tokenExists,
+            redirectTarget: pathname,
+            retryCount: freshCallbackRetryCountRef.current,
+          });
+          setStatus("authenticating");
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, FRESH_CALLBACK_SESSION_RETRY_DELAY_MS);
+          });
+        }
+      }
       persistPortalUser(payload.user);
       localStorage.removeItem("portalMockOrgId");
       localStorage.removeItem("portalMockOrgName");
+      const organizationResolved = Boolean(
+        payload.organization?.organization_id || payload.user?.organization_id
+      );
+      if (!organizationResolved) {
+        setSession(payload);
+        setError(new Error("Signed in, but no portal organization was resolved for this account."));
+        setStatus("session_error");
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "missing_organization",
+          status: "session_error",
+          tokenExists: hasPersistedPortalToken(),
+          organizationResolved: false,
+        });
+        return;
+      }
       setSession(payload);
+      clearFreshAuthCallbackMarker();
+      freshCallbackRetryCountRef.current = 0;
       setStatus("success");
+      logAuthFlow("PortalSessionProvider.loadSession", {
+        reason: "success",
+        status: "success",
+        tokenExists: hasPersistedPortalToken(),
+        organizationResolved,
+      });
     } catch (err: unknown) {
       if (err instanceof AuthRedirectError) {
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "auth_redirect_error",
+          status: "unauthenticated",
+          tokenExists: hasPersistedPortalToken(),
+        });
         setStatus("unauthenticated");
         return;
       }
       if (err instanceof AuthConfigError) {
+        if (options.background) return;
         setError(err);
         setStatus("fatal");
         return;
@@ -300,18 +403,51 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (statusCode === 401) {
-        clearPortalAuthStorage();
-        if (pathname === "/") {
-          setSession(null);
-          setError(null);
+        const tokenExists = hasPersistedPortalToken();
+        freshCallbackRetryCountRef.current = 0;
+        if (!tokenExists) {
+          clearStalePortalSession("session_401");
+        }
+        clearFreshAuthCallbackMarker();
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "session_401",
+          httpStatus: 401,
+          tokenExists,
+          redirectTarget: pathname,
+        });
+        setSession(null);
+        setError(
+          new Error(
+            tokenExists
+              ? "Signed in, but the portal API rejected this account session."
+              : "No active portal session was found."
+          )
+        );
+        if (isEmbeddedPortalContext()) {
           setStatus("unauthenticated");
           return;
         }
-        await redirectToAuth0Login();
+        if (tokenExists) {
+          setStatus("session_error");
+          return;
+        }
+        if (pathname === "/") {
+          setStatus("unauthenticated");
+          return;
+        }
+        setStatus("unauthenticated");
         return;
       }
       const normalizedError =
         err instanceof Error ? err : new Error("Unable to load your session.");
+      if (options.background) {
+        logAuthFlow("PortalSessionProvider.loadSession", {
+          reason: "background_refresh_failed",
+          status: "success",
+          tokenExists: hasPersistedPortalToken(),
+        });
+        return;
+      }
       setError(normalizedError);
       setStatus("transient-error");
     }
@@ -321,9 +457,33 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     // Dev session bypass uses a fixed tenant snapshot; switching is intentionally inert.
   }, []);
 
+  const organizationScopeStorageKey = useMemo(() => {
+    const userId = session?.user?.user_id?.trim();
+    const organizationId = (
+      session?.organization?.organization_id || session?.user?.organization_id || ""
+    ).trim();
+    return userId && organizationId
+      ? `portalOrganizationScopeV2:${userId}:${organizationId}`
+      : null;
+  }, [session?.organization?.organization_id, session?.user?.organization_id, session?.user?.user_id]);
+
+  useEffect(() => {
+    const sessionScope = normalizePortalOrganizationScope(session?.organization?.suborg);
+    const storedScope =
+      typeof window === "undefined" || !organizationScopeStorageKey
+        ? null
+        : normalizePortalOrganizationScope(window.sessionStorage.getItem(organizationScopeStorageKey));
+    setSelectedOrganizationScopeKey(sessionScope ?? storedScope ?? "all");
+  }, [organizationScopeStorageKey, session?.organization?.suborg]);
+
   const switchOrganizationScope = useCallback((key: PortalOrganizationScopeKey) => {
-    setSelectedOrganizationScopeKey(key);
-  }, []);
+    const normalized = normalizePortalOrganizationScope(key);
+    if (!normalized) return;
+    setSelectedOrganizationScopeKey(normalized);
+    if (typeof window !== "undefined" && organizationScopeStorageKey) {
+      window.sessionStorage.setItem(organizationScopeStorageKey, normalized);
+    }
+  }, [organizationScopeStorageKey]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -332,11 +492,41 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [loadSession]);
 
+  useEffect(() => {
+    if (status !== "success" || isDevSessionBypassEnabled()) return;
+    let lastRefreshAt = 0;
+    const refreshSession = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastRefreshAt < SESSION_EVENT_REFRESH_THROTTLE_MS) return;
+      lastRefreshAt = now;
+      void loadSession({ background: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshSession();
+    };
+    const intervalId = window.setInterval(refreshSession, SESSION_BACKGROUND_REFRESH_MS);
+    window.addEventListener("focus", refreshSession);
+    window.addEventListener("online", refreshSession);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshSession);
+      window.removeEventListener("online", refreshSession);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadSession, status]);
+
   const value = useMemo(() => {
-    const userRole = normalizeRoleKey(session?.user?.role);
-    const isSuperAdmin = userRole === "super_admin" || userRole === "superadmin";
-    const isAdmin = session?.is_admin === true || userRole === "admin" || isSuperAdmin;
-    const isOrgAdmin = userRole === "org_admin" || isSuperAdmin;
+    const sessionRoles = [
+      normalizeRoleKey(session?.user?.role),
+      normalizeRoleKey(session?.user?.organization_membership?.role),
+    ].filter(Boolean);
+    const hasSessionRole = (role: string) => sessionRoles.includes(role);
+    const isSuperAdmin = hasSessionRole("super_admin") || hasSessionRole("superadmin");
+    const isOrgAdmin = hasSessionRole("org_admin") || hasSessionRole("orgadmin") || isSuperAdmin;
+    const isFacilityAdmin = hasSessionRole("facility_admin") || hasSessionRole("facilityadmin") || isOrgAdmin;
+    const isAdmin = session?.is_admin === true || hasSessionRole("admin") || isSuperAdmin;
     const permissions: string[] = Array.isArray(session?.user?.permissions)
       ? session.user.permissions.map((permission) => permission.toString())
       : [];
@@ -344,8 +534,43 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       session?.organization?.organization_id ||
       session?.user?.organization_id ||
       null;
-    const sessionLocations = Array.isArray(session?.locations) ? session.locations : [];
-    const selectedLocation = session?.selected_location ?? null;
+    const assignedLocations = [
+      session?.locations,
+      session?.facilities,
+      session?.available_locations,
+      session?.availableLocations,
+      session?.available_facilities,
+      session?.availableFacilities,
+    ].flatMap((locations) => (Array.isArray(locations) ? locations : []));
+    const accessibleLocations = Array.from(
+      new Map(
+        assignedLocations
+          .filter((location) => location.location_id && location.is_active !== false)
+          .map((location) => [location.location_id, location])
+      ).values()
+    );
+    const directLocationMemberships = [
+      ...(Array.isArray(session?.user?.location_memberships) ? session.user.location_memberships : []),
+      ...(Array.isArray(session?.scope?.location_memberships) ? session.scope.location_memberships : []),
+    ];
+    const membershipLocationIds = Array.from(new Set(
+      directLocationMemberships
+        .filter((membership) => membership?.is_active !== false)
+        .map((membership) => membership?.location_id?.toString().trim() ?? "")
+        .filter(Boolean)
+    ));
+    const restrictedScopeLocationIds =
+      session?.facilityScope?.mode === "restricted" && Array.isArray(session.facilityScope.allowedLocationIds)
+        ? session.facilityScope.allowedLocationIds.map((locationId) => locationId.toString().trim()).filter(Boolean)
+        : [];
+    const assignedLocationIds = membershipLocationIds.length
+      ? membershipLocationIds
+      : Array.from(new Set(restrictedScopeLocationIds));
+    const assignedLocationIdSet = new Set(assignedLocationIds);
+    const directlyAssignedLocations = accessibleLocations.filter((location) =>
+      assignedLocationIdSet.has(location.location_id)
+    );
+    const selectedLocation = session?.selected_location ?? session?.selectedLocation ?? null;
     const selectedLocationId = selectedLocation?.location_id
       ? selectedLocation.location_id.toString()
       : null;
@@ -354,7 +579,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       selectedLocation?.display_name ||
       selectedLocation?.location_name ||
       null;
-    const locationLocked = Boolean(session?.location_locked);
+    const locationLocked = Boolean(session?.location_locked ?? session?.scope?.location_locked);
     const planTier = session?.plan_tier ?? null;
     const requiresAds = Boolean(session?.requires_ads);
     const portalAccess = session?.portal_access ?? true;
@@ -370,6 +595,27 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       normalizedOrganizationName === "inspection_trac" ||
       normalizedOrganizationName === "inspection-track" ||
       normalizedOrganizationName === "signature vehicle logistics";
+    const normalizedLocationLabels = (location: PortalSessionLocation) =>
+      [location.location_label, location.display_name, location.location_name]
+        .filter(Boolean)
+        .map((value) => normalizeOrganizationKey(value?.toString() ?? ""));
+    const twentyFourHourFacility =
+      directlyAssignedLocations.find((location) =>
+        normalizedLocationLabels(location).some(
+          (label) => label === "shap" || /(^|\s)shap($|\s)/.test(label)
+        )
+      ) ?? null;
+    const locationLabels = assignedLocations.flatMap(normalizedLocationLabels);
+    const isShap = Boolean(twentyFourHourFacility);
+    const isSvl =
+      normalizedOrganizationName === "signature vehicle logistics" ||
+      normalizedOrganizationName === "svl" ||
+      locationLabels.some(
+        (label) =>
+          label === "svl" ||
+          label.includes("signature vehicle logistics") ||
+          /(^|\s)svl($|\s)/.test(label)
+      );
 
     const hasPermission = (key: PermissionKey) => {
       if (isAdmin || isOrgAdmin) {
@@ -388,14 +634,19 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       hasPermission,
       isAdmin,
       isOrgAdmin,
+      isFacilityAdmin,
       isSuperAdmin,
       organizationId,
       isPortalAccessAllowed: portalAccess,
       portalAccess,
       isAwct,
+      isShap,
+      twentyFourHourFacility,
+      isSvl,
       planTier,
       requiresAds,
-      locations: sessionLocations,
+      locations: accessibleLocations,
+      assignedLocationIds,
       selectedLocation,
       selectedLocationId,
       selectedLocationLabel,

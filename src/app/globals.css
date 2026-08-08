@@ -4,6 +4,7 @@
   --color-brand: var(--brand);
   --color-brand-accent: var(--brand-accent);
   --color-brand-light: var(--brand-light);
+  --font-sans: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 :root {
@@ -11,6 +12,8 @@
   --brand: #2563eb;
   --brand-accent: #1d4ed8;
   --brand-light: #eff6ff;
+  --font-geist-sans: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-inter: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
 
     /* Surface System (Pure White Premium) */
     --bg: #f8fafc;
@@ -84,6 +87,16 @@
   --metric-danger-border: #fda4af;
   --metric-danger-fg: #dc2626;
   --metric-danger-detail: #9f1239;
+
+  /* Shared portal button tokens */
+  --portal-button-bg: #ffffff;
+  --portal-button-bg-hover: #f8fafc;
+  --portal-button-fg: #0f172a;
+  --portal-button-border: #dbe4f0;
+  --portal-button-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  --portal-button-soft-bg: #f8fafc;
+  --portal-button-soft-bg-hover: #f1f5f9;
+  --portal-button-soft-fg: #0f172a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -129,6 +142,14 @@
     --metric-danger-border: rgba(251, 113, 133, 0.34);
     --metric-danger-fg: #ffe4e6;
     --metric-danger-detail: #fecdd3;
+    --portal-button-bg: #ffffff;
+    --portal-button-bg-hover: #f8fafc;
+    --portal-button-fg: #0f172a;
+    --portal-button-border: #334155;
+    --portal-button-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+    --portal-button-soft-bg: rgba(15, 23, 42, 0.92);
+    --portal-button-soft-bg-hover: rgba(30, 41, 59, 0.96);
+    --portal-button-soft-fg: #f8fafc;
   }
 }
 
@@ -174,6 +195,14 @@
   --metric-danger-border: #fda4af;
   --metric-danger-fg: #881337;
   --metric-danger-detail: #9f1239;
+  --portal-button-bg: #ffffff;
+  --portal-button-bg-hover: #f8fafc;
+  --portal-button-fg: #0f172a;
+  --portal-button-border: #dbe4f0;
+  --portal-button-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  --portal-button-soft-bg: #f8fafc;
+  --portal-button-soft-bg-hover: #f1f5f9;
+  --portal-button-soft-fg: #0f172a;
 }
 
 :root[data-theme="dark"],
@@ -219,6 +248,34 @@
   --metric-danger-border: rgba(251, 113, 133, 0.34);
   --metric-danger-fg: #ffe4e6;
   --metric-danger-detail: #fecdd3;
+  --portal-button-bg: #ffffff;
+  --portal-button-bg-hover: #f8fafc;
+  --portal-button-fg: #0f172a;
+  --portal-button-border: #334155;
+  --portal-button-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+  --portal-button-soft-bg: rgba(15, 23, 42, 0.92);
+  --portal-button-soft-bg-hover: rgba(30, 41, 59, 0.96);
+  --portal-button-soft-fg: #f8fafc;
+}
+
+.portal-button {
+  background: var(--portal-button-bg);
+  border-color: var(--portal-button-border);
+  color: var(--portal-button-fg);
+  box-shadow: var(--portal-button-shadow);
+}
+
+.portal-button:hover {
+  background: var(--portal-button-bg-hover);
+}
+
+.portal-button--soft {
+  background: var(--portal-button-soft-bg);
+  color: var(--portal-button-soft-fg);
+}
+
+.portal-button--soft:hover {
+  background: var(--portal-button-soft-bg-hover);
 }
 
 :root[data-theme="light"],
@@ -271,7 +328,7 @@ body {
 }
 
 body {
-  font-family: var(--font-geist-sans), var(--font-inter), "Geist Sans", "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  font-family: var(--font-portal-sans), "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   background-image: var(--bg-gradient);
   color: var(--text-primary);

@@ -12,6 +12,12 @@ import { withPortalBasePath } from "./config";
 
 type OrgKey = string;
 
+export const INSPECTION_TRAC_POWER_BI_EMBED_URL =
+  "https://app.powerbi.com/view?r=eyJrIjoiNTlmMzRjYWYtYzc4MS00Njc2LTk5NDgtMThiZmJjODlmNmU1IiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9";
+
+export const SIGNATURE_VL_POWER_BI_EMBED_URL =
+  "https://app.powerbi.com/view?r=eyJrIjoiMDc4ODEwZGYtY2UxYy00ZWY0LWIwMjEtZWQ5ODk5ZDBlZjNlIiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9";
+
 interface OrgBrandingDefinition {
   organizationName: string;
   logoUrl?: string;
@@ -26,19 +32,19 @@ export interface RSAOrgOption {
 }
 
 export const RSA_ORG_OPTIONS: RSAOrgOption[] = [
-  { key: "awct.inc", label: "AWCT.inc" },
-  { key: "awc.inc", label: "AWC.inc" },
+  { key: "awct.inc", label: "AWCT" },
+  { key: "awc.inc", label: "AWC" },
 ];
 
 const BRANDING_MAP: Record<OrgKey, OrgBrandingDefinition> = {
   "awct.inc": {
-    organizationName: "AWCT.inc",
+    organizationName: "AWCT",
     logoUrl: withPortalBasePath("/media/inspection-trac-logo.png"),
-    powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiMmRkNjcxMGMtOWRjNy00ODdhLWJjMzktNjFhOTBhNjE5YjNiIiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
+    powerBiEmbedUrl: INSPECTION_TRAC_POWER_BI_EMBED_URL,
     isPaid: true,
   },
   "awc.inc": {
-    organizationName: "AWC.inc",
+    organizationName: "AWC",
     logoUrl: withPortalBasePath("/media/inspection-trac-logo.png"),
     badgeLabel: "Paid",
     powerBiEmbedUrl: null,
@@ -62,13 +68,13 @@ const BRANDING_MAP: Record<OrgKey, OrgBrandingDefinition> = {
     organizationName: "Signature Vehicle Logistics",
     logoUrl: withPortalBasePath("/media/inspection-trac-logo.png"),
     badgeLabel: "Paid",
-    powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiMDc4ODEwZGYtY2UxYy00ZWY0LWIwMjEtZWQ5ODk5ZDBlZjNlIiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
+    powerBiEmbedUrl: SIGNATURE_VL_POWER_BI_EMBED_URL,
     isPaid: true,
   },
   "american wheel & car": {
     organizationName: "American Wheel & Car",
     logoUrl: undefined,
-    powerBiEmbedUrl: "https://app.powerbi.com/view?r=eyJrIjoiMmRkNjcxMGMtOWRjNy00ODdhLWJjMzktNjFhOTBhNjE5YjNiIiwidCI6IjUxZjU3NDU4LTQ5YzQtNDQ1NC1hNDQ1LWFmYTE4OTAxNTUxYyJ9",
+    powerBiEmbedUrl: INSPECTION_TRAC_POWER_BI_EMBED_URL,
     isPaid: true,
   },
 };
@@ -124,6 +130,18 @@ function normalizeOrgKey(value?: string | null): string {
     return "";
   }
   return value.toLowerCase().trim().replace(/[\s_-]+/g, " ");
+}
+
+function normalizeEmailDomain(value?: string | null): string {
+  if (!value) {
+    return "";
+  }
+  const atIndex = value.lastIndexOf("@");
+  return atIndex >= 0 ? value.slice(atIndex + 1).trim().toLowerCase() : "";
+}
+
+function normalizeEmail(value?: string | null): string {
+  return value?.trim().toLowerCase() ?? "";
 }
 
 function normalizeLogoUrl(value?: string | null): string | null {
@@ -270,6 +288,14 @@ export function resolvePortalBranding({
     powerBiEmbedUrl: preset.defaultPowerBiEmbedUrl,
     isPaid: preset.defaultIsPaid,
   };
+  const email = normalizeEmail(session?.user?.email);
+  const emailDomain = normalizeEmailDomain(email);
+  const powerBiEmbedUrl =
+    emailDomain === "signaturevl.com" ||
+    email === "snidermatthew423@gmail.com" ||
+    email === "snidermatthew424@gmail.com"
+      ? SIGNATURE_VL_POWER_BI_EMBED_URL
+      : definition.powerBiEmbedUrl ?? null;
   const customLogo = preset.allowSnapshotLogoOverride
     ? normalizeLogoUrl(typeof snapshot?.logo_url === "string" ? snapshot.logo_url : null)
     : null;
@@ -298,7 +324,7 @@ export function resolvePortalBranding({
     normalizedKey,
     logoUrl,
     badgeLabel: definition.badgeLabel ?? null,
-    powerBiEmbedUrl: definition.powerBiEmbedUrl ?? null,
+    powerBiEmbedUrl,
     isPaid: Boolean(definition.isPaid),
     appLabel: resolvedAppLabel,
     customLogoUrl: customLogo,

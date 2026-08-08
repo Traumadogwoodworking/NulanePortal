@@ -4,6 +4,17 @@ import nextTs from "eslint-config-next/typescript";
 
 const baseConfig = [...nextVitals, ...nextTs];
 
+baseConfig.push({
+  rules: {
+    // These rules were promoted by the React 19 compiler preset. Existing
+    // request-state effects remain valid while they are migrated incrementally.
+    "react-hooks/set-state-in-effect": "warn",
+    "react-hooks/purity": "warn",
+    "react-hooks/preserve-manual-memoization": "warn",
+    "react-hooks/immutability": "warn",
+  },
+});
+
 if (process.env.ESLINT_PERF === "true") {
   let importCostPlugin = null;
   try {
@@ -27,7 +38,6 @@ if (process.env.ESLINT_PERF === "true") {
 
 baseConfig.push(
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",

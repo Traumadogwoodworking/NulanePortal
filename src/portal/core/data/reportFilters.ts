@@ -583,4 +583,3 @@ export function matchesHomeRsaReportFilters(
   }
   return reportWithinDateRange(report.created_at || report.updated_at || null, filters.createdFrom, filters.createdTo);
 }
-

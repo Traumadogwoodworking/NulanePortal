@@ -42,7 +42,7 @@ import { submitInspection, deriveReportId } from "@/lib/docudent/submitInspectio
 import { uploadAttachments, type UploadSummary } from "@/lib/docudent/uploadAttachments";
 import { PersistenceService, type StashedReport } from "@/lib/docudent/persistenceService";
 import { RefreshCw } from "lucide-react";
-import { usePortalReportsSnapshot } from "@/lib/portalData";
+import { refreshPortalData, useReportListSnapshot } from "@/lib/portalData";
 import { publicBranding } from "@/lib/publicBranding";
 
 const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
@@ -50,7 +50,11 @@ const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
 export default function DocuDentPage() {
   const moduleEnabled = isModuleEnabled("docudent");
   const { session, organizationId } = usePortalSession();
-  const { data: reportsSnapshot } = usePortalReportsSnapshot();
+  const {
+    data: reportsListSnapshot,
+    error: reportsListError,
+    isLoading: reportsListLoading,
+  } = useReportListSnapshot({ page: 1, limit: 50, pageSize: 50, sort: "created_at_desc" });
   const portalBranding = useMemo(() => getPortalBranding(session), [session]);
   const presetBranding = useMemo(() => resolvePortalBranding({ session, pathname: "/docudent" }), [session]);
   const hasScope = hasOrganizationScope(session);
@@ -94,9 +98,9 @@ export default function DocuDentPage() {
       setLoading(false);
       return;
     }
-    setLoadError(reportsSnapshot?.partialError ?? null);
-    setLoading(false);
-  }, [moduleEnabled, organizationId, reportsSnapshot?.partialError]);
+    setLoadError(reportsListError instanceof Error ? reportsListError.message : null);
+    setLoading(reportsListLoading);
+  }, [moduleEnabled, organizationId, reportsListError, reportsListLoading]);
 
   useEffect(() => {
     if (submissionState.status !== "success") {
@@ -108,11 +112,11 @@ export default function DocuDentPage() {
   }, [formState, currentStep, submissionState.status]);
 
   const stats = useMemo(() => {
-    const reports = reportsSnapshot?.damageReports ?? [];
+    const reports = (reportsListSnapshot?.rows ?? []) as unknown as ReportDamageApiRow[];
     const total = reports.length;
     const pending = reports.filter((r) => r.status === "review" || r.status === "open").length;
     return { total, pending };
-  }, [reportsSnapshot?.damageReports]);
+  }, [reportsListSnapshot?.rows]);
 
   const selectedAreaOption = useMemo(
     () => DAMAGE_AREAS.find((area) => area.code === formState.damageArea) ?? null,
@@ -170,7 +174,7 @@ export default function DocuDentPage() {
   const totalFiles = files.length;
   const activeStep = docuDentSteps[currentStep];
   const isReviewStep = currentStep === docuDentSteps.length - 1;
-  const recentReports = reportsSnapshot?.damageReports ?? [];
+  const recentReports = (reportsListSnapshot?.rows ?? []) as unknown as ReportDamageApiRow[];
   const submissionBadgeLabel =
     submissionState.status === "success"
       ? "Submitted"
@@ -245,9 +249,17 @@ export default function DocuDentPage() {
       const result = await submitInspection(formState, { reportId, attachments: attachmentsSummary });
       PersistenceService.clearDraft();
       window.localStorage.removeItem(DOCUDENT_STEP_STORAGE_KEY);
+      let refreshWarning = "";
+      try {
+        await refreshPortalData(organizationId, ["reports", "analytics"]);
+      } catch (refreshError) {
+        refreshWarning = ` The report was accepted, but shared report views could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`;
+      }
       setSubmissionState({
         status: "success",
-        message: `Report ${result.reportId} submitted (${files.length} attachment${files.length === 1 ? "" : "s"}).`,
+        message: `Report ${result.reportId} submitted (${files.length} attachment${files.length === 1 ? "" : "s"}).${refreshWarning}`,
         reportId: result.reportId,
         attachments: attachmentsSummary,
       });
@@ -287,7 +299,20 @@ export default function DocuDentPage() {
       
       await PersistenceService.removeFromStash(report.id);
       setStashedReports(PersistenceService.listStashed());
-      setSubmissionState({ status: "success", message: `Stashed report #${report.id.substring(0, 8)} synced successfully.` });
+      let refreshWarning = "";
+      try {
+        await refreshPortalData(organizationId, ["reports", "analytics"]);
+      } catch (refreshError) {
+        refreshWarning = ` The report was accepted, but shared report views could not be refreshed: ${
+          refreshError instanceof Error ? refreshError.message : "unknown refresh error"
+        }`;
+      }
+      setSubmissionState({
+        status: "success",
+        message: `Stashed report #${report.id.substring(0, 8)} synced successfully.${refreshWarning}`,
+        reportId: report.id,
+        attachments: attachmentsSummary,
+      });
     } catch (error) {
       console.error("Retry failed", error);
       setSubmissionState({ status: "error", message: "Retry failed. Keeping in stash." });

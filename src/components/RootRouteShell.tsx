@@ -32,12 +32,13 @@ function isPublicBrandedPath(pathname: string | null) {
     "/privacy-policy",
     "/terms",
     "/terms-of-service",
-    "/support",
     "/contact",
     "/contact-us",
     "/workflow",
     "/definian-signal",
     "/get-app",
+    "/join",
+    "/getting-started",
   ].includes(path);
 }
 

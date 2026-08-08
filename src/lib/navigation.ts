@@ -15,9 +15,12 @@ export interface PortalRoute {
   brandLogo?: string;
   connectionStatus?: "real" | "mixed" | "mocked" | "placeholder" | "scaffold";
   requiresOrgAdmin?: boolean;
+  requiresFacilityAdmin?: boolean;
   requiresSuperAdmin?: boolean;
   requiredPermission?: PermissionKey;
   requiresAwct?: boolean;
+  requiresShap?: boolean;
+  hiddenForSvl?: boolean;
   hideFromNav?: boolean;
   moduleKey?: ModuleToggleKey;
 }
@@ -43,6 +46,8 @@ const portalRoutes: PortalRoute[] = [
     description: "Key metrics and system status",
     section: "core",
     icon: "dashboard",
+    hiddenForSvl: true,
+    hideFromNav: true,
   },
   {
     label: "Damage Reports",
@@ -55,11 +60,19 @@ const portalRoutes: PortalRoute[] = [
   {
     label: "RSA Reports",
     href: "/reports/rsa",
-    description: "Railcar security audits",
+    description: "Rail Safe Audit",
     section: "core",
     icon: "rsa",
     moduleKey: "reports",
-    requiresAwct: true,
+    requiresShap: true,
+  },
+  {
+    label: "24 Hour",
+    href: "/inspection/24-hour",
+    description: "24-hour inventory inspection",
+    section: "core",
+    icon: "clock",
+    moduleKey: "reports",
   },
 
   // Apps
@@ -87,7 +100,7 @@ const portalRoutes: PortalRoute[] = [
     description: "Manage operational locations",
     section: "administration",
     icon: "facility",
-    requiresOrgAdmin: true,
+    requiresFacilityAdmin: true,
   },
   {
     label: "Users", // Renamed from "People"
@@ -95,7 +108,7 @@ const portalRoutes: PortalRoute[] = [
     description: "User and role management",
     section: "administration",
     icon: "people",
-    requiresOrgAdmin: true,
+    requiresFacilityAdmin: true,
   },
   {
     label: "Branding",
@@ -103,7 +116,7 @@ const portalRoutes: PortalRoute[] = [
     description: "Customize portal appearance",
     section: "administration",
     icon: "palette",
-    requiresOrgAdmin: true,
+    requiresSuperAdmin: true,
   },
   {
     label: "Email",
@@ -111,10 +124,10 @@ const portalRoutes: PortalRoute[] = [
     description: "Notifications",
     section: "administration",
     icon: "email",
-    requiresOrgAdmin: true,
+    requiresFacilityAdmin: true,
     badge: "black-label",
   },
-  
+
   // Support
   {
     label: "Support Tickets",
@@ -166,8 +179,11 @@ export interface SessionAccessInfo {
   isPortalAccessAllowed: boolean;
   isAdmin: boolean;
   isOrgAdmin: boolean;
+  isFacilityAdmin: boolean;
   isSuperAdmin: boolean;
   isAwct: boolean;
+  isShap: boolean;
+  isSvl: boolean;
   hasPermission: (key: PermissionKey) => boolean;
 }
 
@@ -182,10 +198,19 @@ export function getAccessBarrier(route: PortalRoute | null, accessInfo: SessionA
   if (!route) {
     return null;
   }
+  if (route.requiresShap && !accessInfo.isShap) {
+    return { type: "permission" };
+  }
+  if (route.hiddenForSvl && accessInfo.isSvl) {
+    return { type: "permission" };
+  }
   if (accessInfo.isSuperAdmin) {
     return null;
   }
   if (route.requiresOrgAdmin && !accessInfo.isOrgAdmin) {
+    return { type: "org-admin" };
+  }
+  if (route.requiresFacilityAdmin && !accessInfo.isFacilityAdmin) {
     return { type: "org-admin" };
   }
   if (route.requiresSuperAdmin && !accessInfo.isSuperAdmin) {

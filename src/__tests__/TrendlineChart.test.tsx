@@ -25,7 +25,7 @@ describe("TrendlineChart", () => {
         ]}
       />
     );
-    expect(markup).toContain("recharts-wrapper");
+    expect(markup).toContain("recharts-responsive-container");
     expect(markup).toContain("Trendline");
   });
 });

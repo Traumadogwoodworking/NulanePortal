@@ -1577,4 +1577,3 @@ export class ReportsAdapter {
     URL.revokeObjectURL(url);
   }
 }
-

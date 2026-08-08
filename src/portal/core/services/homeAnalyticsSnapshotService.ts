@@ -200,4 +200,3 @@ export function adaptHomeSnapshotToDashboardAnalytics(
     recentActivity: tables.recentReportsPreview ?? [],
   };
 }
-

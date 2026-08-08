@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DamageMapCard } from "@/portal/core/features/damage/DamageMapCard";
+import { DamageMapCard } from "@/components/reports/DamageMapCard";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +67,12 @@ import {
   ChevronDown,
   CheckCircle2,
 } from "lucide-react";
-import { deriveReportSeverity, resolveDamageReportLocationName, slugForFacilityLabel } from "@/lib/reportUtils";
+import {
+  deriveReportSeverity,
+  enrichDamageReportFacility,
+  resolveDamageReportLocationName,
+  slugForFacilityLabel,
+} from "@/lib/reportUtils";
 import { usePortalSession } from "@/lib/portalSession";
 import { getPortalSuborgValue } from "@/lib/portalOrganizations";
 import {
@@ -90,6 +95,7 @@ import {
 } from "@/lib/portalData";
 import type {
   FacilitySummary,
+  PortalSessionLocation,
   ReportDamageApiRow,
   ReportStatus,
   ReportSummary,
@@ -608,9 +614,15 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debouncedValue;
 }
 
-function normalizeReportListResponseRows(rows: unknown[] | undefined): ReportListRow[] {
+function normalizeReportListResponseRows(
+  rows: unknown[] | undefined,
+  locations: readonly PortalSessionLocation[]
+): ReportListRow[] {
   return sanitizeDamageReportListRows(rows).map((rawRow) => {
-    const row = rawRow as unknown as ReportListRow;
+    const row = enrichDamageReportFacility(
+      rawRow as unknown as ReportDamageApiRow,
+      locations
+    ) as ReportListRow;
     const normalized = normalizeReportListRow(row);
     const overview: NonNullable<ReportDamageApiRow["overview"]> =
       row.overview && typeof row.overview === "object" && !Array.isArray(row.overview)
@@ -661,6 +673,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     status: sessionStatus,
     isPortalAccessAllowed,
     session,
+    locations,
     selectedOrganizationScopeKey,
   } = usePortalSession();
   const organizationScopeParams = useMemo(
@@ -1047,14 +1060,15 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     let cancelled = false;
     void (async () => {
       try {
-        const match = await fetchDamageReportDetail(selectedDamageReportId);
+        const rawMatch = await fetchDamageReportDetail(selectedDamageReportId);
         if (cancelled) return;
         hydratedDamageReportIdsRef.current.add(selectedDamageReportId);
-        if (match) {
+        if (rawMatch) {
+          const match = enrichDamageReportFacility(rawMatch, locations);
           setSelectedDamageReportDetail(match);
           setSelectedDamageReportId(match.report_id);
           hydratedDamageReportIdsRef.current.add(match.report_id);
-          const hydratedListRow = normalizeReportListResponseRows([match])[0] ?? null;
+          const hydratedListRow = normalizeReportListResponseRows([match], locations)[0] ?? null;
           setListRows((current) => {
             const matchingIndex = current.findIndex(
               (row) => row.report_id === selectedDamageReportId || row.report_id === match.report_id
@@ -1079,7 +1093,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedDamageFullRow, selectedDamageIsClearScan, selectedDamageReportId]);
+  }, [locations, selectedDamageFullRow, selectedDamageIsClearScan, selectedDamageReportId]);
   const facilityChoices = useMemo<FacilitySummary[]>(() => {
     const choices = new Map<string, { id: string; label: string; slug: string }>();
     if (fullFilterOptions.facilities.length) {
@@ -1166,7 +1180,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       try {
         const response = await fetchReportList({ ...listFilters, page: nextPage, pageSize });
         if (listLoadSequenceRef.current !== loadSequence) return;
-        const nextRows = normalizeReportListResponseRows(response.rows);
+        const nextRows = normalizeReportListResponseRows(response.rows, locations);
         const responsePage = Number(response.page ?? nextPage);
         const responseHasMore =
           Boolean(response.hasNextPage) &&
@@ -1221,7 +1235,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         setIsDamageFilterLoading(false);
       }
     };
-  }, [focusedDamageReportId, listFilters, pageSize, reloadToken]);
+  }, [focusedDamageReportId, listFilters, locations, pageSize, reloadToken]);
 
   const loadNextPage = useCallback(() => {
     if (listLoading || !hasNextPage || listPageRequestInFlightRef.current) return;
@@ -1233,7 +1247,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
       await fetchReportList({ ...listFilters, page: page + 1, pageSize }).then((response) => {
         if (listLoadSequenceRef.current !== loadSequence) return;
         const responsePage = Number(response.page ?? page + 1);
-        const nextRows = normalizeReportListResponseRows(response.rows);
+        const nextRows = normalizeReportListResponseRows(response.rows, locations);
         const uniqueRows = nextRows.filter((row) => {
           const reportId = row.report_id;
           return reportId && !listRowIdsRef.current.has(reportId);
@@ -1262,7 +1276,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         }
       });
     })();
-  }, [hasNextPage, listFilters, listLoading, page, pageSize]);
+  }, [hasNextPage, listFilters, listLoading, locations, page, pageSize]);
 
   const clearDamageFilters = useCallback(() => {
     setActiveDamageFilterKeys([]);
@@ -1733,13 +1747,14 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
 
   if (
     sessionStatus === "loading" ||
+    sessionStatus === "authenticating" ||
     (listLoading && listRows.length === 0)
   ) {
     return (
       <PageLoadingScreen
         title="Loading damage reports"
         description={
-          sessionStatus === "loading"
+          sessionStatus === "loading" || sessionStatus === "authenticating"
             ? "Confirming your portal session..."
             : "Retrieving the latest inspection reports..."
         }

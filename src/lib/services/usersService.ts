@@ -1,5 +1,9 @@
 import { apiFetch } from "@/lib/apiClient";
 import {
+  appendOrganizationScope,
+  type PortalOrganizationScopeKey,
+} from "@/lib/portalOrganizations";
+import {
   DeletedUserSummary,
   LocationMembership,
   OrganizationMembership,
@@ -31,7 +35,7 @@ const LOCATION_MEMBERSHIPS_ENDPOINT = (organizationId: string) =>
   `/admin/organizations/${organizationId}/location-memberships`;
 const LOCATION_MEMBERSHIP_DETAIL_ENDPOINT = (organizationId: string, membershipId: string) => `/admin/organizations/${organizationId}/location-memberships/${membershipId}`;
 
-interface CreateUserPayload {
+export interface CreateUserPayload {
   email: string;
   role: string;
   facility_ids: string[];
@@ -51,6 +55,20 @@ interface CreateUserPayload {
   auth0_metadata?: Record<string, unknown>;
   membership_metadata?: Record<string, unknown>;
   auth0_organization_id?: string;
+}
+
+export interface UserInvitationStatus {
+  id: string | null;
+  status: "requested" | "skipped";
+  emailRequested: boolean;
+  createdAt: string | null;
+  expiresAt: string | null;
+  reason: string | null;
+}
+
+export interface InviteUserResult {
+  user: UserSummary;
+  invitation: UserInvitationStatus;
 }
 
 export interface UpdateUserPayload {
@@ -130,6 +148,25 @@ function mapUserRecord(user: PortalUserRecord): UserSummary {
     lastLogin: user.last_login || user.updated_at || null,
     lastUpdated: user.updated_at || new Date().toISOString(),
     createdAt: user.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeInvitationStatus(
+  value: unknown,
+  request: CreateUserPayload
+): UserInvitationStatus {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const rawStatus = typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
+  const skipped = request.invite === false || record.skipped === true || rawStatus === "skipped";
+  const emailRequestedValue = record.email_requested ?? record.send_invitation_email ?? request.send_email;
+  const readText = (candidate: unknown) => typeof candidate === "string" && candidate.trim() ? candidate.trim() : null;
+  return {
+    id: readText(record.id) ?? readText(record.invitation_id),
+    status: skipped ? "skipped" : "requested",
+    emailRequested: !skipped && emailRequestedValue !== false,
+    createdAt: readText(record.created_at) ?? readText(record.createdAt),
+    expiresAt: readText(record.expires_at) ?? readText(record.expiresAt),
+    reason: skipped ? readText(record.reason) ?? "invite_disabled" : null,
   };
 }
 
@@ -213,20 +250,30 @@ function readArrayFromPayload<T>(payload: unknown, keys: string[]): T[] {
 }
 
 
-export async function fetchOrganizationUsers(organizationId: string): Promise<UserSummary[]> {
+export async function fetchOrganizationUsers(
+  organizationId: string,
+  organizationScope?: PortalOrganizationScopeKey
+): Promise<UserSummary[]> {
   if (!organizationId) {
     return [];
   }
-  const payload = await apiFetch<unknown>(USERS_ENDPOINT(organizationId));
+  const payload = await apiFetch<unknown>(
+    appendOrganizationScope(USERS_ENDPOINT(organizationId), organizationScope)
+  );
   const records = readArrayFromPayload<PortalUserRecord>(payload, ["users", "data", "results", "rows"]);
   return records.map((user) => mapUserRecord(user));
 }
 
-export async function fetchDeletedOrganizationUsers(organizationId: string): Promise<DeletedUserSummary[]> {
+export async function fetchDeletedOrganizationUsers(
+  organizationId: string,
+  organizationScope?: PortalOrganizationScopeKey
+): Promise<DeletedUserSummary[]> {
   if (!organizationId) {
     return [];
   }
-  const payload = await apiFetch<unknown>(DELETED_USERS_ENDPOINT(organizationId));
+  const payload = await apiFetch<unknown>(
+    appendOrganizationScope(DELETED_USERS_ENDPOINT(organizationId), organizationScope)
+  );
   const records = readArrayFromPayload<PortalUserRecord & {
     organization_membership?: OrganizationMembership | null;
     location_memberships?: LocationMembership[] | null;
@@ -333,14 +380,19 @@ export async function fetchUserDetail(
 export async function createUser(
   organizationId: string,
   payload: CreateUserPayload
-): Promise<UserSummary> {
+): Promise<InviteUserResult> {
   const response = await apiFetch<unknown>(USERS_ENDPOINT(organizationId), {
     method: "POST",
     body: JSON.stringify(payload),
   });
   if (response && typeof response === "object" && "user" in response) {
-    const user = (response as { user?: PortalUserRecord }).user;
-    if (user) return mapUserRecord(user);
+    const typedResponse = response as { user?: PortalUserRecord; invitation?: unknown };
+    if (typedResponse.user) {
+      return {
+        user: mapUserRecord(typedResponse.user),
+        invitation: normalizeInvitationStatus(typedResponse.invitation, payload),
+      };
+    }
   }
   throw new Error("Unexpected create user response shape.");
 }
@@ -493,12 +545,18 @@ export async function removeLocationMembership(
 }
 
 export class UsersAdapter {
-  static async getUsers(organizationId: string): Promise<UserSummary[]> {
-    return fetchOrganizationUsers(organizationId);
+  static async getUsers(
+    organizationId: string,
+    organizationScope?: PortalOrganizationScopeKey
+  ): Promise<UserSummary[]> {
+    return fetchOrganizationUsers(organizationId, organizationScope);
   }
 
-  static async getDeletedUsers(organizationId: string): Promise<DeletedUserSummary[]> {
-    return fetchDeletedOrganizationUsers(organizationId);
+  static async getDeletedUsers(
+    organizationId: string,
+    organizationScope?: PortalOrganizationScopeKey
+  ): Promise<DeletedUserSummary[]> {
+    return fetchDeletedOrganizationUsers(organizationId, organizationScope);
   }
 
   static async getUserDetail(
@@ -520,7 +578,7 @@ export class UsersAdapter {
     return fetchLocationMemberships(organizationId);
   }
 
-  static async inviteUser(organizationId: string, payload: CreateUserPayload): Promise<UserSummary> {
+  static async inviteUser(organizationId: string, payload: CreateUserPayload): Promise<InviteUserResult> {
     return createUser(organizationId, payload);
   }
 

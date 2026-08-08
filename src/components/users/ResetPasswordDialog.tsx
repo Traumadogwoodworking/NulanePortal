@@ -124,7 +124,7 @@ export function ResetPasswordDialog({
     }
   };
 
-  if (!organizationId || !user) {
+  if (!organizationId || !user || !canSendPasswordReset(user)) {
     return null;
   }
 

@@ -133,4 +133,3 @@ export function resolveReportMedia(report: Record<string, unknown> | null | unde
     splatUrls,
   };
 }
-

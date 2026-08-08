@@ -106,11 +106,11 @@ export const DAMAGE_AREAS: DamageAreaOption[] = [
 ];
 
 export const DAMAGE_SEVERITIES: DamageSeverityOption[] = [
-  { value: "1", label: '1 - ≤1" (≤3 cm)' },
-  { value: "2", label: '2 - >1" to ≤3" (3–8 cm)' },
-  { value: "3", label: '3 - >3" to ≤6" (8–15 cm)' },
-  { value: "4", label: '4 - >6" to ≤12" (15–30 cm)' },
-  { value: "5", label: '5 - >12" (≥30 cm)' },
+  { value: "1", label: "1 - 1 inch or less (3 centimeters or less)" },
+  { value: "2", label: "2 - More than 1 inch through 3 inches (3 through 8 centimeters)" },
+  { value: "3", label: "3 - More than 3 inches through 6 inches (8 through 15 centimeters)" },
+  { value: "4", label: "4 - More than 6 inches through 12 inches (15 through 30 centimeters)" },
+  { value: "5", label: "5 - More than 12 inches (30 centimeters or more)" },
   { value: "6", label: "6 - Missing / Major Damage" },
 ];
 

@@ -11,18 +11,18 @@ export function PageTitle({ title, subtitle, eyebrow, titleClassName = "text-sla
   return (
     <header className="sticky top-0 z-20 space-y-2 bg-white/90 py-3 backdrop-blur-md">
       {eyebrow && (
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+        <p className="text-xs font-semibold tracking-wide text-slate-600">
           {eyebrow}
         </p>
       )}
       <h1
-        className={`text-[22px] font-extrabold tracking-tight ${titleClassName}`}
-        style={{ fontFamily: "var(--font-inter), var(--font-geist-sans), sans-serif", textShadow: "0 1px 0 rgba(255,255,255,0.2), 0 2px 6px rgba(148,163,184,0.28)" }}
+        className={`text-2xl font-extrabold tracking-tight sm:text-[28px] ${titleClassName}`}
+        style={{ fontFamily: "var(--font-inter), var(--font-geist-sans), sans-serif" }}
       >
         {title}
       </h1>
       {subtitle && (
-        <p className="text-[12px] font-medium text-slate-600">
+        <p className="text-sm font-medium leading-6 text-slate-600">
           {subtitle}
         </p>
       )}

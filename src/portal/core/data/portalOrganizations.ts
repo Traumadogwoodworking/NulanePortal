@@ -98,4 +98,3 @@ export function rowMatchesOrganizationScope(
     return label === normalizedFacilityLabel || label.startsWith(`${normalizedFacilityLabel} `);
   });
 }
-

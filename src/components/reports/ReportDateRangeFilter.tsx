@@ -28,16 +28,10 @@ function addDays(date: Date, amount: number): Date {
   return next;
 }
 
-function startOfWeek(date: Date): Date {
+function addMonths(date: Date, amount: number): Date {
   const next = new Date(date);
-  const day = next.getDay();
-  next.setDate(next.getDate() - day);
-  next.setHours(0, 0, 0, 0);
+  next.setMonth(next.getMonth() + amount);
   return next;
-}
-
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function clampDate(date: Date, min: Date, max: Date): Date {
@@ -77,11 +71,12 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
   }, [maxDate, minDate]);
 
   const presetRanges = useMemo(() => {
-    const end = dateBounds.max;
+    const end = new Date();
     return [
       {
         key: "today",
         label: "Today",
+        mode: "single" as const,
         range: {
           createdFrom: todayInputValue,
           createdTo: todayInputValue,
@@ -90,6 +85,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       {
         key: "yesterday",
         label: "Yesterday",
+        mode: "single" as const,
         range: {
           createdFrom: yesterdayInputValue,
           createdTo: yesterdayInputValue,
@@ -98,21 +94,23 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       {
         key: "week_to_date",
         label: "Week to date",
+        mode: "range" as const,
         range: {
-          createdFrom: toDateInputValue(clampDate(startOfWeek(end), dateBounds.min, end)),
-          createdTo: toDateInputValue(end),
+          createdFrom: toDateInputValue(clampDate(addDays(end, -7), dateBounds.min, end)),
+          createdTo: todayInputValue,
         },
       },
       {
         key: "month_to_date",
         label: "Month to date",
+        mode: "range" as const,
         range: {
-          createdFrom: toDateInputValue(clampDate(startOfMonth(end), dateBounds.min, end)),
-          createdTo: toDateInputValue(end),
+          createdFrom: toDateInputValue(clampDate(addMonths(end, -1), dateBounds.min, end)),
+          createdTo: todayInputValue,
         },
       },
     ];
-  }, [dateBounds.max, dateBounds.min, todayInputValue, yesterdayInputValue]);
+  }, [dateBounds.min, todayInputValue, yesterdayInputValue]);
 
   const dateRangeMax = useMemo(() => daysBetween(dateBounds.min, dateBounds.max), [dateBounds]);
   const createdFromOffset = value.createdFrom ? daysBetween(dateBounds.min, parseDateInputValue(value.createdFrom)) : 0;
@@ -165,11 +163,11 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
   }, [isOpen]);
 
   return (
-    <div ref={rootRef} className="group relative">
+    <div ref={rootRef} className="group relative min-w-0">
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex h-8 w-72 cursor-pointer list-none items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm"
+        className="flex h-9 w-full min-w-0 cursor-pointer list-none items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm"
       >
         <span className="min-w-0 flex-1 truncate">
           {value.createdFrom || value.createdTo
@@ -183,18 +181,18 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
       {isOpen ? (
       <div className="absolute right-0 top-10 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
         <div className="mb-3">
-          <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Presets</div>
+          <div className="mb-2 text-xs font-bold text-slate-600">Presets</div>
           <div className="flex flex-col gap-2">
             {presetRanges.map((preset) => (
               <button
                 key={preset.key}
                 type="button"
                 onClick={() => {
-                  setDateFilterMode("single");
+                  setDateFilterMode(preset.mode);
                   onChange(preset.range);
                   setIsOpen(false);
                 }}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-[11px] font-black uppercase tracking-widest text-slate-700 transition hover:border-slate-300 hover:bg-white"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
               >
                 {preset.label}
               </button>
@@ -222,7 +220,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
                   });
                 }
               }}
-              className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-black uppercase tracking-widest ${
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold ${
                 dateFilterMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
               }`}
             >
@@ -232,7 +230,7 @@ export function ReportDateRangeFilter({ value, onChange, label = "Date Range", m
         </div>
         <div className="space-y-4">
           <div>
-            <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
               <span>{dateFilterMode === "single" ? "Day" : "Active range"}</span>
               <span>
                 {dateFilterMode === "single"

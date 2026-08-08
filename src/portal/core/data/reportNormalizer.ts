@@ -578,4 +578,3 @@ export function normalizeReportListRow(input: unknown): NormalizedReportListRow 
 export function normalizeReportListRows(rows: unknown[]): NormalizedReportListRow[] {
   return rows.map(normalizeReportListRow).filter((row) => row.id || row.reportId);
 }
-

@@ -3,6 +3,7 @@ import { setupServer } from "msw/node";
 import measurements from "../fixtures/measurements.json";
 
 const apiBase = "https://api.nulanesystems.com/api";
+const inspectionApiBase = "https://api.nulanesystems.com/inspection-trac/api";
 
 const handlers = [
   http.get(`${apiBase}/measurements`, ({ request }) => {
@@ -58,6 +59,17 @@ const handlers = [
     );
   }),
 
+  http.get(`${inspectionApiBase}/vin/:vin`, () => {
+    return HttpResponse.json(
+      {
+        status: "verified",
+        label: "Verified VIN",
+        message: "VIN check passed",
+      },
+      { status: 200 }
+    );
+  }),
+
   http.get(`${apiBase}/report/pull`, () => {
     return HttpResponse.json(
       {
@@ -72,6 +84,7 @@ const handlers = [
             inspector_email: "ops@example.com",
             damage_entries: [],
             splat_urls: [],
+            splatImageUrl: "https://example.com/splat.png",
           },
         ],
       },
@@ -79,7 +92,7 @@ const handlers = [
     );
   }),
 
-  http.get(`${apiBase}/reports/rsa`, () => {
+  http.get(`${apiBase}/railcar-scans/report/pull`, () => {
     return HttpResponse.json(
       {
         reports: [],

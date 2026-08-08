@@ -14,23 +14,24 @@ describe("DamageMapCard", () => {
     damage_entries: entries,
     location: { location_label: "Bay 4", location_id: "bay-4" },
     splat_urls: ["https://example.com/splat.png"],
+    splatImageUrl: "https://example.com/canonical-splat.png",
     overview: { metadata: { navigationText: "Dock A" } },
     metadata: { inspector: "test" },
   };
 
-  it("renders the resolved splat image", async () => {
+  it("renders the canonical splat image", async () => {
     const { container } = render(<DamageMapCard report={report} />);
     expect(screen.getByText(/Damage map/i)).toBeInTheDocument();
-    expect(screen.getByText("1 item")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /damage splat/i })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: "Damage splat" })).toHaveAttribute(
       "src",
-      "https://example.com/splat.png",
+      "https://example.com/canonical-splat.png"
     );
+    expect(screen.getByText("1 item")).toBeInTheDocument();
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
 
-  it("renders a graceful empty state when no splat is available", async () => {
+  it("renders graceful empty state when no entries", async () => {
     const { container } = render(
       <DamageMapCard
         report={{
@@ -39,8 +40,8 @@ describe("DamageMapCard", () => {
         }}
       />
     );
-    expect(screen.getByText("0 items")).toBeInTheDocument();
     expect(screen.getByText(/Splat unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText("0 items")).toBeInTheDocument();
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });

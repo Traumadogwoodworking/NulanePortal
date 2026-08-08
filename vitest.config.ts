@@ -5,6 +5,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost:3000/",
+      },
+    },
     include: ["src/__tests__/**/*.test.ts", "src/__tests__/**/*.test.tsx"],
     setupFiles: ["./test/setupTests.ts"],
     coverage: {

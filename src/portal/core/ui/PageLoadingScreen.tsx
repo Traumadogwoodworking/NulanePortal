@@ -22,6 +22,7 @@ export function PageLoadingScreen({
         <div className="h-1.5 overflow-hidden bg-blue-100">
           <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-600" />
         </div>
+
         <div className="flex flex-col items-center px-6 py-12 text-center sm:px-10">
           <div className="relative flex h-16 w-16 items-center justify-center rounded-full border border-blue-200 bg-blue-50 shadow-inner">
             <div className="absolute inset-1 animate-ping rounded-full border border-blue-300/60" />
@@ -30,6 +31,7 @@ export function PageLoadingScreen({
           <h2 className="mt-6 text-2xl font-bold tracking-tight text-slate-950">{title}</h2>
           <p className="mt-2 max-w-xl text-base font-medium leading-6 text-slate-700">{description}</p>
           <p className="mt-1 text-sm text-slate-500">{detail}</p>
+
           <div className="mt-10 grid w-full gap-4 sm:grid-cols-3" aria-hidden="true">
             {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">

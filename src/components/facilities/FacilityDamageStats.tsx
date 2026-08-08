@@ -44,10 +44,10 @@ export function FacilityDamageStatsPanel({ stats, emptyLabel = "No damage report
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-26px_rgba(15,23,42,0.22)]">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Damage activity</p>
+          <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-500">Damage activity</p>
           <p className="text-[12px] font-semibold text-slate-900">{stats.label}</p>
         </div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
           {stats.totalReports} report{stats.totalReports === 1 ? "" : "s"}
         </p>
       </div>
@@ -61,8 +61,8 @@ export function FacilityDamageStatsPanel({ stats, emptyLabel = "No damage report
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Severity breakdown</p>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+          <p className="text-xs font-black uppercase tracking-[0.28em] text-slate-500">Severity breakdown</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
           Top {formatFacilitySeverityLabel(stats.topSeverity)}
           </p>
         </div>

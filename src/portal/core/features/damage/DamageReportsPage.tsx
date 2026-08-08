@@ -22,7 +22,7 @@ export function DamageReportsPage() {
     );
   }
 
-  if (status === "loading") {
+  if (status === "loading" || status === "authenticating") {
     return (
       <PageLoadingScreen
         title="Loading damage reports"

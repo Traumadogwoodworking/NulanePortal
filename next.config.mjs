@@ -42,9 +42,14 @@ if (process.env.ANALYZE === "true") {
   }
 }
 
+const isGithubPages = process.env.GITHUB_PAGES === "true";
+const githubPagesBasePath = isGithubPages ? "/inspection-trac" : undefined;
+
 const nextConfig = withAnalyzer({
   typedRoutes: false,
   trailingSlash: true,
+  basePath: githubPagesBasePath,
+  assetPrefix: githubPagesBasePath,
   turbopack: {
     root: projectRoot,
   },
