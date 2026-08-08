@@ -11,7 +11,7 @@
     "projectId": "prj_bjUoKFKnJr9zLVl9XStNeHZCKC2I"
   },
   "browserApiBaseUrl": "/api/portal",
-  "apiUpstream": "https://api.nulanesystems.com",
+  "apiUpstream": "https://api.nulanesystems.com/api/",
   "auth0": {
     "domain": "nulanesystems.us.auth0.com",
     "clientId": "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc",
