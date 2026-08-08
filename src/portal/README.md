@@ -36,3 +36,21 @@ current Inspection-Trac report manager, report-list API contract, analytics
 filter options, normalizers, yard mapping, media resolution, snapshot hooks,
 and shared controls now live under `core`. Definian's embedded login page and
 server token route live under `products/definian`.
+
+## Local managed runner
+
+The current Definian checkout is registered as the `definian-portal` profile
+of the machine-wide `next-site` runner. It uses the central Process Compose
+supervisor and keeps its runtime values outside this repository. For local
+development, `DEFINIAN_EMBEDDED_LOGIN_UPSTREAM` explicitly delegates the
+password exchange to the deployed HTTPS embedded-login endpoint instead of
+copying the Auth0 client secret locally.
+
+```sh
+nulane-dev site definian-portal
+nulane-dev status
+nulane-dev logs next-site
+```
+
+Open `http://localhost:3000/`. Do not launch `npm run dev` separately or add a
+second portal process; switch the existing `next-site` profile instead.

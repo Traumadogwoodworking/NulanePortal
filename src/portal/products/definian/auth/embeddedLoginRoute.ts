@@ -22,6 +22,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
     }
 
+    const configuredUpstream = (process.env.DEFINIAN_EMBEDDED_LOGIN_UPSTREAM || "").trim();
+    if (configuredUpstream) {
+      const upstreamUrl = new URL(configuredUpstream);
+      if (upstreamUrl.protocol !== "https:") {
+        console.error("[embedded-login] configured upstream must use HTTPS");
+        return NextResponse.json({ error: "Embedded login is not configured." }, { status: 500 });
+      }
+      console.info("[embedded-login] forwarding token exchange to configured Definian upstream", {
+        host: upstreamUrl.host,
+        maskedEmail: maskEmail(email),
+      });
+      const upstreamResponse = await fetch(upstreamUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ email, password, returnTo: safeReturnTo(body.returnTo) }),
+      });
+      const upstreamPayload = (await upstreamResponse.json()) as Record<string, unknown>;
+      return NextResponse.json(upstreamPayload, {
+        status: upstreamResponse.status,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
     const domain = (process.env.AUTH0_DOMAIN || process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
     const clientId = (process.env.AUTH0_CLIENT_ID || process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || "").trim();
     const clientSecret = (process.env.AUTH0_CLIENT_SECRET || "").trim();
