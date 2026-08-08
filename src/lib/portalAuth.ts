@@ -500,6 +500,32 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   throw new AuthRedirectError();
 }
 
+export async function authenticatePortalInPopup(): Promise<void> {
+  if (isDevAuthBypassEnabled()) {
+    persistPortalToken(DEV_ACCESS_TOKEN);
+    return;
+  }
+  const client = await getAuth0Client();
+  const config = getAuthConfig();
+  clearPortalAuthStorage();
+  await client.loginWithPopup({
+    authorizationParams: {
+      audience: config.audience,
+      organization: config.organizationId,
+      prompt: "login",
+    },
+  });
+  const token = await waitForToken(
+    client.getTokenSilently({
+      authorizationParams: {
+        audience: config.audience,
+      },
+    }),
+    10000,
+  );
+  persistPortalToken(token);
+}
+
 export async function logoutPortal(): Promise<void> {
   if (isDevAuthBypassEnabled()) {
     clearPortalAuthStorage();

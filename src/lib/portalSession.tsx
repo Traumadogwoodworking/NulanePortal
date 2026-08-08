@@ -14,6 +14,7 @@ import { portalConfig } from "@/lib/config";
 import {
   AuthConfigError,
   AuthRedirectError,
+  authenticatePortalInPopup,
   clearPortalAuthStorage,
   logoutPortal,
   persistPortalUser,
@@ -182,6 +183,7 @@ interface PortalSessionContextValue {
   user: PortalUserRecord | null;
   error: Error | null;
   refetch: () => void;
+  signInEmbedded: () => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (key: PermissionKey) => boolean;
   isAdmin: boolean;
@@ -309,6 +311,20 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     // Dev session bypass uses a fixed tenant snapshot; switching is intentionally inert.
   }, []);
 
+  const signInEmbedded = useCallback(async () => {
+    setStatus("loading");
+    setError(null);
+    try {
+      await authenticatePortalInPopup();
+      await loadSession();
+    } catch (err: unknown) {
+      const normalizedError =
+        err instanceof Error ? err : new Error("Unable to complete secure sign-in.");
+      setError(normalizedError);
+      setStatus("unauthenticated");
+    }
+  }, [loadSession]);
+
   useEffect(() => {
     const t = setTimeout(() => {
       void loadSession();
@@ -367,6 +383,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       error,
       refetch: loadSession,
+      signInEmbedded,
       logout: logoutPortal,
       hasPermission,
       isAdmin,
@@ -385,7 +402,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       locationLocked,
       switchOrganization,
     };
-  }, [status, session, error, loadSession, switchOrganization]);
+  }, [status, session, error, loadSession, signInEmbedded, switchOrganization]);
 
   return (
     <PortalSessionContext.Provider value={value}>
