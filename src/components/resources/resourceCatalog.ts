@@ -1,5 +1,6 @@
 import type { FacilityRegistrationConfiguration } from "@/lib/services/facilityOnboardingService";
 import type { FacilitySummary } from "@/lib/types";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
 export type ResourceAudience = "field" | "portal" | "shared";
 export type ResourcePublicationStatus = "published" | "draft";
@@ -226,7 +227,7 @@ export function buildFacilityGuide(
   facility: FacilitySummary,
   registration?: FacilityRegistrationConfiguration | null,
 ): ResourceGuideDefinition {
-  const facilityName = registration?.onboardingDisplayName || facility.name;
+  const facilityName = formatFacilityDisplayName(registration?.onboardingDisplayName || facility.name);
   const yardNames = (facility.yards ?? []).filter((yard) => yard.active).map((yard) => yard.name);
 
   return published({

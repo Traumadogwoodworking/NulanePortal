@@ -82,6 +82,7 @@ import { DamageClearMetricValue } from "@/features/home-analytics/components/Dam
 import { MetricCard } from "@/features/home-analytics/components/MetricCard";
 import type { HomeAnalyticsFilters, HomeCountMode, HomeFilterKey } from "@/features/home-analytics/types";
 import { getPortalAnalyticsFilterOptions } from "@/lib/analyticsFilterOptions";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
 type DashboardSeverityItem = {
   level: string;
@@ -1370,7 +1371,7 @@ function normalizeKnownModelLabel(value?: string | null): string {
 }
 
 function normalizeFacilityDisplayLabel(value: string | null | undefined): string {
-  const normalized = stripFacilitySuffix((value ?? "").toString()).trim().replace(/\s+/g, " ");
+  const normalized = formatFacilityDisplayName(stripFacilitySuffix((value ?? "").toString())).trim().replace(/\s+/g, " ");
   const lower = normalized.toLowerCase();
   if (
     !normalized ||

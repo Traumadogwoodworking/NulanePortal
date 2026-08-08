@@ -22,6 +22,7 @@ import { Search, RefreshCw, MapPin, Building2, Settings2, Check, Minus, Trash2 }
 import { Input } from "@/components/ui/input";
 import { matchesAnySearchQuery } from "@/lib/searchText";
 import type { FacilityYard } from "@/lib/types";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
 const columns = ["Facility Identity", "Users", "Status"];
 const facilityRecipientAliases: Record<string, string> = {
@@ -922,7 +923,7 @@ export default function FacilitiesPage() {
                                  <Building2 className="w-3.5 h-3.5" />
                               </div>
                               <div className="flex flex-col min-w-0">
-                                 <span className={`text-xs font-bold truncate ${isSelected ? 'text-brand' : 'text-slate-900'}`}>{f.name}</span>
+                                 <span className={`text-xs font-bold truncate ${isSelected ? 'text-brand' : 'text-slate-900'}`}>{formatFacilityDisplayName(f.name)}</span>
                               </div>
                            </div>
                         </td>
@@ -952,7 +953,7 @@ export default function FacilitiesPage() {
                             <MapPin className="w-5 h-5" />
                          </div>
                          <div className="min-w-0">
-                            <h3 className="text-[14px] font-black text-slate-950 leading-none truncate uppercase tracking-tight">{selectedFacility?.name || "Facility Identity"}</h3>
+                            <h3 className="text-[14px] font-black text-slate-950 leading-none truncate uppercase tracking-tight">{formatFacilityDisplayName(selectedFacility?.name) || "Facility Identity"}</h3>
                           </div>
                       </div>
                       <div className="flex gap-1.5">
@@ -1029,7 +1030,7 @@ export default function FacilitiesPage() {
                           organizationId={organizationId}
                           organizationName={branding?.organization_name || undefined}
                           facilityId={selectedFacility.id}
-                          facilityName={selectedFacility.name}
+                          facilityName={formatFacilityDisplayName(selectedFacility.name)}
                           canManage={isOrgAdmin}
                         />
                       ) : null}

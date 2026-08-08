@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { FacilitySummary } from "@/lib/types";
 import { facilityFilterLabel } from "@/lib/access";
 import { normalizeSearchText } from "@/lib/searchText";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
 interface FacilitySelectorProps {
   facilities: FacilitySummary[];
@@ -59,7 +60,7 @@ export function FacilitySelector({
           {visibleFacilities.length ? (
             visibleFacilities.map((facility) => (
               <option key={facility.id} value={facility.id}>
-                {showSlug ? facilityFilterLabel(facility) : facility.name}
+                {showSlug ? facilityFilterLabel(facility) : formatFacilityDisplayName(facility.name)}
               </option>
             ))
           ) : (

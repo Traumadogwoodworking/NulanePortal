@@ -1,4 +1,5 @@
 import { FacilitySummary, LocationSummary } from "./types";
+import { formatFacilityDisplayName } from "./facilityDisplay";
 
 export type PermissionKey =
   | "portal.admin"
@@ -43,5 +44,5 @@ export function buildFacilityScope(
 }
 
 export function facilityFilterLabel(facility: FacilitySummary): string {
-  return `${facility.name} (${facility.slug.toUpperCase()})`;
+  return `${formatFacilityDisplayName(facility.name)} (${facility.slug.toUpperCase()})`;
 }

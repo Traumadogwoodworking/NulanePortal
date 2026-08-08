@@ -26,6 +26,7 @@ import {
   resourceSearchText,
 } from "@/components/resources/resourceCatalog";
 import { matchesAnySearchQuery } from "@/lib/searchText";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
 type RegistrationMap = Record<string, FacilityRegistrationConfiguration | null>;
 
@@ -93,7 +94,7 @@ function FacilityResourceSection({
       .filter((sharedGuide) => matchesAnySearchQuery(resourceSearchText(sharedGuide), query))
       .map((sharedGuide) => ({
         title: sharedGuide.title,
-        description: `Shared product instructions to use at ${facility.name}.`,
+        description: `Shared product instructions to use at ${formatFacilityDisplayName(facility.name)}.`,
         href: guideHref({ guide: sharedGuide.id, facility: facility.id }),
       })),
   ];
@@ -106,7 +107,7 @@ function FacilityResourceSection({
         <div className="flex min-w-0 items-start gap-3">
           <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
           <div className="min-w-0">
-            <h2 id={`facility-${facility.id}`} className="truncate text-lg font-black tracking-tight text-slate-950">{facility.name}</h2>
+            <h2 id={`facility-${facility.id}`} className="truncate text-lg font-black tracking-tight text-slate-950">{formatFacilityDisplayName(facility.name)}</h2>
             {facility.region ? <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-500"><MapPin className="h-3.5 w-3.5" />{facility.region}</p> : null}
           </div>
         </div>

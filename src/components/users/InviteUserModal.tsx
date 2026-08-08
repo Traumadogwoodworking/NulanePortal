@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { ReactNode } from "react";
 import type { FacilitySummary } from "@/lib/types";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
 interface InviteUserModalProps {
   facilities: FacilitySummary[];
@@ -256,7 +257,7 @@ export function InviteUserModal({
                           }`}
                         >
                           <span className="min-w-0">
-                            <span className="block truncate font-medium">{facility.name}</span>
+                            <span className="block truncate font-medium">{formatFacilityDisplayName(facility.name)}</span>
                             <span className="block truncate text-xs text-slate-500">{facility.slug || facility.id}</span>
                           </span>
                           <span className="ml-3 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-semibold uppercase">

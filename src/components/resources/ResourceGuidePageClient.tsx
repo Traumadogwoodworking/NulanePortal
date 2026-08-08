@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, LifeBuoy, MapPin } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { usePortalDirectorySnapshot } from "@/lib/portalData";
+import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 import { usePortalSession } from "@/lib/portalSession";
 import { fetchFacilityRegistration, type FacilityRegistrationConfiguration } from "@/lib/services/facilityOnboardingService";
 import { useSearchParams } from "next/navigation";
@@ -83,7 +84,7 @@ export default function ResourceGuidePageClient() {
 
   const generalGuide = guideId ? findGeneralGuide(guideId) : null;
   const guide = generalGuide && facility
-    ? { ...generalGuide, facilityId: facility.id, facilityName: facility.name, registrationUrl: registration?.registrationUrl, support: registration?.support }
+    ? { ...generalGuide, facilityId: facility.id, facilityName: formatFacilityDisplayName(facility.name), registrationUrl: registration?.registrationUrl, support: registration?.support }
     : generalGuide || (facility ? buildFacilityGuide(facility, registration) : null);
 
   if (isLoading && !guide) {
