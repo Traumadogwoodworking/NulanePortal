@@ -20,6 +20,15 @@ test("buildApiUrl does not duplicate the api prefix when the base already ends w
   );
 });
 
+test("buildApiUrl preserves a same-origin proxy base", async () => {
+  process.env.NEXT_PUBLIC_API_BASE_URL = "/api/portal";
+  vi.resetModules();
+  const { buildApiUrl, portalConfig } = await import("@/lib/config");
+
+  expect(portalConfig.apiBase).toBe("/api/portal");
+  expect(buildApiUrl("/user/me")).toBe("/api/portal/user/me");
+});
+
 afterEach(() => {
   process.env.NEXT_PUBLIC_API_BASE_URL = originalApiBase;
   process.env.EXT_PUBLIC_DOCUDENT_API_BASE_URL = originalLegacyApiBase;

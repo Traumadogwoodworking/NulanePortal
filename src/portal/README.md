@@ -46,6 +46,12 @@ development, `DEFINIAN_EMBEDDED_LOGIN_UPSTREAM` explicitly delegates the
 password exchange to the deployed HTTPS embedded-login endpoint instead of
 copying the Auth0 client secret locally.
 
+Browser API requests use `NEXT_PUBLIC_API_BASE_URL=/api/portal`. The dynamic
+Next.js route at `src/app/api/portal/[...path]/route.ts` forwards them to the
+server-only `PORTAL_API_UPSTREAM`. This is the required local contract: do not
+point browser code directly at the production API or weaken production CORS to
+make localhost work.
+
 ```sh
 nulane-dev site definian-portal
 nulane-dev status

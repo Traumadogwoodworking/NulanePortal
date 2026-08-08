@@ -18,16 +18,19 @@ describe("DamageMapCard", () => {
     metadata: { inspector: "test" },
   };
 
-  it("renders highlighted regions and legend", async () => {
+  it("renders the resolved splat image", async () => {
     const { container } = render(<DamageMapCard report={report} />);
     expect(screen.getByText(/Damage map/i)).toBeInTheDocument();
-    expect(screen.getByText(/High/)).toBeInTheDocument();
-    expect(screen.getByText(/Front/)).toBeInTheDocument();
+    expect(screen.getByText("1 item")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /damage splat/i })).toHaveAttribute(
+      "src",
+      "https://example.com/splat.png",
+    );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
 
-  it("renders graceful empty state when no entries", async () => {
+  it("renders a graceful empty state when no splat is available", async () => {
     const { container } = render(
       <DamageMapCard
         report={{
@@ -36,7 +39,8 @@ describe("DamageMapCard", () => {
         }}
       />
     );
-    expect(screen.getByText(/No damage recorded/i)).toBeInTheDocument();
+    expect(screen.getByText("0 items")).toBeInTheDocument();
+    expect(screen.getByText(/Splat unavailable/i)).toBeInTheDocument();
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
