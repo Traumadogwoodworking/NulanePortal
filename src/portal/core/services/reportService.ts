@@ -2,6 +2,7 @@ import { apiFetch, apiFetchResponse, type PortalApiRequestInit } from "@/lib/api
 import { isDevMockEnabled } from "@/lib/devMockApi";
 import { buildApiUrl, normalizeMediaUrl } from "@/lib/config";
 import { getPortalAccessToken } from "@/lib/portalAuth";
+import { ACTIVE_PORTAL_BRANDING } from "@/lib/brandingPresets";
 import { normalizeReportListRows } from "@/lib/reportNormalizer";
 import type {
   ReportDamageApiRow,
@@ -849,6 +850,11 @@ function buildLegacyDashboardAnalytics(
 }
 
 export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams = {}): Promise<DashboardAnalyticsResponse> {
+  if (ACTIVE_PORTAL_BRANDING === "definianInspection") {
+    return buildLegacyDashboardAnalytics(
+      await fetchDamageReportsUncached(params as ReportFilters)
+    );
+  }
   try {
     return await apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`, {
       portal: {
@@ -866,6 +872,10 @@ export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams =
 export async function fetchReportFilterOptions(
   suborg?: string
 ): Promise<ReportFilterOptionsResponse> {
+  if (ACTIVE_PORTAL_BRANDING === "definianInspection") {
+    const analytics = await fetchDashboardAnalytics({ suborg });
+    return analytics.filters ?? {};
+  }
   try {
     return await apiFetch<ReportFilterOptionsResponse>(
       `${REPORTS_FILTER_OPTIONS_ENDPOINT}${buildNamedQueryString({ suborg })}`,

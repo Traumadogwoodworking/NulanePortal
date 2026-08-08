@@ -58,12 +58,9 @@ describe("reportService paginated snapshots", () => {
     });
   });
 
-  it("derives home analytics from report pull when the deployed analytics route is unavailable", async () => {
+  it("derives Definian home analytics directly from the deployed report pull contract", async () => {
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
-      if (parsedUrl.pathname === "/dashboard/analytics") {
-        throw Object.assign(new Error("Not Found"), { status: 404 });
-      }
       expect(parsedUrl.pathname).toBe("/report/pull");
       return {
         reports: [

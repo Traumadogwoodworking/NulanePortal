@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/apiClient";
+import { ACTIVE_PORTAL_BRANDING } from "@/lib/brandingPresets";
 import {
   fetchDashboardAnalytics,
   type DashboardAnalyticsParams,
@@ -91,6 +92,9 @@ export function getHomeAnalyticsSnapshotFilterKey(params: DashboardAnalyticsPara
 }
 
 export async function requestHomeAnalyticsSnapshot(params: DashboardAnalyticsParams = {}) {
+  if (ACTIVE_PORTAL_BRANDING === "definianInspection") {
+    return buildLegacyHomeAnalyticsSnapshot(params);
+  }
   try {
     return await apiFetch<HomeAnalyticsSnapshotResponse>("/dashboard/home-snapshot/request", {
       method: "POST",
@@ -102,39 +106,46 @@ export async function requestHomeAnalyticsSnapshot(params: DashboardAnalyticsPar
     });
   } catch (error) {
     if (Number((error as { status?: unknown })?.status) !== 404) throw error;
-    const analytics = await fetchDashboardAnalytics(params);
-    return {
-      ok: true,
-      snapshot_id: "legacy-report-pull",
-      status: "ready" as const,
-      cached: false,
-      filters: cleanSnapshotFilters(params),
-      generated_at: new Date().toISOString(),
-      result: {
-        summary: analytics.totals as Record<string, number>,
-        charts: {
-          byFacility: analytics.byFacility,
-          byInspector: analytics.byInspector,
-          bySeverity: analytics.severity,
-          byDamageArea: analytics.topAreas,
-          byDamageType: analytics.topTypes,
-          dailyTrend: analytics.dailyTrend,
-        },
-        tables: {
-          facilityDamageStats: analytics.byFacility,
-          topDamageAreas: analytics.topAreas,
-          topInspectors: analytics.byInspector,
-          recentReportsPreview: analytics.recentActivity,
-        },
-        filter_options: analytics.filters,
-        metadata: {
-          source: "legacy-report-pull",
-          generatedAt: new Date().toISOString(),
-          sourceReportCount: analytics.meta?.rowCount,
-        },
-      },
-    };
+    return buildLegacyHomeAnalyticsSnapshot(params);
   }
+}
+
+async function buildLegacyHomeAnalyticsSnapshot(
+  params: DashboardAnalyticsParams
+): Promise<HomeAnalyticsSnapshotResponse> {
+  const analytics = await fetchDashboardAnalytics(params);
+  const generatedAt = new Date().toISOString();
+  return {
+    ok: true,
+    snapshot_id: "legacy-report-pull",
+    status: "ready",
+    cached: false,
+    filters: cleanSnapshotFilters(params),
+    generated_at: generatedAt,
+    result: {
+      summary: analytics.totals as Record<string, number>,
+      charts: {
+        byFacility: analytics.byFacility,
+        byInspector: analytics.byInspector,
+        bySeverity: analytics.severity,
+        byDamageArea: analytics.topAreas,
+        byDamageType: analytics.topTypes,
+        dailyTrend: analytics.dailyTrend,
+      },
+      tables: {
+        facilityDamageStats: analytics.byFacility,
+        topDamageAreas: analytics.topAreas,
+        topInspectors: analytics.byInspector,
+        recentReportsPreview: analytics.recentActivity,
+      },
+      filter_options: analytics.filters,
+      metadata: {
+        source: "legacy-report-pull",
+        generatedAt,
+        sourceReportCount: analytics.meta?.rowCount,
+      },
+    },
+  };
 }
 
 export async function fetchHomeAnalyticsSnapshot(snapshotId: string, pollAttempt?: number) {
