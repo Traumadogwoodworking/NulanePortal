@@ -1,13 +1,21 @@
 import { buildFacilityGuide, generalResourceGuides, guideHref, resourceSearchText } from "@/components/resources/resourceCatalog";
 import type { FacilitySummary } from "@/lib/types";
 
+const testYard = {
+  yardId: "main",
+  name: "Main Yard",
+  code: "MAIN",
+  active: true,
+  areas: [],
+} as unknown as NonNullable<FacilitySummary["yards"]>[number];
+
 const facility: FacilitySummary = {
   id: "facility-1",
   name: "Test Facility",
   slug: "test-facility",
   active: true,
   locationCount: 1,
-  yards: [{ yardId: "main", name: "Main Yard", code: "MAIN", active: true }],
+  yards: [testYard],
 };
 
 describe("resource catalog", () => {
