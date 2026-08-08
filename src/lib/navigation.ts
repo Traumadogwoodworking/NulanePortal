@@ -66,15 +66,6 @@ const portalRoutes: PortalRoute[] = [
     moduleKey: "reports",
     requiresShap: true,
   },
-  {
-    label: "24 Hour",
-    href: "/inspection/24-hour",
-    description: "24-hour inventory inspection",
-    section: "core",
-    icon: "clock",
-    moduleKey: "reports",
-  },
-
   // Apps
   {
     label: publicBranding.appName,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchDamageReportDetail,
   fetchDamageReportListSnapshot,
+  fetchDashboardAnalytics,
   fetchReportList,
   ReportsAdapter,
 } from "@/lib/services/reportService";
@@ -25,7 +26,7 @@ describe("reportService paginated snapshots", () => {
   it("uses the report list endpoint and expands date filters to full local-day boundaries", async () => {
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
-      expect(parsedUrl.pathname).toBe("/reports/list");
+      expect(parsedUrl.pathname).toBe("/report/pull");
       expect(parsedUrl.searchParams.get("page")).toBe("1");
       expect(parsedUrl.searchParams.get("pageSize")).toBe("50");
       expect(parsedUrl.searchParams.get("sort")).toBe("created_at_desc");
@@ -55,6 +56,35 @@ describe("reportService paginated snapshots", () => {
       damage_area: "hood",
       damage_type: "scratch",
     });
+  });
+
+  it("derives home analytics from report pull when the deployed analytics route is unavailable", async () => {
+    apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
+      const parsedUrl = new URL(url, "http://localhost");
+      if (parsedUrl.pathname === "/dashboard/analytics") {
+        throw Object.assign(new Error("Not Found"), { status: 404 });
+      }
+      expect(parsedUrl.pathname).toBe("/report/pull");
+      return {
+        reports: [
+          {
+            report_id: "damage-1",
+            vin: "VIN-1",
+            facility: "Detroit",
+            inspector_email: "inspector@example.com",
+            created_at: new Date().toISOString(),
+            damage_entries: [{ severity: "4", damage_area: "Door", damage_type: "Dent" }],
+          },
+        ],
+      };
+    });
+
+    const analytics = await fetchDashboardAnalytics();
+
+    expect(analytics.totals?.totalReports).toBe(1);
+    expect(analytics.totals?.damageReports).toBe(1);
+    expect(analytics.byFacility?.[0]).toEqual(expect.objectContaining({ label: "Detroit" }));
+    expect(analytics.filters?.inspectors?.[0]?.value).toBe("inspector@example.com");
   });
 
   it("keeps general search separate from dedicated damage report filters", async () => {
@@ -144,7 +174,7 @@ describe("reportService paginated snapshots", () => {
     const requestedPages: number[] = [];
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
-      expect(parsedUrl.pathname).toBe("/reports/list");
+      expect(parsedUrl.pathname).toBe("/report/pull");
       const page = Number(parsedUrl.searchParams.get("page") ?? "1");
       requestedPages.push(page);
 
@@ -167,7 +197,7 @@ describe("reportService paginated snapshots", () => {
     const requestedPages: number[] = [];
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
-      expect(parsedUrl.pathname).toBe("/reports/list");
+      expect(parsedUrl.pathname).toBe("/report/pull");
       const page = Number(parsedUrl.searchParams.get("page") ?? "1");
       requestedPages.push(page);
 

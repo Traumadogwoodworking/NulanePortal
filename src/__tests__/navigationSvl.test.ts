@@ -46,23 +46,6 @@ describe("SVL dashboard access", () => {
   });
 });
 
-describe("24-hour inspection access", () => {
-  test("shows the tab for portal users regardless of SHAP assignment", () => {
-    const shapSections = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: true }));
-    const otherFacilitySections = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: false }));
-
-    expect(shapSections.flatMap((section) => section.items.map((item) => item.href))).toContain("/inspection/24-hour");
-    expect(otherFacilitySections.flatMap((section) => section.items.map((item) => item.href))).toContain("/inspection/24-hour");
-  });
-
-  test("allows direct access without a SHAP facility", () => {
-    const route = getRouteByPath("/inspection/24-hour");
-
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: true }))).toBeNull();
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false }))).toBeNull();
-  });
-});
-
 describe("RSA report access", () => {
   test("shows RSA only for users with a direct SHAP assignment", () => {
     const shapPaths = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: true }))

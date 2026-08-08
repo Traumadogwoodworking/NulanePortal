@@ -269,7 +269,7 @@ export function sanitizeDamageReportListRows(rows: unknown[] | undefined): Repor
 }
 
 const REPORTS_ENDPOINT = "/report/pull";
-const REPORTS_LIST_ENDPOINT = "/reports/list";
+const REPORTS_LIST_ENDPOINT = REPORTS_ENDPOINT;
 const REPORTS_FILTER_OPTIONS_ENDPOINT = "/reports/filter-options";
 const REPORT_MUTATIONS_ENDPOINT = "/reports";
 const RSA_REPORTS_ENDPOINT = "/railcar-scans/report/pull";
@@ -704,27 +704,183 @@ export function buildNormalizedReportQueryString(filters: ReportFilters = {}) {
   return buildReportQueryString(filters);
 }
 
-export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams = {}): Promise<DashboardAnalyticsResponse> {
-  return apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`, {
-    portal: {
-      callerLabel: "dashboard.analytics",
-      timeoutMs: REPORT_LIST_TIMEOUT_MS,
+function buildLegacyDashboardAnalytics(
+  reports: ReportDamageApiRow[]
+): DashboardAnalyticsResponse {
+  const countBy = (values: string[]) => {
+    const counts = new Map<string, number>();
+    values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+    return counts;
+  };
+  const optionRows = (counts: Map<string, number>) =>
+    Array.from(counts.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([value, count]) => ({ value, label: value, count }));
+  const timestampFor = (report: ReportDamageApiRow) =>
+    report.created_at || report.updated_at || "";
+  const dayFor = (report: ReportDamageApiRow) => {
+    const timestamp = timestampFor(report);
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+  };
+  const facilityFor = (report: ReportDamageApiRow) =>
+    String(
+      report.location_label ||
+      report.location_name ||
+      report.facility ||
+      report.location?.location_label ||
+      report.location?.location_name ||
+      report.location_id ||
+      report.facility_id ||
+      "Other"
+    ).trim();
+  const entriesFor = (report: ReportDamageApiRow) =>
+    Array.isArray(report.damage_entries) ? report.damage_entries : [];
+  const severityFor = (report: ReportDamageApiRow) => {
+    const values = entriesFor(report)
+      .map((entry) => Number(entry?.severity))
+      .filter((value) => Number.isFinite(value));
+    return values.length ? String(Math.max(...values)) : "";
+  };
+  const isClear = (report: ReportDamageApiRow) => {
+    const record = report as unknown as Record<string, unknown>;
+    const status = String(record.damage_status ?? record.damageStatus ?? "").toLowerCase();
+    const damageFound = record.damage_found ?? record.damageFound;
+    return entriesFor(report).length === 0 &&
+      (status === "no_damage" || status === "clear" || damageFound === false);
+  };
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const weekAgo = new Date(now);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const damaged = reports.filter((report) => !isClear(report));
+  const clear = reports.filter(isClear);
+  const dated = reports.map((report) => ({ report, date: new Date(timestampFor(report)) }));
+  const facilityCounts = countBy(reports.map(facilityFor));
+  const severityCounts = countBy(reports.map(severityFor));
+  const inspectorCounts = countBy(reports.map((report) => report.inspector_email?.trim() || ""));
+  const statusCounts = countBy(reports.map((report) => String(report.status ?? "").trim()));
+  const makeCounts = countBy(reports.map((report) => report.make?.trim() || ""));
+  const modelCounts = countBy(reports.map((report) => report.model?.trim() || ""));
+  const inspectionTypeCounts = countBy(
+    reports.map((report) => String(report.inspection_type_number ?? "").trim())
+  );
+  const areaCounts = countBy(
+    reports.flatMap((report) => entriesFor(report).map((entry) => String(entry.damage_area ?? entry.damage_area_code ?? "").trim()))
+  );
+  const typeCounts = countBy(
+    reports.flatMap((report) => entriesFor(report).map((entry) => String(entry.damage_type ?? entry.damage_type_code ?? "").trim()))
+  );
+  const dailyCounts = countBy(reports.map(dayFor));
+
+  return {
+    totals: {
+      totalReports: reports.length,
+      damageReports: damaged.length,
+      noDamageReports: clear.length,
+      reportsToday: dailyCounts.get(today) ?? 0,
+      reportsLast7Days: dated.filter(({ date }) => !Number.isNaN(date.getTime()) && date >= weekAgo).length,
+      reportsThisMonth: dated.filter(({ date }) => !Number.isNaN(date.getTime()) && date >= monthStart).length,
+      reportsThisYear: dated.filter(({ date }) => !Number.isNaN(date.getTime()) && date >= yearStart).length,
+      damageReportsToday: damaged.filter((report) => dayFor(report) === today).length,
+      noDamageReportsToday: clear.filter((report) => dayFor(report) === today).length,
+      vins: new Set(reports.map((report) => report.vin?.trim().toUpperCase()).filter(Boolean)).size,
+      entries: reports.reduce((sum, report) => sum + entriesFor(report).length, 0),
+      facilities: facilityCounts.size,
     },
-  });
+    currentPeriod: {
+      damageToday: damaged.filter((report) => dayFor(report) === today).length,
+      damageLast7Days: damaged.filter((report) => {
+        const date = new Date(timestampFor(report));
+        return !Number.isNaN(date.getTime()) && date >= weekAgo;
+      }).length,
+      damageMonthToDate: damaged.filter((report) => {
+        const date = new Date(timestampFor(report));
+        return !Number.isNaN(date.getTime()) && date >= monthStart;
+      }).length,
+      damageYearToDate: damaged.filter((report) => {
+        const date = new Date(timestampFor(report));
+        return !Number.isNaN(date.getTime()) && date >= yearStart;
+      }).length,
+    },
+    severity: Array.from(severityCounts.entries()).map(([level, count]) => ({
+      level,
+      label: `Severity ${level}`,
+      count,
+    })),
+    dailyTrend: Array.from(dailyCounts.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, count]) => ({ date, damageReports: count, rsaReports: 0 })),
+    byFacility: Array.from(facilityCounts.entries()).map(([label, count]) => ({
+      id: label,
+      label,
+      name: label,
+      damageReports: count,
+      totalReports: count,
+    })),
+    topAreas: Array.from(areaCounts.entries()).map(([name, count]) => ({ name, count })),
+    topTypes: Array.from(typeCounts.entries()).map(([name, count]) => ({ name, count })),
+    byInspector: Array.from(inspectorCounts.entries()).map(([email, reportCount]) => ({
+      email,
+      label: email,
+      reportCount,
+    })),
+    recentActivity: reports.slice(0, 50) as unknown as Array<Record<string, unknown>>,
+    filters: {
+      facilities: optionRows(facilityCounts),
+      severities: optionRows(severityCounts),
+      damageAreas: optionRows(areaCounts),
+      damageTypes: optionRows(typeCounts),
+      inspectors: optionRows(inspectorCounts),
+      inspectionTypes: optionRows(inspectionTypeCounts),
+      statuses: optionRows(statusCounts),
+      makes: optionRows(makeCounts),
+      models: optionRows(modelCounts),
+    },
+    meta: {
+      generatedAt: new Date().toISOString(),
+      rowCount: reports.length,
+    },
+  };
+}
+
+export async function fetchDashboardAnalytics(params: DashboardAnalyticsParams = {}): Promise<DashboardAnalyticsResponse> {
+  try {
+    return await apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics${buildNamedQueryString(params)}`, {
+      portal: {
+        callerLabel: "dashboard.analytics",
+        timeoutMs: REPORT_LIST_TIMEOUT_MS,
+      },
+    });
+  } catch (error) {
+    if (Number((error as { status?: unknown })?.status) !== 404) throw error;
+    const reports = await fetchDamageReportsUncached(params as ReportFilters);
+    return buildLegacyDashboardAnalytics(reports);
+  }
 }
 
 export async function fetchReportFilterOptions(
   suborg?: string
 ): Promise<ReportFilterOptionsResponse> {
-  return apiFetch<ReportFilterOptionsResponse>(
-    `${REPORTS_FILTER_OPTIONS_ENDPOINT}${buildNamedQueryString({ suborg })}`,
-    {
-      portal: {
-        callerLabel: "damageReports.filterOptions",
-        timeoutMs: REPORT_LIST_TIMEOUT_MS,
-      },
-    }
-  );
+  try {
+    return await apiFetch<ReportFilterOptionsResponse>(
+      `${REPORTS_FILTER_OPTIONS_ENDPOINT}${buildNamedQueryString({ suborg })}`,
+      {
+        portal: {
+          callerLabel: "damageReports.filterOptions",
+          timeoutMs: REPORT_LIST_TIMEOUT_MS,
+        },
+      }
+    );
+  } catch (error) {
+    if (Number((error as { status?: unknown })?.status) !== 404) throw error;
+    const analytics = await fetchDashboardAnalytics({ suborg });
+    return analytics.filters ?? {};
+  }
 }
 
 export async function fetchReportList(params: ReportListParams = {}): Promise<ReportListResponse> {
@@ -733,7 +889,7 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
     suborg: params.suborg,
     page: params.page ?? 1,
     pageSize: resolvedPageSize,
-    limit: params.limit,
+    limit: params.limit ?? resolvedPageSize,
     sort: params.sort ?? "created_at_desc",
     search: params.search,
     report_id: params.report_id,
@@ -782,9 +938,13 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
     (Array.isArray(record.reports) ? record.reports : null) ??
     (Array.isArray(record.items) ? record.items : null) ??
     (Array.isArray(record.results) ? record.results : null) ??
+    (Array.isArray(record.report_metadata) ? record.report_metadata : null) ??
+    (Array.isArray(record.reportMetadata) ? record.reportMetadata : null) ??
+    (Array.isArray(record.reports_metadata) ? record.reports_metadata : null) ??
     (Array.isArray(record.data) ? record.data : null) ??
     (data && Array.isArray(data.rows) ? data.rows : null) ??
     (data && Array.isArray(data.reports) ? data.reports : null) ??
+    (data && Array.isArray(data.report_metadata) ? data.report_metadata : null) ??
     [];
   const rows = sanitizeDamageReportListRows(rawRows);
   if (rawRows.length > 0 && rows.length === 0) {

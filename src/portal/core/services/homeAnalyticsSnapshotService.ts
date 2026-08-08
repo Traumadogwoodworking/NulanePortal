@@ -1,5 +1,9 @@
 import { apiFetch } from "@/lib/apiClient";
-import type { DashboardAnalyticsParams, DashboardAnalyticsResponse } from "@/lib/services/reportService";
+import {
+  fetchDashboardAnalytics,
+  type DashboardAnalyticsParams,
+  type DashboardAnalyticsResponse,
+} from "@/lib/services/reportService";
 
 export type HomeAnalyticsSnapshotStatus = "queued" | "running" | "ready" | "failed" | "expired";
 
@@ -87,14 +91,50 @@ export function getHomeAnalyticsSnapshotFilterKey(params: DashboardAnalyticsPara
 }
 
 export async function requestHomeAnalyticsSnapshot(params: DashboardAnalyticsParams = {}) {
-  return apiFetch<HomeAnalyticsSnapshotResponse>("/dashboard/home-snapshot/request", {
-    method: "POST",
-    body: JSON.stringify({ filters: cleanSnapshotFilters(params) }),
-    portal: {
-      callerLabel: "homeAnalytics.requestSnapshot",
-      timeoutMs: 15000,
-    },
-  });
+  try {
+    return await apiFetch<HomeAnalyticsSnapshotResponse>("/dashboard/home-snapshot/request", {
+      method: "POST",
+      body: JSON.stringify({ filters: cleanSnapshotFilters(params) }),
+      portal: {
+        callerLabel: "homeAnalytics.requestSnapshot",
+        timeoutMs: 15000,
+      },
+    });
+  } catch (error) {
+    if (Number((error as { status?: unknown })?.status) !== 404) throw error;
+    const analytics = await fetchDashboardAnalytics(params);
+    return {
+      ok: true,
+      snapshot_id: "legacy-report-pull",
+      status: "ready" as const,
+      cached: false,
+      filters: cleanSnapshotFilters(params),
+      generated_at: new Date().toISOString(),
+      result: {
+        summary: analytics.totals as Record<string, number>,
+        charts: {
+          byFacility: analytics.byFacility,
+          byInspector: analytics.byInspector,
+          bySeverity: analytics.severity,
+          byDamageArea: analytics.topAreas,
+          byDamageType: analytics.topTypes,
+          dailyTrend: analytics.dailyTrend,
+        },
+        tables: {
+          facilityDamageStats: analytics.byFacility,
+          topDamageAreas: analytics.topAreas,
+          topInspectors: analytics.byInspector,
+          recentReportsPreview: analytics.recentActivity,
+        },
+        filter_options: analytics.filters,
+        metadata: {
+          source: "legacy-report-pull",
+          generatedAt: new Date().toISOString(),
+          sourceReportCount: analytics.meta?.rowCount,
+        },
+      },
+    };
+  }
 }
 
 export async function fetchHomeAnalyticsSnapshot(snapshotId: string, pollAttempt?: number) {
