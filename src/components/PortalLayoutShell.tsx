@@ -58,10 +58,27 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   }, [branding, themeMode]);
 
   if (status === "unauthenticated") {
+    const embedded = typeof window !== "undefined" && window.top !== window.self;
+    const loginHref = `/login/?returnTo=${encodeURIComponent(safePathname)}`;
     return (
       <PortalStatusScreen
-        title="Signing you in"
-        description="Redirecting to Auth0 so you can access the portal."
+        title={embedded ? "Open secure sign-in" : "Signing you in"}
+        description={
+          embedded
+            ? "Continue in the full portal window to sign in securely."
+            : "Redirecting to Auth0 so you can access the portal."
+        }
+        actions={
+          embedded ? (
+            <a
+              href={loginHref}
+              target="_top"
+              className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:border-white hover:bg-white/20"
+            >
+              Continue to sign in
+            </a>
+          ) : undefined
+        }
       />
     );
   }

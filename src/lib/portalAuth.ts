@@ -462,9 +462,13 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
     }
     throw new AuthRedirectError("Dev auth bypass redirect");
   }
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
+  if (isBrowser() && window.top && window.top !== window.self) {
+    throw new AuthRedirectError("Sign-in requires a top-level browser window");
+  }
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] redirectToAuth0Login invoked", {
-      returnTo: resolveSafePortalReturnTo(returnTo),
+      returnTo: safeReturnTo,
       origin: isBrowser() ? window.location.origin : "server",
       path: isBrowser() ? window.location.pathname : "server",
     });
@@ -472,7 +476,6 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
   const client = await getAuth0Client();
   clearPortalAuthStorage();
   const config = getAuthConfig();
-  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] starting login redirect", describeConfig(config));
   }
