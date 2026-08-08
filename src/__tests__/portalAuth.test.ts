@@ -195,7 +195,6 @@ describe("startFacilityRegistrationAuth", () => {
           organization: "org_GRicZ7Jqg1r3aerr",
           login_hint: "person@example.com",
           screen_hint: "signup",
-          prompt: "login",
         }),
       })
     );

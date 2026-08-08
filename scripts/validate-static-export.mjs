@@ -33,7 +33,6 @@ async function assertServerBuild() {
     "index.html",
     "join.html",
     "getting-started.html",
-    "api/auth/embedded-login/route.js",
     "api/portal/[...path]/route.js",
   ];
   const missing = [];

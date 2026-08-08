@@ -830,7 +830,6 @@ async function performAuth0LoginRedirect(
         organization: config.organizationId,
         ...(options.signup ? { screen_hint: "signup" } : {}),
         ...(options.loginHint?.trim() ? { login_hint: options.loginHint.trim().toLowerCase() } : {}),
-        prompt: "login",
       },
     });
   } catch (error) {

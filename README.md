@@ -69,32 +69,29 @@ npm run export:validate # validates required server routes (or a static export w
 
 Recurring local development is owned by the `next-site` Process Compose runner. Its active profile must be `definian-portal`; do not start a second unmanaged Next.js server. Runtime variables live outside the repository under `/Users/home/.nulane/dev/env/`.
 
-### Embedded Auth0 notes
+### Auth0 Universal Login
 
-Definian uses the branded embedded login route at `/login/`. The SPA still completes the OAuth callback at `/auth/callback/`; it does not replace the Definian login page with Auth0 Universal Login.
+Definian uses a top-level Auth0 Authorization Code + PKCE redirect from `/login/` and completes the callback at `/auth/callback/`. The verified Definian Auth0 organization is required so Universal Login applies the Definian organization context and branding.
 
-- Allowed Callback URLs: `http://localhost:3000/auth/callback/`
-- Allowed Logout URLs: `http://localhost:3000/`
-- Allowed Web Origins: `http://localhost:3000`
+- Allowed Callback URLs: `http://localhost:3000/auth/callback/`, `https://vercel-portal-exact.vercel.app/auth/callback/`
+- Allowed Logout URLs: `http://localhost:3000/`, `https://vercel-portal-exact.vercel.app/`
+- Allowed Web Origins: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`
 - Allowed Origins / CORS: `http://localhost:3000` when the API tenant enforces browser origins for local API calls
 
-Keep the production URLs in the same Auth0 application when validating production:
+`https://www.definian.com/signal` is the public entry point, but authentication and callback storage stay on the portal origin. `/signal` must navigate the top-level window to the portal; it must not iframe Auth0 or the authenticated portal.
 
-- `https://definian.com/auth/callback/`
-- the active Vercel deployment callback URL
-- logout and web origins for `https://definian.com`
-
-An invalid or backend-rejected token is cleared before the branded embedded login is opened again. Do not add a second automatic Universal Login redirect path.
+An invalid or backend-rejected token is cleared before Universal Login is opened again. Existing Auth0 SSO sessions are allowed to continue without forcing credential entry.
 
 
 ## Deployment model
 
-The Definian build includes `/api/auth/embedded-login` and `/api/portal/[...path]`, so production requires a Next.js server deployment (Vercel is supported). The same-origin `/api/portal` proxy is intentional: it forwards authenticated API requests and avoids browser CORS drift.
+The Definian build includes `/api/portal/[...path]`, so production requires a Next.js server deployment (Vercel is supported). The same-origin `/api/portal` proxy is intentional: it forwards authenticated API requests and avoids browser CORS drift.
 
 ```bash
 npm ci
 npm run lint
 npm test
+npm run release:preflight
 npm run build
 npm run export:validate
 ```

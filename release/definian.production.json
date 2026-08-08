@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "product": "definian-portal",
+  "environment": "production",
+  "brandingPreset": "definianInspection",
+  "publicEntryUrl": "https://www.definian.com/signal",
+  "portalUrl": "https://vercel-portal-exact.vercel.app",
+  "deploymentTarget": {
+    "provider": "vercel",
+    "projectName": "vercel-portal-exact",
+    "projectId": "prj_bjUoKFKnJr9zLVl9XStNeHZCKC2I"
+  },
+  "browserApiBaseUrl": "/api/portal",
+  "apiUpstream": "https://api.nulanesystems.com",
+  "auth0": {
+    "domain": "nulanesystems.us.auth0.com",
+    "clientId": "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc",
+    "audience": "https://api.nulanesystems.com",
+    "organizationRequired": true,
+    "organizationId": "org_GRicZ7Jqg1r3aerr",
+    "callbackUrl": "https://vercel-portal-exact.vercel.app/auth/callback/",
+    "logoutUrl": "https://vercel-portal-exact.vercel.app/"
+  }
+}

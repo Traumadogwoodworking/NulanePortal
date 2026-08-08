@@ -15,7 +15,7 @@ src/portal/
     ui/                         shared UI primitives and composed controls
   products/
     inspection-trac/            Inspection-Trac identity and configuration
-    definian/                   Definian identity, embedded auth, and overrides
+    definian/                   Definian identity, configuration, and overrides
 ```
 
 Code belongs in `core` when every branded portal should receive the same fix or
@@ -34,17 +34,18 @@ must import from `@/portal/core/...`; new product-specific code must import from
 The damage-report feature is the first complete shared slice. Its page,
 current Inspection-Trac report manager, report-list API contract, analytics
 filter options, normalizers, yard mapping, media resolution, snapshot hooks,
-and shared controls now live under `core`. Definian's embedded login page and
-server token route live under `products/definian`.
+and shared controls now live under `core`. Definian's identity and product-only
+configuration live under `products/definian`; authentication uses the shared
+Auth0 PKCE client with the verified Definian organization.
 
 ## Local managed runner
 
 The current Definian checkout is registered as the `definian-portal` profile
 of the machine-wide `next-site` runner. It uses the central Process Compose
 supervisor and keeps its runtime values outside this repository. For local
-development, `DEFINIAN_EMBEDDED_LOGIN_UPSTREAM` explicitly delegates the
-password exchange to the deployed HTTPS embedded-login endpoint instead of
-copying the Auth0 client secret locally.
+development, the public Auth0 values and server-only API upstream are supplied
+by the managed runner environment. Passwords and Auth0 client secrets do not
+belong in the portal login flow.
 
 Browser API requests use `NEXT_PUBLIC_API_BASE_URL=/api/portal`. The dynamic
 Next.js route at `src/app/api/portal/[...path]/route.ts` forwards them to the
