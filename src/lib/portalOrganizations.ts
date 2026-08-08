@@ -15,7 +15,7 @@ export const PORTAL_ORGANIZATION_SCOPES: readonly PortalOrganizationScope[] = [
   },
   {
     key: "awct",
-    label: "AWCT.inc",
+    label: "AWCT",
     facilityLabels: ["JNAP", "SHAP", "OTHER"],
   },
   {
