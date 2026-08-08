@@ -62,18 +62,22 @@ if (productionBuild) {
   }
 }
 
-let commit = "unknown";
-try {
-  commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-  if (requireClean) {
-    const status = execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
-      cwd: root,
-      encoding: "utf8"
-    }).trim();
-    if (status) failures.push("release worktree is dirty");
+let commit = process.env.VERCEL_GIT_COMMIT_SHA || "deployment-source-unavailable";
+if (existsSync(resolve(root, ".git"))) {
+  try {
+    commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    if (requireClean) {
+      const status = execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+        cwd: root,
+        encoding: "utf8"
+      }).trim();
+      if (status) failures.push("release worktree is dirty");
+    }
+  } catch (error) {
+    failures.push(`unable to inspect Git release state: ${error instanceof Error ? error.message : String(error)}`);
   }
-} catch (error) {
-  failures.push(`unable to inspect Git release state: ${error instanceof Error ? error.message : String(error)}`);
+} else if (requireClean) {
+  failures.push("release clean-tree check requires Git metadata");
 }
 
 if (failures.length) {
