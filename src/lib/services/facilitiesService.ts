@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/apiClient";
-import type { FacilitySummary, FacilityYard, FacilityYardArea, FacilitiesListResponse, LocationSummary } from "@/lib/types";
+import type { FacilitySummary, FacilityYard, FacilitiesListResponse, LocationSummary } from "@/lib/types";
 import type { ResponseError } from "../apiClient";
 import {
   appendOrganizationScope,
@@ -44,30 +44,10 @@ function readBoolean(value: unknown, fallback = true) {
   return fallback;
 }
 
-function normalizeYardArea(value: unknown, index: number): FacilityYardArea | null {
-  if (typeof value === "string") {
-    const name = value.trim();
-    return name ? { areaId: name, name, active: true } : null;
-  }
-  const row = readRecord(value);
-  const name = readOptionalString(
-    row.area_name ?? row.areaName ?? row.name ?? row.label ?? row.display_name ?? row.displayName
-  );
-  const areaId = readOptionalString(
-    row.area_id ?? row.areaId ?? row.id ?? row.code ?? name
-  );
-  if (!name && !areaId) return null;
-  return {
-    areaId: areaId ?? `area-${index + 1}`,
-    name: name ?? areaId ?? `Area ${index + 1}`,
-    active: readBoolean(row.is_active ?? row.active, true),
-  };
-}
-
 function normalizeFacilityYard(value: unknown, index: number): FacilityYard | null {
   if (typeof value === "string") {
     const name = value.trim();
-    return name ? { yardId: name, name, code: name, active: true, areas: [] } : null;
+    return name ? { yardId: name, name, code: name, active: true } : null;
   }
   const row = readRecord(value);
   const name = readOptionalString(
@@ -76,16 +56,11 @@ function normalizeFacilityYard(value: unknown, index: number): FacilityYard | nu
   const code = readOptionalString(row.code ?? row.yard_code ?? row.yardCode);
   const yardId = readOptionalString(row.yard_id ?? row.yardId ?? row.id ?? code ?? name);
   if (!name && !yardId) return null;
-  const rawAreas = row.areas ?? row.yard_areas ?? row.yardAreas ?? row.zones;
-  const areas = (Array.isArray(rawAreas) ? rawAreas : [])
-    .map(normalizeYardArea)
-    .filter((area): area is FacilityYardArea => Boolean(area));
   return {
     yardId: yardId ?? `yard-${index + 1}`,
     name: name ?? yardId ?? `Yard ${index + 1}`,
     code: code ?? yardId ?? `YARD-${index + 1}`,
     active: readBoolean(row.is_active ?? row.active, true),
-    areas,
   };
 }
 
@@ -104,18 +79,6 @@ function normalizeFacilityYards(row: Record<string, unknown>, metadata: Record<s
   });
 }
 
-function serializeFacilityYardArea(area: FacilityYardArea) {
-  return {
-    area_id: area.areaId,
-    areaId: area.areaId,
-    area_name: area.name,
-    areaName: area.name,
-    name: area.name,
-    is_active: area.active,
-    active: area.active,
-  };
-}
-
 function serializeFacilityYard(yard: FacilityYard) {
   return {
     yard_id: yard.yardId,
@@ -127,7 +90,6 @@ function serializeFacilityYard(yard: FacilityYard) {
     yard_code: yard.code,
     is_active: yard.active,
     active: yard.active,
-    areas: yard.areas.map(serializeFacilityYardArea),
   };
 }
 

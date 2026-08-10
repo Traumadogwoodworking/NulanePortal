@@ -118,7 +118,7 @@ describe("facilitiesService", () => {
     );
   });
 
-  it("normalizes and persists facility yards with nested areas", async () => {
+  it("normalizes and persists only the verified facility yard fields", async () => {
     const backendLocation = {
       location_id: "facility-1",
       location_name: "Chicago",
@@ -131,10 +131,7 @@ describe("facilitiesService", () => {
             yard_name: "North Yard",
             yard_code: "NORTH",
             is_active: true,
-            areas: [
-              { area_id: "area-inbound", area_name: "Inbound", is_active: true },
-              "Outbound",
-            ],
+            areas: [{ area_id: "unapproved-area", area_name: "Ignored" }],
           },
         ],
       },
@@ -148,10 +145,6 @@ describe("facilitiesService", () => {
         name: "North Yard",
         code: "NORTH",
         active: true,
-        areas: [
-          { areaId: "area-inbound", name: "Inbound", active: true },
-          { areaId: "Outbound", name: "Outbound", active: true },
-        ],
       },
     ]);
 
@@ -171,10 +164,6 @@ describe("facilitiesService", () => {
             yard_id: "yard-north",
             yard_name: "North Yard",
             yard_code: "NORTH",
-            areas: [
-              { area_id: "area-inbound", area_name: "Inbound" },
-              { area_id: "Outbound", area_name: "Outbound" },
-            ],
           },
         ],
       },

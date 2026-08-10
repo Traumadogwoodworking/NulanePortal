@@ -19,7 +19,6 @@ export type FacilityYardDraft = {
   name: string;
   code: string;
   active: boolean;
-  areaNames: string[];
 };
 
 interface FacilityYardManagerProps {
@@ -33,14 +32,12 @@ type YardFormState = {
   name: string;
   code: string;
   active: boolean;
-  areasText: string;
 };
 
 const EMPTY_FORM: YardFormState = {
   name: "",
   code: "",
   active: true,
-  areasText: "",
 };
 
 function codeFromName(value: string) {
@@ -50,19 +47,6 @@ function codeFromName(value: string) {
     .replace(/[^A-Z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 32);
-}
-
-export function normalizeYardAreaNames(value: string) {
-  const seen = new Set<string>();
-  return value
-    .split(/[\n,]+/)
-    .map((entry) => entry.trim())
-    .filter((entry) => {
-      const key = entry.toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
 }
 
 export function FacilityYardManager({
@@ -110,7 +94,6 @@ export function FacilityYardManager({
       name: yard.name,
       code: yard.code,
       active: yard.active,
-      areasText: yard.areas.map((area) => area.name).join("\n"),
     });
     setCodeManuallyEdited(true);
     setError(null);
@@ -135,7 +118,6 @@ export function FacilityYardManager({
         name: form.name.trim(),
         code: form.code.trim().toUpperCase(),
         active: form.active,
-        areaNames: normalizeYardAreaNames(form.areasText),
       });
       setIsEditorOpen(false);
       setEditingYard(null);
@@ -181,7 +163,7 @@ export function FacilityYardManager({
       <div className="flex items-center justify-between gap-2 px-1">
         <div>
           <p id="facility-yards-heading" className="text-xs font-black uppercase tracking-widest text-slate-400">
-            Yards &amp; Areas
+            Yards
           </p>
           <p className="text-xs font-bold uppercase tracking-widest text-slate-300">
             {yards.length} configured
@@ -216,22 +198,6 @@ export function FacilityYardManager({
                     {yard.active ? <Check className="h-3 w-3 text-emerald-500" /> : <Minus className="h-3 w-3 text-slate-300" />}
                     {yard.active ? "Active" : "Inactive"}
                   </span>
-                </div>
-
-                <div className="mt-3">
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-400">Areas</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {yard.areas.length ? yard.areas.map((area) => (
-                      <span
-                        key={area.areaId}
-                        className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600"
-                      >
-                        {area.name}
-                      </span>
-                    )) : (
-                      <span className="text-xs font-medium text-slate-400">No areas configured</span>
-                    )}
-                  </div>
                 </div>
 
                 <div className="mt-3 flex justify-end gap-2">
@@ -269,7 +235,7 @@ export function FacilityYardManager({
           <DialogHeader>
             <DialogTitle>{editingYard ? "Edit yard" : "Add yard"}</DialogTitle>
             <DialogDescription>
-              Configure a yard and its named operating areas for this facility.
+              Configure the yard name, code, and availability for this facility.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -303,18 +269,6 @@ export function FacilityYardManager({
               />
               {duplicateCode ? <p className="text-xs font-semibold text-rose-600">Yard codes must be unique within this facility.</p> : null}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="yard-areas">Areas</Label>
-              <textarea
-                id="yard-areas"
-                value={form.areasText}
-                onChange={(event) => setForm((current) => ({ ...current, areasText: event.target.value }))}
-                placeholder={"Inbound\nInspection\nOutbound"}
-                rows={5}
-                className="flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-brand/30"
-              />
-              <p className="text-xs text-slate-500">Enter one area per line or separate names with commas.</p>
-            </div>
             <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
               <span>
                 <span className="block font-medium text-slate-900">Active</span>
@@ -342,7 +296,7 @@ export function FacilityYardManager({
           <DialogHeader>
             <DialogTitle>Remove yard?</DialogTitle>
             <DialogDescription>
-              This removes the yard and its {removeTarget?.areas.length ?? 0} configured areas from the facility.
+              This removes the yard from the facility.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">

@@ -256,11 +256,13 @@ async function publicRegistrationRequest(path: string, init: RequestInit = {}): 
   if (isDevMockEnabled()) {
     return record(await resolveDevMockResponse(buildApiUrl(path), init));
   }
+  const requestId = `portal-${Date.now().toString(36)}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)}`;
   const response = await fetch(buildApiUrl(path), {
     ...init,
     headers: {
       Accept: "application/json",
       ...(init.body ? { "Content-Type": "application/json" } : {}),
+      "X-Portal-Request-Id": requestId,
       ...(init.headers || {}),
     },
     cache: "no-store",
@@ -271,7 +273,7 @@ async function publicRegistrationRequest(path: string, init: RequestInit = {}): 
       text(payload.error) || "Facility registration is unavailable.",
       {
         code: text(payload.code) || "REGISTRATION_REQUEST_FAILED",
-        requestId: response.headers.get("x-request-id") || "",
+        requestId: response.headers.get("x-request-id") || requestId,
         status: response.status,
       }
     );

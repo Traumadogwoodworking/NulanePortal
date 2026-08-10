@@ -5,8 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageSection } from "@/components/ui/PageSection";
 import { StatCard } from "@/components/ui/StatCard";
-import { DataTableShell } from "@/components/ui/DataTableShell";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorPanel } from "@/components/ui/ErrorPanel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,9 +20,11 @@ import { Search, RefreshCw, MapPin, Building2, Settings2, Check, Minus, Trash2 }
 import { Input } from "@/components/ui/input";
 import { matchesAnySearchQuery } from "@/lib/searchText";
 import type { FacilityYard } from "@/lib/types";
-import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
+import {
+  formatFacilityDisplayName,
+  formatOrganizationDisplayName,
+} from "@/lib/facilityDisplay";
 
-const columns = ["Facility Identity", "Users", "Status"];
 const facilityRecipientAliases: Record<string, string> = {
   jn: "jnap",
   jnap: "jnap",
@@ -51,10 +51,10 @@ function canonicalFacilityKey(value: string | null | undefined): string {
   return normalizeFacilityRecipientKey(value);
 }
 
-function createFacilityMetadataId(prefix: "yard" | "area") {
+function createFacilityYardId() {
   const uniqueId = globalThis.crypto?.randomUUID?.()
     ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `${prefix}-${uniqueId}`;
+  return `yard-${uniqueId}`;
 }
 
 function extractFacilitySuffix(value: string | null | undefined): string {
@@ -293,23 +293,12 @@ export default function FacilitiesPage() {
     const existingYard = yardId
       ? currentYards.find((yard) => yard.yardId === yardId) ?? null
       : null;
-    const resolvedYardId = existingYard?.yardId ?? createFacilityMetadataId("yard");
-    const existingAreasByName = new Map(
-      (existingYard?.areas ?? []).map((area) => [area.name.trim().toLowerCase(), area])
-    );
+    const resolvedYardId = existingYard?.yardId ?? createFacilityYardId();
     const nextYard: FacilityYard = {
       yardId: resolvedYardId,
       name: draft.name,
       code: draft.code,
       active: draft.active,
-      areas: draft.areaNames.map((name) => {
-        const existingArea = existingAreasByName.get(name.toLowerCase());
-        return existingArea ?? {
-          areaId: createFacilityMetadataId("area"),
-          name,
-          active: true,
-        };
-      }),
     };
     const nextYards = existingYard
       ? currentYards.map((yard) => yard.yardId === existingYard.yardId ? nextYard : yard)
@@ -890,8 +879,8 @@ export default function FacilitiesPage() {
           <span>{isRefreshing && directory ? "Checking the server for facility updates…" : "Facility list is synced from the server."}</span>
           <span>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}` : "Not synced yet"}</span>
         </div>
-        <div className="grid gap-4 lg:grid-cols-4">
-          <div className="lg:col-span-3">
+        <div className="grid gap-5 lg:grid-cols-[minmax(15rem,0.8fr)_minmax(0,2.2fr)] lg:items-start">
+          <div className="min-w-0">
             {isLoading ? (
               <div className="py-20 flex justify-center"><RefreshCw className="animate-spin text-brand/40" /></div>
             ) : statusMessage ? (
@@ -899,52 +888,52 @@ export default function FacilitiesPage() {
             ) : showEmptyState ? (
               <EmptyState title="No facilities match the current view" description="Try adjusting search parameters. This is an empty filtered result, not a load failure." />
             ) : (
-              <div className="-mx-4 -mb-4">
-                <DataTableShell
-                  title="Facility Registry"
-                  description="Facilities currently returned by the directory snapshot."
-                  columns={columns}
-                >
-                  {filteredFacilities.map((f) => {
-                    const isSelected = f.id === selectedFacilityId;
+              <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" aria-labelledby="facility-registry-heading">
+                <header className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+                  <h3 id="facility-registry-heading" className="text-base font-bold tracking-tight text-slate-950">Facility Registry</h3>
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-600">Select a facility to view and manage its details.</p>
+                </header>
+                <div className="max-h-[44rem] divide-y divide-slate-100 overflow-y-auto">
+                  {filteredFacilities.map((facility) => {
+                    const isSelected = facility.id === selectedFacilityId;
+                    const userCount = facilityUserCounts.get(facility.id) ?? users.length;
                     return (
-                      <tr
-                        key={f.id}
-                        onClick={() => {
-                          setSelectedFacilityId(f.id);
-                        }}
-                        className={`group transition-all duration-150 cursor-pointer ${
-                          isSelected ? "bg-brand/[0.03]" : "hover:bg-slate-50"
+                      <button
+                        key={facility.id}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedFacilityId(facility.id)}
+                        className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors ${
+                          isSelected ? "bg-brand/[0.08]" : "bg-white hover:bg-slate-50"
                         }`}
                       >
-                        <td className="px-4 py-2">
-                           <div className="flex items-center gap-3">
-                              <div className={`w-7 h-7 rounded bg-slate-100 flex items-center justify-center text-slate-400 ${isSelected ? 'text-brand' : ''}`}>
-                                 <Building2 className="w-3.5 h-3.5" />
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                 <span className={`text-xs font-bold truncate ${isSelected ? 'text-brand' : 'text-slate-900'}`}>{formatFacilityDisplayName(f.name)}</span>
-                              </div>
-                           </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className="text-xs font-black text-slate-700">
-                            {facilityUserCounts.get(f.id) ?? users.length}
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                          isSelected ? "bg-brand text-white" : "bg-slate-100 text-slate-500"
+                        }`}>
+                          <Building2 className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className={`block truncate text-sm font-bold ${isSelected ? "text-brand" : "text-slate-900"}`}>
+                            {formatFacilityDisplayName(facility.name)}
                           </span>
-                        </td>
-                        <td className="px-4 py-2">
-                           <StatusBadge label={f.active ? "Ready" : "Offline"} tone={f.active ? "positive" : "danger"} />
-                        </td>
-                      </tr>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                            <span>{userCount} {userCount === 1 ? "user" : "users"}</span>
+                            <span aria-hidden="true">&bull;</span>
+                            <span className={facility.active ? "text-emerald-700" : "text-rose-700"}>
+                              {facility.active ? "Ready" : "Offline"}
+                            </span>
+                          </span>
+                        </span>
+                      </button>
                     );
                   })}
-                </DataTableShell>
-              </div>
+                </div>
+              </section>
             )}
           </div>
 
-          <aside className="lg:border-l border-slate-100 pl-4 py-2">
-            <div className="sticky top-4 space-y-6">
+          <aside className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="space-y-6">
                {selectedFacilityId ? (
                  <>
                    <header className="space-y-3">
@@ -1028,7 +1017,7 @@ export default function FacilitiesPage() {
                       {organizationId && selectedFacility ? (
                         <FacilityRegistrationPanel
                           organizationId={organizationId}
-                          organizationName={branding?.organization_name || undefined}
+                          organizationName={formatOrganizationDisplayName(branding?.organization_name) || undefined}
                           facilityId={selectedFacility.id}
                           facilityName={formatFacilityDisplayName(selectedFacility.name)}
                           canManage={isOrgAdmin}
@@ -1043,7 +1032,7 @@ export default function FacilitiesPage() {
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               <p className="font-black uppercase tracking-widest text-slate-400">Org name</p>
                               <p className="mt-1 font-semibold text-slate-900">
-                                {branding?.organization_name || "Not configured"}
+                                {formatOrganizationDisplayName(branding?.organization_name) || "Not configured"}
                               </p>
                             </div>
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
