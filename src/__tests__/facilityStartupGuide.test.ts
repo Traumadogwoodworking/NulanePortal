@@ -1,38 +1,23 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildFacilityGuidePdfDefinition,
-  facilityStartupSteps,
-} from "@/components/facilities/facilityStartupGuide";
+import { facilityStartupSteps } from "@/components/facilities/facilityStartupGuide";
 
-describe("facility quick-start guide", () => {
-  it("uses automatic sign-in loading language instead of manual refresh instructions", () => {
-    const content = facilityStartupSteps.map((step) => `${step.title} ${step.detail}`).join(" ");
+describe("generic facility startup steps", () => {
+  it("uses plain account and verification language", () => {
+    const content = facilityStartupSteps
+      .map((step) => `${step.title} ${step.detail}`)
+      .join(" ");
+
+    expect(content).toContain("Create account");
+    expect(content).toContain("complete email verification when prompted");
     expect(content).toContain("loads during sign-in");
+    expect(content).not.toContain("Auth0");
+    expect(content.toLowerCase()).not.toContain("short-lived session");
     expect(content.toLowerCase()).not.toContain("refresh your assignments");
   });
 
-  it("includes the permanent registration URL, install links, and support contact", () => {
-    const definition = buildFacilityGuidePdfDefinition({
-      facilityName: "Chicago Heights",
-      organizationName: "Inspection-Trac",
-      registrationUrl: "https://inspection-trac.com/join/?facility=chicago-heights",
-      supportName: "Inspection-Trac Support",
-      supportEmail: "support@inspection-trac.com",
-      appName: "Inspection-Trac",
-      appStoreUrl: "https://apps.apple.com/example",
-      googlePlayUrl: "https://play.google.com/example",
-      packetRevision: 3,
-    });
-
-    const serialized = JSON.stringify(definition);
-    expect(serialized).toContain("Chicago Heights");
-    expect(serialized).toContain("https://inspection-trac.com/join/?facility=chicago-heights");
-    expect(serialized).toContain("https://apps.apple.com/example");
-    expect(serialized).toContain("https://play.google.com/example");
-    expect(serialized).toContain("support@inspection-trac.com");
-    expect(serialized).toContain('"pageBreak":"before"');
-    expect(serialized).toContain('"fit":144');
-    expect(JSON.stringify((definition.footer as (page: number, total: number) => unknown)(1, 2)))
-      .toContain("Revision 3");
+  it("does not contain a Chicago-specific PDF generation path", () => {
+    const content = JSON.stringify(facilityStartupSteps);
+    expect(content).not.toContain("Chicago Heights");
+    expect(content).not.toContain("quick-start.pdf");
   });
 });

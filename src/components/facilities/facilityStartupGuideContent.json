@@ -2,12 +2,12 @@
   "front": {
     "eyebrow": "INSPECTION-TRAC FACILITY ACCESS",
     "title": "Scan to get started",
-    "instruction": "Use your phone camera. Enter your work email, then create an account or sign in with that exact address.",
-    "privacy": "The QR code identifies this facility only. It contains no employee name, email, password, or permission."
+    "instruction": "Use your phone camera to open the secure {facilityName} registration page. Enter your work email, then create an account or sign in with that exact address.",
+    "privacy": "Safe to post and print: the QR code identifies {facilityName} only. It contains no employee name, email, password, invitation, or permission."
   },
   "back": {
     "title": "Your Inspection-Trac quick start",
-    "safety": "If the facility shown after scanning is not correct, stop and contact support. No assignment is created until your verified sign-in completes."
+    "safety": "If the facility shown after scanning is not {facilityName}, stop and contact support. No assignment is created until your verified sign-in completes."
   },
   "steps": [
     {
@@ -16,15 +16,15 @@
     },
     {
       "title": "Create or access your account",
-      "detail": "Enter the email that should receive access, then sign up or sign in securely through Auth0."
+      "detail": "Existing users choose Sign in. New users choose Create account and complete email verification when prompted."
     },
     {
       "title": "Confirm your assigned facility",
-      "detail": "Inspection-Trac verifies the signed-in email and assigns only this facility and its approved base role."
+      "detail": "Return to the registration page after sign-in. Confirm it says {facilityName} before continuing."
     },
     {
       "title": "Start your first inspection",
-      "detail": "Open Inspection-Trac and sign in with the same account. Your current facility access loads during sign-in."
+      "detail": "Open Inspection-Trac and sign in with the same verified account. Your {facilityName} access loads during sign-in."
     },
     {
       "title": "Get support",

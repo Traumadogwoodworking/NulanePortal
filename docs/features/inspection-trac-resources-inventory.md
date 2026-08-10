@@ -1,80 +1,89 @@
-# Inspection-Trac resources and training inventory
+# Inspection-Trac Resources & Training inventory
 
-Status: Complete for the current portal/app build
-Inventory date: 2026-08-08
+Status: current implementation
+Inventory date: 2026-08-10
 
-## Navigation fix
+## Starting state
 
-The facility guide back link previously rebuilt the current guide URL when the query contained only `facility`. For example, `/resources/guides?facility=it-9a6e0f-locawctjn` linked back to itself. The guide now always returns to `/resources`, which is the Resources & Training index.
+- `/resources` was a flat list of 11 shared guides followed by a facility section that duplicated every shared guide once per facility.
+- Guide bodies used ad hoc section names and rendered every section as a numbered procedure.
+- Search covered guide prose and facility data, but had no category index and still suggested the unsupported term `bay`.
+- Facility cards exposed a Facility settings link without checking facility-admin access.
+- Registration lookup failures were silently converted to missing data.
+- Invalid guide, missing facility, and unauthorized guide states were not distinguished.
+- No approved AIAG/M-22 source PDF was found in the portal or mobile-app checkout.
 
-The facility guide also distinguishes two situations:
+## Source authorities used
 
-- a new user who still needs the configured access link;
-- a user already inside the facility who should confirm Current Facility, choose the enabled workflow, and verify the yard and bay/area before starting.
+| Subject                        | Source authority                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Portal routes and access       | `src/lib/navigation.ts`, `src/lib/portalSession.tsx`                                                            |
+| Facility and yard data         | `FacilitySummary`, `FacilityYard`, directory snapshot, facility registration service                            |
+| Damage report review/export    | `src/components/reports/ReportsManager.tsx`                                                                     |
+| Mobile VIN and inspection flow | Flutter router, VIN scan, inspection, and report review screens in `NulaneRepo/lib`                             |
+| Railcar and chock flow         | `rail_inspection_workflow_screen.dart`, `origin_rail_inspection_screen.dart`, `workflow_preflight_service.dart` |
+| Retry/offline behavior         | `workflow_delivery_service.dart`, `report_review_screen.dart`, submission engine                                |
+| Facility onboarding material   | Live Chicago record, `chicagoHeightsQuickStart.json`, published PDF generator, and registration flow            |
 
-## Portal page inventory
+## Implemented information architecture
 
-These entries follow the current portal navigation contract in `src/lib/navigation.ts`.
+1. Get Started
+   - Start an Inspection
+2. Complete Inspections
+   - Complete a Damage Inspection
+   - Complete a Rail Inspection
+   - Use Damage Codes
+3. Review Reports
+   - Find and Export Reports
+4. Manage Access
+   - Get Account or Facility Access
+   - Manage Facility Registration (facility admin)
+   - Manage Users and Roles (facility admin)
+5. Fix a Problem
+   - Recover a Saved or Queued Report
+   - Fix VIN Scanning
 
-| Area | Route | What to expect | Access note |
-| --- | --- | --- | --- |
-| Core | `/home` | Filtered inspection totals, severity and damage-area analytics | Authenticated portal |
-| Core | `/reports/damage` | Damage report list, filters, report detail, evidence, and exports | Reports module |
-| Core | `/reports/rsa` | Rail Safe Audit reports | SHAP/RSA access |
-| Core | `/inspection/24-hour` | 24-hour inventory inspection reporting | Reports module |
-| Compatibility | `/dashboard` | Hidden/admin dashboard compatibility route | Not normal navigation |
-| Apps | `/docudent` | Linked Inspection-Trac app/product surface | Module enabled |
-| Administration | `/organizations` | Tenant and subscription administration | Organization admin |
-| Administration | `/facilities` | Facilities, locations, yards, areas, access, and enrollment | Facility admin |
-| Administration | `/users` | User and role administration | Facility admin |
-| Administration | `/branding` | Portal appearance and branding | Super admin |
-| Administration | `/email` | Notification settings | Facility admin |
-| Support | `/support` | Support ticket submission and follow-up | Authenticated portal |
-| Support | `/resources` | Facility guides, app walkthroughs, portal map, app links, and access PDFs | Authenticated portal |
-| Support | `/settings` | Workspace and session settings | Authenticated portal |
+Every published guide contains only its exact app or portal location, numbered
+actions, an observable Done state, and the shortest useful Problem recovery.
 
-## Mobile app page and workflow inventory
-
-These entries follow the GoRouter route map in `NulaneRepo/lib/main.dart`, the launchable module definitions in `lib/core/app_control/app_module_definition.dart`, and the dashboard module grid.
-
-| Route/surface | Screen or workflow | What to expect |
-| --- | --- | --- |
-| `/` and `/login` | Sign in | Signed-out users authenticate; authenticated users continue to Dashboard |
-| `/dashboard` | Dashboard | Enabled workflow cards plus submitted, queued, and partial report status |
-| `/vin-scan` | Damage Submission | Camera/hardware/manual VIN capture, facility selection, then inspection |
-| `/inspection` | Inspection entry | Damage/no-damage decision, area, type, severity, photos, notes, save, and review |
-| `/report-review` | Review and submit | Validation, evidence review, signature requirements, and submission state |
-| `/pad-vin-scan` | Interchange | Interchange inspection with configuration-controlled availability |
-| `/twenty-four-hour-vin-scan` | 24 Hour Inspection | 24-hour VIN-led inspection and confirmation |
-| `/twenty-four-hour-confirm` | 24 Hour confirmation | Review the vehicle data and continue the 24-hour flow |
-| `/rsa-car-scan` | Rail Ship Approved | Railcar/deck scan and RSA approval workflow |
-| `/settings` | Settings & Legal | Current Facility, account, support, legal, tutorial replay, and scanner mode |
-| `/app-control` | App Control | Admin/runtime visibility and diagnostics; not a normal field step |
-| `/generic/:moduleId` | Generic configured module | Backend-driven form when the module is enabled |
-| `/module/:moduleId` | Configured workflow module | Backend-driven workflow when the module is enabled |
-| `/:moduleId` | Dynamic module fallback | Configuration-driven route; do not promise it unless visible on Dashboard |
-
-## Current guide coverage
-
-The Resources & Training catalog exposes these shared guides:
-
-- Sign In and Select the Current Facility
-- Scan or Enter a VIN
-- Complete a Damage Inspection
-- Complete a No-Damage Inspection
-- Resume Saved Work
-- Find a Submitted Report
-- Export Facility Reports
-- Get Help with Access or a Report
-- Inspection-Trac App Screen Map
-- Mobile App Workflow Inventory
-- Inspection-Trac Portal Page Map
-
-Every live facility also receives a generated facility guide containing configured yards, registration/support state, the already-inside-the-facility path, app expectations, workflow guidance, report handling, and recovery/help steps.
+Facility-specific content is a generated overlay from live facility, active-yard, registration, and support data. Shared procedures are not copied once per facility.
 
 ## Evidence boundaries
 
-- The portal route map and app route map are verified from source code.
-- Facility names, active yards, registration links, and support details are live data and may vary by organization/facility scope.
-- Conditional modules are intentionally documented as conditional; a guide must not imply that a disabled or backend-required module is available.
-- The inventory describes the current source-controlled screens. It does not claim that every backend-driven manifest variant has identical labels or fields.
+- Dashboard visibility is the field operator’s source of truth for whether a module is available to the current account and facility.
+- Rail guidance documents only the source-backed railcar, track (when shown), deck, spot, chock-status, evidence, damage, and queue behavior.
+- The portal does not bundle an approved AIAG/M-22 source PDF. The damage-coding guide therefore explains Inspection-Trac inputs and explicitly does not claim to reproduce the standard.
+- Unsupported facility subdivisions are not documented. Facility overlays use the typed facility and yard contract only.
+- Administration guides are visible and directly accessible only to the existing facility-admin or super-admin roles.
+
+## Facility onboarding path
+
+- `chicagoHeightsQuickStart.json` is the typed canonical source for the title,
+  purpose, registration URL, six steps, Done state, support request, stable
+  facility ID, and Main yard.
+- `FacilityQuickStartActions` is the shared UI path for the registration URL,
+  QR, and published quick-start PDF. Resources and Facility Registration use
+  it.
+- `scripts/generate-published-facility-quick-start.mjs` is the only published
+  quick-start document builder. It reads the canonical content and writes the
+  one approved asset.
+- Chicago Heights uses the one-page
+  `public/resources/chicago-heights/chicago-heights-quick-start.pdf` through the
+  same delivery path. Browser-generated Chicago PDFs are disabled, so users do
+  not see competing quick starts.
+- The Resources facility section lists only facilities with an approved
+  quick-start asset. Chicago Heights is currently the only published facility;
+  the underlying directory and Facilities administration data are unchanged.
+- The live Chicago record has no registration slug. Its directory adapter uses
+  the location UUID as the fallback slug, so the published asset resolver now
+  matches the canonical slug first, then stable location ID, then an optional
+  facility code.
+- The Chicago Heights facility quick-reference page puts the approved PDF
+  before its numbered steps and names scanning, account creation or sign-in,
+  email verification, facility confirmation, and the Main-yard action.
+- The published Chicago Heights QR decodes to
+  `https://inspection-trac.com/join/chicago-heights`. The live browser flow
+  resolves that path to the live Chicago Heights registration page.
+- Pre-existing files under `output/pdf/` are historical inventory artifacts and
+  are not the canonical downloadable material.
+- No AIAG/M-22 PDF was located.

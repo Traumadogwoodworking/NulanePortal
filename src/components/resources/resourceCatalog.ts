@@ -1,497 +1,603 @@
 import type { FacilityRegistrationConfiguration } from "@/lib/services/facilityOnboardingService";
 import type { FacilitySummary } from "@/lib/types";
 import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
+import { normalizeSearchText, splitSearchTokens } from "@/lib/searchText";
+import {
+  getFacilityQuickStartAsset,
+  type FacilityQuickStartAsset,
+} from "@/components/facilities/facilityQuickStartAsset";
 
 export type ResourceAudience = "field" | "portal" | "shared";
 export type ResourcePublicationStatus = "published" | "draft";
+export type ResourceAccess =
+  "authenticated" | "facility-admin" | "org-admin" | "super-admin";
+export type ResourceCategoryId =
+  | "get-started"
+  | "complete-inspections"
+  | "review-reports"
+  | "manage-access"
+  | "fix-a-problem";
 
-export interface ResourceSection {
+export interface ResourceCategoryDefinition {
+  id: ResourceCategoryId;
   title: string;
-  steps: string[];
+  description: string;
 }
 
 export interface ResourceGuideDefinition {
   id: string;
   title: string;
   description: string;
+  category: ResourceCategoryId;
   audience: ResourceAudience;
+  access: ResourceAccess;
   keywords: string[];
   publicationStatus: ResourcePublicationStatus;
-  sections: ResourceSection[];
+  where: string;
+  steps: string[];
+  done: string;
+  problem: string;
+  problemGuideId?: string;
+  referenceNote?: string;
   facilityId?: string;
   facilityName?: string;
   registrationUrl?: string;
   support?: { displayName?: string; email?: string; phone?: string };
   yards?: string[];
+  quickStart?: FacilityQuickStartAsset;
 }
 
-const published = (input: Omit<ResourceGuideDefinition, "publicationStatus">): ResourceGuideDefinition => ({
-  ...input,
-  publicationStatus: "published",
-});
+export interface ResourceAccessContext {
+  isFacilityAdmin: boolean;
+  isOrgAdmin: boolean;
+  isSuperAdmin: boolean;
+}
+
+export const resourceCategories: ResourceCategoryDefinition[] = [
+  {
+    id: "get-started",
+    title: "Get Started",
+    description: "Open an inspection and identify the vehicle.",
+  },
+  {
+    id: "complete-inspections",
+    title: "Complete Inspections",
+    description:
+      "Record damage, no-damage, rail, chock, and damage-code results.",
+  },
+  {
+    id: "review-reports",
+    title: "Review Reports",
+    description: "Find submitted reports and export the results you need.",
+  },
+  {
+    id: "manage-access",
+    title: "Manage Access",
+    description: "Get help, manage registration, and assign supported roles.",
+  },
+  {
+    id: "fix-a-problem",
+    title: "Fix a Problem",
+    description: "Recover a report or continue when VIN scanning fails.",
+  },
+];
+
+const published = (
+  input: Omit<ResourceGuideDefinition, "publicationStatus">,
+): ResourceGuideDefinition => ({ ...input, publicationStatus: "published" });
 
 export const generalResourceGuides: ResourceGuideDefinition[] = [
   published({
-    id: "sign-in-and-select-facility",
-    title: "Sign In and Select the Current Facility",
-    description: "Use the mobile app sign-in flow and choose the facility where you are working.",
+    id: "start-an-inspection",
+    title: "Start an Inspection",
+    description:
+      "Select the work location, open a workflow, and confirm the VIN.",
+    category: "get-started",
     audience: "field",
-    keywords: ["login", "sign in", "user", "account", "facility", "location"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Open Inspection-Trac and use the sign-in action.",
-          "Complete the sign-in flow with your account.",
-          "When the app asks for the current facility, choose the facility where you are working.",
-          "Save the facility selection and continue to the dashboard.",
-        ],
-      },
-      {
-        title: "If the facility is missing",
-        steps: [
-          "Stop if the facility you need is not in the list.",
-          "Facility selection is required to continue; ask an administrator to assign the correct facility access.",
-        ],
-      },
+    access: "authenticated",
+    keywords: [
+      "sign in",
+      "login",
+      "dashboard",
+      "current facility",
+      "workflow",
+      "VIN",
+      "camera",
+      "manual entry",
+      "17 characters",
     ],
-  }),
-  published({
-    id: "scan-or-enter-vin",
-    title: "Scan or Enter a VIN",
-    description: "Capture the vehicle VIN and confirm it before moving into the inspection.",
-    audience: "field",
-    keywords: ["scanner", "scan", "qr", "vin", "vehicle", "manual", "enter"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Open the VIN capture step for the inspection.",
-          "Scan the VIN when the scanner is available, or enter the VIN manually when scanning does not produce a usable value.",
-          "Confirm the captured VIN before continuing.",
-          "Use a valid 17-character VIN. The app rejects VINs containing I, O, or Q.",
-        ],
-      },
-      {
-        title: "If the scan fails",
-        steps: [
-          "Keep the vehicle and VIN in view and try the capture again.",
-          "If scanning still does not work, use the manual VIN entry in the same workflow.",
-        ],
-      },
+    where: "Mobile app → Dashboard",
+    steps: [
+      "Sign in with the account assigned to the facility where you are working.",
+      "Confirm Current Facility, then open the inspection workflow shown for that facility.",
+      "Scan the VIN or use manual entry on the VIN Scanner screen.",
+      "Confirm the 17-character VIN before continuing.",
     ],
+    done: "The inspection opens with the correct facility and confirmed VIN.",
+    problem:
+      "If the facility is missing, ask a facility administrator to verify your assignment. If the scanner fails, use Fix VIN Scanning.",
+    problemGuideId: "fix-vin-scanning",
   }),
   published({
     id: "complete-damage-inspection",
     title: "Complete a Damage Inspection",
-    description: "Record the vehicle, damage details, required photos, signature, and submission.",
+    description: "Record damage or no-damage results, review, and submit.",
+    category: "complete-inspections",
     audience: "field",
-    keywords: ["inspection", "damage", "photos", "photo", "signature", "submit", "vin"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Capture or enter a valid 17-character VIN.",
-          "Add a damage entry and select the damaged area and damage type.",
-          "Capture at least one readable photograph for each damage entry.",
-          "Capture the required inspector signature when the workflow asks for it.",
-          "Review the report, then submit it after the required checks pass.",
-        ],
-      },
-      {
-        title: "Before submitting",
-        steps: [
-          "Confirm the VIN is valid.",
-          "Confirm every damage entry has an area, damage type, and readable photo.",
-          "Recapture any file the app says is missing or cannot be read.",
-        ],
-      },
+    access: "authenticated",
+    keywords: [
+      "damage",
+      "no damage",
+      "photo",
+      "signature",
+      "area",
+      "type",
+      "severity",
+      "review report",
+      "submit",
     ],
+    where: "Mobile app → Dashboard → Damage Inspection",
+    steps: [
+      "Confirm the facility, configured yard when requested, and VIN.",
+      "Choose Damage Found or No Damage Found.",
+      "For damage, add each separate issue with the area, type, severity, and required readable photo.",
+      "Open Review Report, complete any required signature, and correct every validation message.",
+      "Submit the report.",
+    ],
+    done: "The app confirms submission or shows the report saved and queued for upload.",
+    problem:
+      "Open the field named in the validation message. If the report is saved or queued, use Recover a Saved or Queued Report instead of starting again.",
+    problemGuideId: "recover-saved-or-queued-report",
   }),
   published({
-    id: "complete-no-damage-inspection",
-    title: "Complete a No-Damage Inspection",
-    description: "Complete the inspection when no damage is observed and submit the reviewed report.",
+    id: "complete-rail-inspection",
+    title: "Complete a Rail Inspection",
+    description:
+      "Record railcar, vehicle-position, and chock evidence in one workflow.",
+    category: "complete-inspections",
     audience: "field",
-    keywords: ["inspection", "no damage", "clear", "photos", "signature", "submit", "vin"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Capture or enter a valid 17-character VIN.",
-          "Mark the vehicle as no damage observed when the damage step is shown.",
-          "Complete the remaining fields shown by the enabled inspection workflow.",
-          "Capture a required inspector signature when the workflow asks for it.",
-          "Review the report and submit it.",
-        ],
-      },
-      {
-        title: "If the app will not submit",
-        steps: [
-          "Read the validation message and complete the field it identifies.",
-          "Do not leave the damage step blank: explicitly mark no damage observed when there is no damage entry.",
-        ],
-      },
+    access: "authenticated",
+    keywords: [
+      "rail",
+      "railcar number",
+      "deck A",
+      "deck B",
+      "vehicle spot",
+      "chock system",
+      "chock code",
+      "jumped chock",
+      "chock photo",
     ],
+    where: "Mobile app → Dashboard → enabled rail inspection workflow",
+    steps: [
+      "Confirm the facility, configured yard when requested, and railcar number.",
+      "Select deck A or B and the vehicle spot shown by the workflow.",
+      "Scan or enter the VIN, then record the chock system/code.",
+      "When a jumped chock is present, record the result and capture the required chock photograph.",
+      "Review the entries and submit.",
+    ],
+    done: "The rail report is submitted with the railcar, spot, VIN, chock result, and required evidence.",
+    problem:
+      "If a rail field is missing, confirm that you opened the facility’s enabled rail workflow. Fix the named field before submitting.",
   }),
   published({
-    id: "resume-saved-work",
-    title: "Resume Saved Work",
-    description: "Find an interrupted or pending inspection in the mobile app and continue from its saved state.",
+    id: "use-damage-codes",
+    title: "Use Damage Codes",
+    description:
+      "Choose the area, type, and severity values available in the inspection.",
+    category: "complete-inspections",
     audience: "field",
-    keywords: ["resume", "saved", "incomplete", "pending", "failed submission", "offline", "report"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Sign in again if the app asks for authentication.",
-          "Open the dashboard and find the saved report by VIN or report ID.",
-          "Open an in-progress report to resume the workflow.",
-          "Review any pending, failed, or sign-in status shown on the report card and follow the displayed next action.",
-        ],
-      },
-      {
-        title: "After signing back in",
-        steps: [
-          "The app checks for queued reports after login and attempts to continue their delivery.",
-          "Keep the report open until its status confirms whether it completed or still needs attention.",
-        ],
-      },
+    access: "authenticated",
+    keywords: [
+      "damage code",
+      "damage coding",
+      "area",
+      "type",
+      "severity",
+      "AIAG",
+      "M-22",
     ],
+    where: "Mobile app → Damage Inspection → Add damage",
+    steps: [
+      "Select the damaged area shown in the app.",
+      "Select the damage type that matches the visible condition.",
+      "Select the severity required by the workflow.",
+      "Capture the required readable photo and save the entry.",
+    ],
+    done: "The damage entry shows an area, type, severity, and required photo.",
+    problem:
+      "If the needed value is not available, stop and ask the approved facility contact instead of choosing a substitute code.",
+    referenceNote:
+      "Inspection-Trac exposes its configured code choices in the workflow. This guide is not an independently verified reproduction of an official AIAG/M-22 reference.",
   }),
   published({
-    id: "find-submitted-report",
-    title: "Find a Submitted Report",
-    description: "Open the portal report list, locate a submitted inspection, and review its status and evidence.",
+    id: "find-and-export-reports",
+    title: "Find and Export Reports",
+    description:
+      "Locate a submitted report, review evidence, and download visible results.",
+    category: "review-reports",
     audience: "portal",
-    keywords: ["report", "submitted", "status", "photos", "pdf", "facility", "vin"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Open Damage Reports in the portal.",
-          "Use the available facility, VIN, status, or date filters to narrow the list.",
-          "Select the report you need to review.",
-          "Review the report status, facility, vehicle details, photos, and PDF when those items are available.",
-        ],
-      },
+    access: "authenticated",
+    keywords: [
+      "damage reports",
+      "RSA reports",
+      "submitted report",
+      "VIN",
+      "status",
+      "date",
+      "photo",
+      "PDF",
+      "CSV",
+      "export",
+      "download",
     ],
+    where: "Portal → Damage Reports or RSA Reports",
+    steps: [
+      "Choose the report page for the workflow you need.",
+      "Use the available facility, VIN, status, or date controls to narrow the list.",
+      "Open a report to confirm its vehicle, facility, status, and evidence.",
+      "Select the visible reports you need, then choose the available PDF or CSV download action.",
+      "Open the download and confirm its report identifiers match your selection.",
+    ],
+    done: "The intended report is verified and the downloaded file contains the selected results.",
+    problem:
+      "Clear overly narrow filters and verify the facility scope. Export PDFs in smaller groups when the page limits the selection.",
   }),
   published({
-    id: "export-facility-reports",
-    title: "Export Facility Reports",
-    description: "Download selected report PDFs or a CSV from the portal report list.",
-    audience: "portal",
-    keywords: ["export", "download", "csv", "pdf", "report", "facility"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Open Damage Reports in the portal.",
-          "Filter the list to the facility and date or status you need.",
-          "Select the reports to export. The report selection supports up to 25 reports at once.",
-          "Choose Download PDFs or Download CSV.",
-        ],
-      },
-    ],
-  }),
-  published({
-    id: "get-support",
-    title: "Get Help with Access or a Report",
-    description: "Send a support request with the facility, account, report, and evidence details that matter.",
+    id: "get-account-or-facility-access",
+    title: "Get Account or Facility Access",
+    description:
+      "Use the facility registration link or send support the exact access details.",
+    category: "manage-access",
     audience: "shared",
-    keywords: ["support", "help", "failed submission", "access", "account", "report"],
-    sections: [
-      {
-        title: "Steps",
-        steps: [
-          "Open Support Tickets in the portal.",
-          "Include the facility name and the account or report involved.",
-          "Describe the problem and what the app or portal displayed.",
-          "Attach a screenshot or short recording when it helps explain the problem.",
-        ],
-      },
+    access: "authenticated",
+    keywords: [
+      "support",
+      "access",
+      "account",
+      "facility",
+      "assignment",
+      "registration",
+      "enrollment",
+      "ticket",
+      "login",
     ],
+    where: "Portal → Resources → facility card",
+    steps: [
+      "Open the card for the facility you need.",
+      "If registration is enabled, open its registration link and sign in or create an account with your work email.",
+      "Confirm the registration page names the intended facility.",
+      "If the link is unavailable or access is still missing, open Support Tickets and include the facility, account email, and exact message shown.",
+    ],
+    done: "The account is assigned to the intended facility, or a support ticket contains the details needed to resolve access.",
+    problem:
+      "Do not use a different facility’s link and never include a password, access token, or secret in a support ticket.",
   }),
   published({
-    id: "mobile-app-screen-map",
-    title: "Inspection-Trac App Screen Map",
-    description: "A screen-by-screen map of the mobile app, including what to expect before, during, and after an inspection.",
-    audience: "field",
-    keywords: ["app", "mobile", "screen", "dashboard", "vin", "inspection", "review", "settings", "offline", "scanner"],
-    sections: [
-      {
-        title: "Sign-in and session",
-        steps: [
-          "Open Inspection-Trac. A signed-out user starts at the branded sign-in screen; a signed-in user is taken to the Dashboard.",
-          "Use the same verified account that was used for facility registration. If authentication expires, sign in again before resuming work.",
-          "If the app sends you back to sign-in, do not create a second account. Sign in with the existing verified account and allow the app to reload access.",
-        ],
-      },
-      {
-        title: "Dashboard",
-        steps: [
-          "The Dashboard is the app home screen. It shows the inspection modules enabled for the current organization and facility.",
-          "Damage Submission starts the standard vehicle damage flow. Interchange, 24 Hour Inspection, Rail Ship Approved, and other modules appear only when their configuration makes them available.",
-          "The Reports area groups submitted, queued, and partial work. Open a report card to review it or resume an incomplete workflow.",
-          "Use Settings for the current facility, account, support, legal pages, tutorial replay, and scanner-mode preferences.",
-        ],
-      },
-      {
-        title: "VIN capture",
-        steps: [
-          "The VIN Scanner is the first screen for the standard damage flow and other scanner-led workflows.",
-          "Use the camera or configured hardware scanner when available. If scanning cannot produce a usable value, choose manual entry in the same screen.",
-          "Confirm the VIN before continuing. The app expects a valid 17-character VIN and rejects I, O, and Q characters.",
-          "If the app asks for a facility, choose the facility where the vehicle is physically being inspected; do not select a substitute location.",
-        ],
-      },
-      {
-        title: "Inspection screen",
-        steps: [
-          "The guided tutorial may walk through Choose the damaged area, Select the damage type, Set the severity level, Capture supporting photos, and Review everything.",
-          "For damage, complete the area, damage type, severity, and photo requirements before saving the entry. Add another damage entry when the vehicle has more than one issue.",
-          "For no damage, explicitly choose the no-damage path when the app asks. Do not leave the damage decision blank.",
-          "Save an entry for later when the inspection is not complete. The app keeps the report in a resumable state instead of forcing a partial submission.",
-        ],
-      },
-      {
-        title: "Review and submission",
-        steps: [
-          "Use Review Report after the required entries are saved. Review the VIN, facility, location, damage rows, photos, notes, and signature requirements shown by the workflow.",
-          "If validation identifies a missing field or file, return to the identified step and correct it before submitting.",
-          "Submit sends the report through the delivery queue. Keep the app open long enough to see whether it completed, queued, needs authentication, or needs user action.",
-          "If a report is queued or interrupted, return to the Dashboard and resume it from the report status instead of starting a duplicate report.",
-        ],
-      },
-      {
-        title: "Settings and recovery",
-        steps: [
-          "In Settings, Current Facility is the source of truth for where new inspections are assigned. Change it only after saving or safely leaving active work.",
-          "Replay Inspection Tutorial resets the guided tips for the next inspection; it does not delete reports or change facility access.",
-          "VIN scanner mode controls the available scanner input on supported devices. iOS and web use the supported camera/input path instead of the hardware-scanner setting.",
-          "Use Contact Support for access, workflow, or delivery problems and include the facility, VIN/report ID, and the message shown by the app.",
-        ],
-      },
-    ],
-  }),
-  published({
-    id: "mobile-app-workflow-inventory",
-    title: "Mobile App Workflow Inventory",
-    description: "The launchable app workflows and the screens they open, with configuration limits called out clearly.",
-    audience: "field",
-    keywords: ["interchange", "24 hour", "rsa", "rail", "module", "workflow", "inspection code", "feature flag"],
-    sections: [
-      {
-        title: "Launchable dashboard workflows",
-        steps: [
-          "Damage Submission opens the standard VIN-led vehicle damage report at /vin-scan.",
-          "Interchange opens the interchange inspection at /pad-vin-scan. Its availability is controlled by organization and feature configuration.",
-          "24 Hour Inspection opens the 24-hour VIN flow at /twenty-four-hour-vin-scan and continues to its confirmation screen.",
-          "Rail Ship Approved opens the railcar/deck scan flow at /rsa-car-scan when the RSA module is enabled for the user and facility.",
-        ],
-      },
-      {
-        title: "Shared report screens",
-        steps: [
-          "Inspection is the guided data-entry screen at /inspection. It supports damage/no-damage decisions, entries, photos, notes, and review navigation.",
-          "Report Review is the final review and submission screen at /report-review. It also handles queued or saved report recovery.",
-          "The Dashboard at /dashboard is the report lookup and recovery surface for submitted, queued, and partial local work.",
-        ],
-      },
-      {
-        title: "Conditional and backend-driven modules",
-        steps: [
-          "Generic and module routes are configuration-driven. Their form fields, workflow steps, and visibility come from the enabled module manifest rather than a single fixed screen.",
-          "Official inspection codes without a dedicated launch route should be treated as unavailable until the backend manifest and facility access make them visible.",
-          "Do not promise a module from a guide when it is not present on the current Dashboard; feature flags, organization settings, facility scope, and permissions can change what appears.",
-        ],
-      },
-      {
-        title: "Screens that are not normal field entry points",
-        steps: [
-          "App Control is an admin/runtime diagnostics surface, not a normal inspection step.",
-          "POD Proof and export-related surfaces are app-side or backend-dependent and should not be presented as a guaranteed field workflow.",
-          "Authentication callback routes are internal sign-in handling and are not user destinations.",
-        ],
-      },
-    ],
-  }),
-  published({
-    id: "portal-page-map",
-    title: "Inspection-Trac Portal Page Map",
-    description: "A complete map of the portal pages, what each page is for, and which access level controls it.",
+    id: "manage-facility-registration",
+    title: "Manage Facility Registration",
+    description:
+      "Review registration status and use the canonical link, QR, and quick-start guide.",
+    category: "manage-access",
     audience: "portal",
-    keywords: ["portal", "home", "reports", "organizations", "facilities", "users", "branding", "email", "support", "resources", "settings", "page map"],
-    sections: [
-      {
-        title: "Core pages",
-        steps: [
-          "Home (/home) is the operational overview. Use it for the filtered inspection totals, severity and damage-area charts, and current-view analytics.",
-          "Damage Reports (/reports/damage) is the main report list. Filter and open reports, inspect evidence, and use the available PDF/CSV export actions.",
-          "RSA Reports (/reports/rsa) is the Rail Safe Audit report surface and is shown only to the access scope that supports RSA.",
-          "24 Hour (/inspection/24-hour) is the portal view for 24-hour inventory inspection reporting when the reports module is enabled.",
-          "Dashboard (/dashboard) is a hidden/admin dashboard route retained for compatibility; normal navigation uses Home.",
-        ],
-      },
-      {
-        title: "Apps and facility operations",
-        steps: [
-          "Inspection-Trac (/docudent) is the linked app/product surface for the mobile inspection workflow.",
-          "Organizations (/organizations) manages tenant and subscription data and requires organization-admin access.",
-          "Facilities (/facilities) manages operational locations, yards, areas, facility access, and enrollment configuration and requires facility-admin access.",
-          "Users (/users) manages users and roles for the organization/facilities and requires facility-admin access.",
-        ],
-      },
-      {
-        title: "Administration and support",
-        steps: [
-          "Branding (/branding) customizes portal appearance and is restricted to the super-admin scope.",
-          "Email (/email) manages notifications and requires facility-admin access.",
-          "Support Tickets (/support) is where access, workflow, and report problems are submitted for follow-up.",
-          "Resources & Training (/resources) is the starting point for facility guides, app screen explanations, portal page inventory, app links, and access PDFs.",
-          "Settings (/settings) is the workspace/session settings surface.",
-        ],
-      },
-      {
-        title: "How to use the portal day to day",
-        steps: [
-          "Start at Home to understand the current filtered view, then move to Damage Reports when a specific report needs review.",
-          "Use Facilities and Users for access/configuration work; do not use reports as a substitute for changing facility membership or yard setup.",
-          "Return to Resources & Training for the facility-specific guide before starting a new facility workflow or handing an app user their setup instructions.",
-          "If a page is missing from the navigation, check the account role, required permission, module flag, and facility/organization scope before treating it as a broken link.",
-        ],
-      },
+    access: "facility-admin",
+    keywords: [
+      "admin",
+      "facility",
+      "registration",
+      "enrollment",
+      "QR",
+      "quick start",
+      "registration link",
+      "packet",
     ],
+    where: "Portal → Facilities → select a facility → Registration",
+    steps: [
+      "Confirm the facility name, registration link name, default role, and support details.",
+      "Turn on Accept registration from this link when enrollment should be open.",
+      "Save Registration and confirm the status reloads as Enabled.",
+      "Use the displayed registration link, QR SVG, or downloadable quick-start guide for that facility.",
+      "Open Test new session and confirm the registration page names the intended facility.",
+    ],
+    done: "Registration is enabled and the link, QR, and quick-start guide all open the same facility URL.",
+    problem:
+      "If registration is unavailable or the saved status cannot be confirmed, keep the material unpublished and open Support Tickets.",
+  }),
+  published({
+    id: "manage-users-and-roles",
+    title: "Manage Users and Roles",
+    description:
+      "Review an existing user and save supported role and facility assignments.",
+    category: "manage-access",
+    audience: "portal",
+    access: "facility-admin",
+    keywords: [
+      "admin",
+      "users",
+      "roles",
+      "invite",
+      "assignment",
+      "facility access",
+    ],
+    where: "Portal → Users",
+    steps: [
+      "Find the existing user before creating an invitation.",
+      "Review the user’s current role and facility assignments.",
+      "Choose only the role and facility options available in the form.",
+      "Save, then reopen the user to verify the assignment.",
+    ],
+    done: "The user record reloads with the intended supported role and facility assignment.",
+    problem:
+      "Update an existing user instead of creating a duplicate. If a facility is missing, verify the organization scope.",
+  }),
+  published({
+    id: "recover-saved-or-queued-report",
+    title: "Recover a Saved or Queued Report",
+    description:
+      "Resume the existing report after interruption, offline save, or upload failure.",
+    category: "fix-a-problem",
+    audience: "field",
+    access: "authenticated",
+    keywords: [
+      "resume report",
+      "saved",
+      "queued",
+      "offline",
+      "retry",
+      "upload",
+      "authentication expired",
+      "needs correction",
+    ],
+    where: "Mobile app → Dashboard → Resume report",
+    steps: [
+      "Reconnect the device when the message says it is offline.",
+      "Sign in again when the message says authentication expired.",
+      "Open Resume report and choose the existing report by VIN or report ID.",
+      "Complete the correction or retry action named by the app.",
+      "Keep the app open until it confirms submission or shows that the report remains queued.",
+    ],
+    done: "The existing report is submitted, or its queue state clearly names the remaining action.",
+    problem:
+      "Do not start a second report for the same inspection. If correction is required, fix the named field or evidence item before retrying.",
+  }),
+  published({
+    id: "fix-vin-scanning",
+    title: "Fix VIN Scanning",
+    description: "Restore camera permission or continue with manual VIN entry.",
+    category: "fix-a-problem",
+    audience: "field",
+    access: "authenticated",
+    keywords: [
+      "scanner",
+      "camera",
+      "permission",
+      "manual VIN",
+      "hardware scanner",
+      "17 characters",
+      "I O Q",
+    ],
+    where: "Mobile app → VIN Scanner",
+    steps: [
+      "Allow camera access in device settings, then reopen VIN Scanner.",
+      "Clean the VIN label, improve lighting, and keep the label in view.",
+      "If scanning still fails, use manual entry.",
+      "Confirm all 17 characters; VINs do not use I, O, or Q.",
+    ],
+    done: "The VIN is confirmed and the inspection advances.",
+    problem:
+      "Hardware-scanner settings apply only on supported devices. If manual entry is rejected, check the length and characters.",
   }),
 ];
 
-export function guideHref(input: { guide?: string; facility?: string; task?: string }) {
+export function guideHref(input: {
+  guide?: string;
+  facility?: string;
+  task?: string;
+}) {
   const params = new URLSearchParams();
   if (input.guide) params.set("guide", input.guide);
   if (input.facility) params.set("facility", input.facility);
   if (input.task) params.set("task", input.task);
-  return `/resources/guides?${params.toString()}`;
+  const query = params.toString();
+  return query ? `/resources/guides?${query}` : "/resources/guides";
 }
 
 export function buildFacilityGuide(
   facility: FacilitySummary,
   registration?: FacilityRegistrationConfiguration | null,
 ): ResourceGuideDefinition {
-  const facilityName = formatFacilityDisplayName(registration?.onboardingDisplayName || facility.name);
-  const yardNames = (facility.yards ?? []).filter((yard) => yard.active).map((yard) => yard.name);
+  const facilityName = formatFacilityDisplayName(
+    registration?.onboardingDisplayName || facility.name,
+  );
+  const yardNames = (facility.yards ?? [])
+    .filter((yard) => yard.active)
+    .map((yard) => yard.name);
+  const quickStart = getFacilityQuickStartAsset({
+    slug: facility.slug,
+    id: facility.id,
+  });
+  const supportParts = [
+    registration?.support?.displayName,
+    registration?.support?.email,
+    registration?.support?.phone,
+  ].filter(Boolean);
 
   return published({
     id: `facility-${facility.id}`,
-    title: `Get Started at ${facilityName}`,
-    description: `Use the configured access, facility selection, and location information for ${facilityName}.`,
+    title: `${facilityName} Quick Start`,
+    description: quickStart
+      ? quickStart.purpose
+      : yardNames.length
+        ? `Facility-specific yard choices: ${yardNames.join(", ")}.`
+        : "No special operating instruction is configured for this facility.",
+    category: "manage-access",
     audience: "shared",
+    access: "authenticated",
     keywords: [
       facility.name,
       facility.region || "",
       "facility",
       "yard",
-      "area",
-      "bay",
-      "account",
       "access",
+      "registration",
+      "QR",
+      "quick start",
       ...yardNames,
     ],
-    facilityId: facility.id,
-    facilityName,
-    registrationUrl: registration?.registrationUrl,
-    support: registration?.support,
-    yards: yardNames,
-    sections: [
-      {
-        title: "Getting started",
-        steps: [
+    where: `Portal → Resources → ${facilityName}`,
+    steps: quickStart
+      ? quickStart.steps
+      : [
           ...(registration?.registrationUrl
             ? [
-                "Open the facility registration link, create or sign in to your account, and confirm the page names this facility.",
-                "Open Inspection-Trac and sign in with the same account.",
+                `Use this facility’s registration link only when someone needs access to ${facilityName}.`,
               ]
-            : ["Ask your administrator for the configured account access link before starting."]),
-          "When the app asks for the current facility, select this facility before continuing.",
-        ],
-      },
-      {
-        title: "Location entry",
-        steps: yardNames.length
-          ? [
-              `Use one of the configured yards for this facility: ${yardNames.join(", ")}.`,
-              "Enter the bay or area shown by the facility workflow. If the correct location is not available, stop and ask the facility administrator rather than selecting a substitute.",
-            ]
-          : [
-              "Select this facility before starting the inspection.",
-              "Enter the bay or area shown by the facility workflow. No active yard options are currently configured for this facility.",
-            ],
-      },
-      {
-        title: "Inspection workflows",
-        steps: [
-          "Use the shared task guides on Resources & Training for VIN capture, damage or no-damage inspection, saved work, and submission.",
-          "If the workflow shown in the app differs from a shared guide, stop and contact support so the facility instructions can be confirmed.",
-        ],
-      },
-      {
-        title: "Already inside the facility",
-        steps: [
-          "Do not reopen registration just because you are already on site. Open Settings in the app and confirm Current Facility matches this facility.",
-          "Return to the Dashboard and choose the workflow enabled for this facility. The visible module cards are the source of truth for what you can start.",
-          "Before capturing the VIN, confirm the yard and bay/area shown by the facility process. Stop and ask the facility administrator if the correct location is not available.",
-        ],
-      },
-      {
-        title: "What to expect in the app",
-        steps: [
-          "The app opens with a Dashboard, then moves through VIN capture, inspection entry, review, and submission for a standard damage report.",
-          "During inspection, expect prompts for the damage decision, area, type, severity, supporting photos, notes, and signature when required by the enabled workflow.",
-          "After submit, expect a completed, queued, authentication-paused, or user-action-needed status. Use the Dashboard to continue a queued or partial report.",
-        ],
-      },
-      {
-        title: "Reports",
-        steps: [
-          "Authorized portal users can open Damage Reports to find submitted reports for the facility.",
-          "Use the report list to review status, photos, and available PDFs, or export selected reports.",
-        ],
-      },
-      {
-        title: "If something goes wrong",
-        steps: [
-          "Wrong facility: open Settings in the app, change the current facility, and save it before continuing.",
-          "Interrupted inspection: use Resume Saved Work from the shared guides.",
-          "Missing access or a failed submission: record the facility and report details, then open Support Tickets.",
-        ],
-      },
-      {
-        title: "Help",
-        steps: [
-          ...(registration?.support?.email || registration?.support?.phone
+            : [
+                `Ask the approved facility administrator for access to ${facilityName}.`,
+              ]),
+          ...(yardNames.length
             ? [
-                `Configured facility support: ${[registration.support.displayName, registration.support.email, registration.support.phone].filter(Boolean).join(" · ")}.`,
+                `When the workflow asks for a yard, choose the assigned option from: ${yardNames.join(", ")}.`,
               ]
-            : ["No facility-specific support contact is configured in the current registration record."]),
-          "Use Support Tickets for access, workflow, or report problems that need follow-up.",
+            : []),
+          "Use the universal task guide for the inspection or report procedure.",
         ],
-      },
-    ],
+    done: quickStart
+      ? quickStart.done
+      : `The account is assigned to ${facilityName}${yardNames.length ? " and the assigned configured yard can be selected" : ""}.`,
+    problem: quickStart
+      ? `${quickStart.support.displayName} · ${quickStart.support.email}. ${quickStart.support.instruction}`
+      : supportParts.length
+        ? `Use the configured support contact: ${supportParts.join(" · ")}.`
+        : "Open Support Tickets and include the facility name, account email, and exact message shown.",
+    registrationUrl:
+      quickStart?.registrationUrl ?? registration?.registrationUrl,
+    support: quickStart?.support ?? registration?.support,
+    yards: quickStart
+      ? quickStart.facility.yards.map((yard) => yard.name)
+      : yardNames,
+    facilityId: facility.id,
+    facilityName,
+    quickStart: quickStart || undefined,
   });
 }
 
-export function findGeneralGuide(id: string | null | undefined) {
-  return generalResourceGuides.find((guide) => guide.id === id && guide.publicationStatus === "published") ?? null;
-}
-
-export function resourceSearchText(guide: ResourceGuideDefinition) {
+export function resourceSearchText(guide: ResourceGuideDefinition): string {
+  const category = resourceCategories.find(
+    (item) => item.id === guide.category,
+  );
   return [
     guide.title,
     guide.description,
+    category?.title,
+    category?.description,
+    guide.audience,
+    guide.access,
     guide.facilityName,
-    ...(guide.keywords ?? []),
-    ...guide.sections.flatMap((section) => [section.title, ...section.steps]),
+    guide.registrationUrl,
+    guide.where,
+    guide.done,
+    guide.problem,
+    guide.referenceNote,
+    guide.quickStart?.title,
+    guide.quickStart?.purpose,
+    guide.quickStart?.registrationUrl,
+    guide.quickStart?.support.instruction,
+    ...guide.keywords,
+    ...guide.steps,
+    ...(guide.yards ?? []),
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+export function rankResourceGuides(
+  guides: ResourceGuideDefinition[],
+  query: string,
+): ResourceGuideDefinition[] {
+  const tokens = splitSearchTokens(query).map((token) => token.toLowerCase());
+  if (!tokens.length) return guides.slice();
+
+  const normalizedQuery = normalizeSearchText(query);
+  return guides
+    .map((guide, index) => {
+      const category = resourceCategories.find(
+        (item) => item.id === guide.category,
+      );
+      const title = normalizeSearchText(guide.title);
+      const categoryText = normalizeSearchText(
+        `${category?.title ?? ""} ${category?.description ?? ""}`,
+      );
+      const keywords = normalizeSearchText(guide.keywords.join(" "));
+      const description = normalizeSearchText(guide.description);
+      const facilityContext = normalizeSearchText(
+        [guide.facilityName, ...(guide.yards ?? [])].filter(Boolean).join(" "),
+      );
+      const body = normalizeSearchText(
+        [guide.where, ...guide.steps, guide.done, guide.problem].join(" "),
+      );
+      const allText = normalizeSearchText(resourceSearchText(guide));
+      const matchedTokens = tokens.filter((token) => allText.includes(token));
+      if (!matchedTokens.length) return null;
+
+      let score = 0;
+      if (normalizedQuery && title.includes(normalizedQuery)) score += 160;
+      if (normalizedQuery && keywords.includes(normalizedQuery)) score += 90;
+      if (normalizedQuery && facilityContext.includes(normalizedQuery))
+        score += 90;
+      if (normalizedQuery && categoryText.includes(normalizedQuery))
+        score += 70;
+
+      for (const token of matchedTokens) {
+        if (title.includes(token)) score += 60;
+        if (keywords.includes(token)) score += 45;
+        if (facilityContext.includes(token)) score += 45;
+        if (categoryText.includes(token)) score += 35;
+        if (description.includes(token)) score += 20;
+        if (body.includes(token)) score += 8;
+      }
+
+      if (matchedTokens.length === tokens.length) score += 25;
+      return { guide, index, score };
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        guide: ResourceGuideDefinition;
+        index: number;
+        score: number;
+      } => Boolean(entry),
+    )
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((entry) => entry.guide);
+}
+
+export function findGeneralGuide(id: string): ResourceGuideDefinition | null {
+  return (
+    generalResourceGuides.find(
+      (guide) => guide.id === id && guide.publicationStatus === "published",
+    ) ?? null
+  );
+}
+
+export function canAccessResourceGuide(
+  guide: ResourceGuideDefinition,
+  access: ResourceAccessContext,
+): boolean {
+  if (guide.access === "authenticated") return true;
+  if (access.isSuperAdmin) return true;
+  if (guide.access === "facility-admin") return access.isFacilityAdmin;
+  if (guide.access === "org-admin") return access.isOrgAdmin;
+  return false;
+}
+
+export function visibleResourceGuides(
+  access: ResourceAccessContext,
+): ResourceGuideDefinition[] {
+  return generalResourceGuides.filter(
+    (guide) =>
+      guide.publicationStatus === "published" &&
+      canAccessResourceGuide(guide, access),
+  );
 }

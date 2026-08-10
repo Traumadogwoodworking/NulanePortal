@@ -6,12 +6,18 @@ import {
   ArrowUpRight,
   BookOpen,
   Building2,
-  ExternalLink,
   MapPin,
   Search,
+  ShieldCheck,
 } from "lucide-react";
+import { FacilityQuickStartActions } from "@/components/facilities/FacilityQuickStartActions";
+import {
+  getFacilityQuickStartAsset,
+  getPublishedQuickStartFacilities,
+} from "@/components/facilities/facilityQuickStartAsset";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { formatOrganizationDisplayName } from "@/lib/facilityDisplay";
 import { usePortalDirectorySnapshot } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
 import {
@@ -21,187 +27,370 @@ import {
 import type { FacilitySummary } from "@/lib/types";
 import {
   buildFacilityGuide,
-  generalResourceGuides,
   guideHref,
-  resourceSearchText,
+  rankResourceGuides,
+  resourceCategories,
+  visibleResourceGuides,
+  type ResourceGuideDefinition,
 } from "@/components/resources/resourceCatalog";
-import { matchesAnySearchQuery } from "@/lib/searchText";
-import { formatFacilityDisplayName } from "@/lib/facilityDisplay";
 
-type RegistrationMap = Record<string, FacilityRegistrationConfiguration | null>;
+type RegistrationEntry = {
+  value: FacilityRegistrationConfiguration | null;
+  error: boolean;
+};
+type RegistrationMap = Record<string, RegistrationEntry>;
+const EMPTY_REGISTRATION_MAP: RegistrationMap = {};
+const commonGuideIds = new Set([
+  "start-an-inspection",
+  "complete-damage-inspection",
+  "find-and-export-reports",
+]);
 
 function GuideLink({
-  title,
-  description,
-  href,
-  external,
+  guide,
+  facilityId,
+  featured = false,
 }: {
-  title: string;
-  description: string;
-  href: string;
-  external?: boolean;
+  guide: ResourceGuideDefinition;
+  facilityId?: string;
+  featured?: boolean;
 }) {
-  const content = (
-    <>
-      <span className="flex min-w-0 flex-1 items-start gap-3">
-        <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
-        <span className="min-w-0">
-          <span className="block text-sm font-bold text-slate-950">{title}</span>
-          <span className="mt-1 block text-xs leading-5 text-slate-600">{description}</span>
-        </span>
-      </span>
-      {external ? <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" /> : <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400" />}
-    </>
-  );
-
-  if (external) {
-    return (
-      <a href={href} target="_blank" rel="noreferrer" className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-        {content}
-      </a>
-    );
-  }
-
   return (
-    <Link href={href} className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-      {content}
+    <Link
+      href={guideHref({ guide: guide.id, facility: facilityId })}
+      className={
+        featured
+          ? "group flex min-w-0 items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4 transition hover:border-blue-300 hover:bg-blue-100/70 focus:outline-none focus:ring-2 focus:ring-blue-300"
+          : "group flex min-w-0 items-start gap-3 px-4 py-3 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-300"
+      }
+    >
+      <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-slate-950">
+          {guide.title}
+        </span>
+        <span className="mt-1 block text-xs leading-5 text-slate-600">
+          {guide.description}
+        </span>
+        {featured ? (
+          <span className="mt-2 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+            {guide.audience === "field"
+              ? "Mobile app"
+              : guide.audience === "portal"
+                ? "Portal"
+                : "App & portal"}
+          </span>
+        ) : null}
+      </span>
+      <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-blue-700" />
     </Link>
   );
 }
 
-function FacilityResourceSection({
+function FacilityResourceCard({
   facility,
   registration,
-  query,
+  canManage,
+  organizationName,
 }: {
   facility: FacilitySummary;
-  registration?: FacilityRegistrationConfiguration | null;
-  query: string;
+  registration?: RegistrationEntry;
+  canManage: boolean;
+  organizationName?: string;
 }) {
-  const guide = buildFacilityGuide(facility, registration);
-  const facilityGuideMatches = matchesAnySearchQuery(resourceSearchText(guide), query);
-  const guideLinks = [
-    ...(facilityGuideMatches
-      ? [{ title: guide.title, description: guide.description, href: guideHref({ facility: facility.id, task: "facility-start" }) }]
-      : []),
-    ...(registration?.registrationUrl && matchesAnySearchQuery("create account sign in register QR onboarding", query)
-      ? [{ title: "Create or access your account", description: "Open the configured facility registration page and confirm facility access.", href: registration.registrationUrl, external: true }]
-      : []),
-    ...(facility.yards?.length && matchesAnySearchQuery(`${facility.name} yard area bay location`, query)
-      ? [{ title: "Select the correct yard and bay", description: "Use the configured facility location options before completing an inspection.", href: guideHref({ facility: facility.id, task: "location-entry" }) }]
-      : []),
-    ...generalResourceGuides
-      .filter((sharedGuide) => matchesAnySearchQuery(resourceSearchText(sharedGuide), query))
-      .map((sharedGuide) => ({
-        title: sharedGuide.title,
-        description: `Shared product instructions to use at ${formatFacilityDisplayName(facility.name)}.`,
-        href: guideHref({ guide: sharedGuide.id, facility: facility.id }),
-      })),
-  ];
+  const registrationReady = Boolean(
+    registration?.value?.enabled &&
+    registration.value.available &&
+    registration.value.globalEnabled &&
+    registration.value.registrationUrl,
+  );
+  const resolvedOrganizationName = formatOrganizationDisplayName(
+    registration?.value?.organizationName || organizationName,
+  );
+  const quickStartAsset = getFacilityQuickStartAsset({
+    slug: facility.slug,
+    id: facility.id,
+  });
 
-  if (!guideLinks.length) return null;
+  if (!quickStartAsset) return null;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white" aria-labelledby={`facility-${facility.id}`}>
-      <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
-          <div className="min-w-0">
-            <h2 id={`facility-${facility.id}`} className="truncate text-lg font-black tracking-tight text-slate-950">{formatFacilityDisplayName(facility.name)}</h2>
-            {facility.region ? <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-500"><MapPin className="h-3.5 w-3.5" />{facility.region}</p> : null}
-          </div>
+    <article className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex items-start gap-3">
+        <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-black tracking-tight text-slate-950">
+            {quickStartAsset.title}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+            {quickStartAsset.purpose}
+          </p>
         </div>
-        <Link href={`/facilities?facility=${encodeURIComponent(facility.id)}`} className="inline-flex w-fit items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900">
-          Open facility settings <ArrowUpRight className="h-3.5 w-3.5" />
+      </div>
+      <div className="mt-5">
+        <FacilityQuickStartActions
+          facilityName={quickStartAsset.facility.name}
+          organizationName={resolvedOrganizationName}
+          registrationUrl={quickStartAsset.registrationUrl}
+          slug={quickStartAsset.facility.registrationSlug}
+          active={registration?.value ? registrationReady : true}
+          supportName={quickStartAsset.support.displayName}
+          supportEmail={quickStartAsset.support.email}
+          supportPhone={registration?.value?.support.phone}
+          appStoreUrl={registration?.value?.stores.ios}
+          googlePlayUrl={registration?.value?.stores.android}
+          packetRevision={registration?.value?.packetRevision}
+          lastSuccessfulEnrollmentAt={
+            registration?.value?.lastSuccessfulEnrollment?.completedAt
+          }
+          publishedQuickStart={quickStartAsset}
+          showProcedure
+        />
+      </div>
+      {registration?.error ? (
+        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Registration details are temporarily unavailable. The published
+          Chicago Heights link, QR, and PDF remain available.
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href={guideHref({ facility: facility.id, task: "facility-start" })}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
+        >
+          Facility quick reference <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
+        {canManage ? (
+          <Link
+            href={`/facilities?facility=${encodeURIComponent(facility.id)}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
+          >
+            Manage registration <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        ) : null}
       </div>
-      <div className="grid gap-3 p-4 sm:grid-cols-2">
-        {guideLinks.map((link) => <GuideLink key={link.title} {...link} />)}
-      </div>
-    </section>
+    </article>
   );
 }
 
 export default function ResourcesPage() {
-  const { organizationId } = usePortalSession();
-  const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
+  const {
+    session,
+    organizationId,
+    selectedLocationLabel,
+    isFacilityAdmin,
+    isOrgAdmin,
+    isSuperAdmin,
+    locations,
+  } = usePortalSession();
+  const { data: directory } = usePortalDirectorySnapshot();
   const facilities = useMemo(
-    () => (directory?.facilities ?? []).slice().sort((left, right) => left.name.localeCompare(right.name)),
-    [directory?.facilities],
+    () =>
+      getPublishedQuickStartFacilities(directory?.facilities ?? [], locations)
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [directory?.facilities, locations],
   );
   const [query, setQuery] = useState("");
-  const [registrations, setRegistrations] = useState<RegistrationMap>({});
+  const [registrationState, setRegistrationState] = useState<{
+    requestKey: string;
+    entries: RegistrationMap;
+  }>({ requestKey: "", entries: {} });
+  const access = useMemo(
+    () => ({ isFacilityAdmin, isOrgAdmin, isSuperAdmin }),
+    [isFacilityAdmin, isOrgAdmin, isSuperAdmin],
+  );
+  const availableGuides = useMemo(
+    () => visibleResourceGuides(access),
+    [access],
+  );
+  const canManageFacilityAccess = isFacilityAdmin || isSuperAdmin;
+  const registrationRequestKey =
+    canManageFacilityAccess && organizationId && facilities.length
+      ? `${organizationId}:${facilities.map((facility) => facility.id).join(",")}`
+      : "";
+  const registrations =
+    registrationState.requestKey === registrationRequestKey
+      ? registrationState.entries
+      : EMPTY_REGISTRATION_MAP;
 
   useEffect(() => {
     let active = true;
-    if (!organizationId || !facilities.length) return () => { active = false; };
-    void Promise.all(facilities.map(async (facility) => {
-      try {
-        return [facility.id, await fetchFacilityRegistration(organizationId, facility.id)] as const;
-      } catch {
-        return [facility.id, null] as const;
-      }
-    })).then((entries) => {
-      if (active) setRegistrations(Object.fromEntries(entries));
+    if (!registrationRequestKey || !organizationId || !facilities.length)
+      return () => {
+        active = false;
+      };
+    void Promise.all(
+      facilities.map(async (facility) => {
+        try {
+          return [
+            facility.id,
+            {
+              value: await fetchFacilityRegistration(
+                organizationId,
+                facility.id,
+              ),
+              error: false,
+            },
+          ] as const;
+        } catch {
+          return [facility.id, { value: null, error: true }] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (active)
+        setRegistrationState({
+          requestKey: registrationRequestKey,
+          entries: Object.fromEntries(entries),
+        });
     });
-    return () => { active = false; };
-  }, [facilities, organizationId]);
+    return () => {
+      active = false;
+    };
+  }, [facilities, organizationId, registrationRequestKey]);
 
-  const visibleFacilities = facilities.filter((facility) => {
-    const guide = buildFacilityGuide(facility, registrations[facility.id]);
-    return matchesAnySearchQuery(
-      `${facility.name} ${resourceSearchText(guide)} ${generalResourceGuides.map(resourceSearchText).join(" ")}`,
-      query,
-    );
-  });
-  const visibleGeneralGuides = generalResourceGuides.filter((guide) => matchesAnySearchQuery(resourceSearchText(guide), query));
+  const visibleGuides = useMemo(
+    () => rankResourceGuides(availableGuides, query),
+    [availableGuides, query],
+  );
+  const availableCategories = useMemo(
+    () =>
+      resourceCategories.filter((category) =>
+        availableGuides.some((guide) => guide.category === category.id),
+      ),
+    [availableGuides],
+  );
+  const facilityGuides = useMemo(
+    () =>
+      facilities.map((facility) =>
+        buildFacilityGuide(facility, registrations[facility.id]?.value),
+      ),
+    [facilities, registrations],
+  );
+  const visibleFacilityGuides = useMemo(
+    () => rankResourceGuides(facilityGuides, query),
+    [facilityGuides, query],
+  );
+  const hasResults =
+    visibleGuides.length > 0 || visibleFacilityGuides.length > 0;
+  const roleLabel = isSuperAdmin
+    ? "Super admin"
+    : isOrgAdmin
+      ? "Organization admin"
+      : isFacilityAdmin
+        ? "Facility admin"
+        : "Operator";
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-7 pb-12">
-      <PageTitle title="Resources & Training" subtitle="Step-by-step guides for using Inspection-Trac at each facility." />
+    <div className="mx-auto w-full max-w-6xl space-y-8 pb-12">
+      <PageTitle
+        title="Resources & Training"
+        subtitle="What do you need help doing?"
+      />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-        <label htmlFor="resource-search" className="text-sm font-bold text-slate-950">Search resources</label>
-        <div className="relative mt-2">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            id="resource-search"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search login, VIN, scanner, damage, bay, report, export…"
-            className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-          />
-        </div>
-      </section>
-
-      <section className="space-y-3" aria-labelledby="facilities-heading">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Facilities</p>
-          <h2 id="facilities-heading" className="mt-1 text-2xl font-black tracking-tight text-slate-950">Choose where you are working</h2>
-        </div>
-        {isLoading && !facilities.length ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading facilities…</div> : null}
-        {error && !facilities.length ? <EmptyState title="Resources could not load" description={error instanceof Error ? error.message : "The facility directory is unavailable right now."} /> : null}
-        {!isLoading && !error && !visibleFacilities.length ? <EmptyState title="No matching facilities or tasks" description="Try a different search term." /> : null}
-        <div className="space-y-3">
-          {visibleFacilities.map((facility) => (
-            <FacilityResourceSection key={facility.id} facility={facility} registration={registrations[facility.id]} query={query} />
+      <section aria-label="Facility quick starts">
+        <div className="grid gap-3">
+          {facilities.map((facility) => (
+            <FacilityResourceCard
+              key={facility.id}
+              facility={facility}
+              registration={registrations[facility.id]}
+              canManage={Boolean(canManageFacilityAccess && organizationId)}
+              organizationName={session?.organization?.name}
+            />
           ))}
         </div>
       </section>
 
-      <section className="space-y-3" aria-labelledby="general-guides-heading">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">General guides</p>
-          <h2 id="general-guides-heading" className="mt-1 text-2xl font-black tracking-tight text-slate-950">Shared product instructions</h2>
+      <section
+        className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"
+        aria-label="Current resource context"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+          <div className="min-w-0 flex-1">
+            <label
+              htmlFor="resource-search"
+              className="text-sm font-bold text-slate-950"
+            >
+              Search the handbook
+            </label>
+            <div className="relative mt-2">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="resource-search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search VIN, railcar, chock, damage, report, access…"
+                className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {roleLabel}
+            </span>
+            {selectedLocationLabel ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2">
+                <MapPin className="h-3.5 w-3.5" />
+                {selectedLocationLabel}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {visibleGeneralGuides.map((guide) => (
-            <GuideLink key={guide.id} title={guide.title} description={guide.description} href={guideHref({ guide: guide.id })} />
-          ))}
-        </div>
-        {!visibleGeneralGuides.length && query ? <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">No shared guides match this search.</p> : null}
+        {query ? (
+          <p className="mt-3 text-xs font-semibold text-slate-500">
+            {visibleGuides.length + visibleFacilityGuides.length} matching guide
+            {visibleGuides.length + visibleFacilityGuides.length === 1
+              ? ""
+              : "s"}
+          </p>
+        ) : null}
       </section>
+
+      {availableCategories.map((category) => {
+        const guides = visibleGuides.filter(
+          (guide) => guide.category === category.id,
+        );
+        if (!guides.length) return null;
+        return (
+          <section
+            key={category.id}
+            id={category.id}
+            className="scroll-mt-24 space-y-3"
+            aria-labelledby={`${category.id}-heading`}
+          >
+            <div>
+              <h2
+                id={`${category.id}-heading`}
+                className="text-2xl font-black tracking-tight text-slate-950"
+              >
+                {category.title}
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                {category.description}
+              </p>
+            </div>
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {guides.map((guide) => (
+                <GuideLink
+                  key={guide.id}
+                  guide={guide}
+                  featured={!query && commonGuideIds.has(guide.id)}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+
+      {!hasResults && query ? (
+        <EmptyState
+          title="No handbook results"
+          description="Try a broader term such as VIN, rail, damage, report, access, or scanner."
+        />
+      ) : null}
     </div>
   );
 }
