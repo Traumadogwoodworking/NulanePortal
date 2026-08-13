@@ -280,7 +280,7 @@ describe("24-hour inspection page", () => {
     expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("updates headline totals from backend filters and search", async () => {
+  it("derives headline totals from all imported rows and keeps them fixed while filters change visible rows", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -295,14 +295,17 @@ describe("24-hour inspection page", () => {
 
     await user.selectOptions(screen.getByLabelText("Filter returned inventory by facility"), "JNAP");
 
-    await waitFor(() => expect(active).toHaveTextContent("1"));
-    expect(uninspected).toHaveTextContent("0");
+    await waitFor(() => expect(screen.queryByText("UNINSPECTEDVIN001")).not.toBeInTheDocument());
+    expect(active).toHaveTextContent("2");
+    expect(uninspected).toHaveTextContent("1");
     expect(inspected).toHaveTextContent("1");
-    expect(overdue).toHaveTextContent("0");
+    expect(overdue).toHaveTextContent("1");
 
     await user.type(screen.getByLabelText("Search inspected and uninspected records"), "missing-vin");
-    expect(active).toHaveTextContent("0");
-    expect(inspected).toHaveTextContent("0");
+    expect(active).toHaveTextContent("2");
+    expect(uninspected).toHaveTextContent("1");
+    expect(inspected).toHaveTextContent("1");
+    expect(overdue).toHaveTextContent("1");
   });
 
   it("searches both inspected and uninspected records", async () => {
@@ -336,16 +339,19 @@ describe("24-hour inspection page", () => {
     renderPage();
 
     const overdue = await screen.findByRole("button", { name: "Filter records by Overdue" });
+    expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
     await user.click(overdue);
     expect(overdue).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("Filter records by inspection state or status")).toHaveValue("overdue");
     expect(screen.getByText("UNINSPECTEDVIN001")).toBeInTheDocument();
     expect(screen.queryByText("INSPECTEDVIN00001")).not.toBeInTheDocument();
+    expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
 
     await user.click(overdue);
     expect(overdue).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("Filter records by inspection state or status")).toHaveValue("all");
     expect(screen.getByText("INSPECTEDVIN00001")).toBeInTheDocument();
+    expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("exports only the currently visible rows in displayed order", async () => {

@@ -403,7 +403,6 @@ export default function TwentyFourHourInspectionPage() {
   const [pageError, setPageError] = useState<TwentyFourHourPageError | null>(null);
 
   const facilityFilterValue = facilityFilter.trim();
-  const searchHasValue = search.trim().length > 0;
   const queryFilters = useMemo(() => ({
     pageSize: TWENTY_FOUR_HOUR_PAGE_SIZE,
   }), []);
@@ -499,23 +498,14 @@ export default function TwentyFourHourInspectionPage() {
     recordFilter,
   }), [facilityFilterValue, inventoryRows, recordFilter, search]);
   const summaryCounts = useMemo(() => {
-    if (!metadataResponse?.summary || searchHasValue || facilityFilterValue || recordFilter !== "all") {
-      return {
-        totalActive: searchSummaryRows.length,
-        needsInspected: searchSummaryRows.filter((row) => !row.inspected).length,
-        inspected: searchSummaryRows.filter((row) => row.inspected).length,
-        critical: searchSummaryRows.filter((row) => row.severity === "critical").length,
-        overdue: searchSummaryRows.filter((row) => row.severity === "overdue").length,
-      };
-    }
     return {
-      totalActive: metadataResponse.summary.total_active,
-      needsInspected: metadataResponse.summary.needs_inspected,
-      inspected: metadataResponse.summary.inspected,
-      critical: metadataResponse.summary.critical,
-      overdue: metadataResponse.summary.overdue,
+      totalActive: inventoryRows.length,
+      needsInspected: inventoryRows.filter((row) => !row.inspected).length,
+      inspected: inventoryRows.filter((row) => row.inspected).length,
+      critical: inventoryRows.filter((row) => row.severity === "critical").length,
+      overdue: inventoryRows.filter((row) => row.severity === "overdue").length,
     };
-  }, [facilityFilterValue, metadataResponse, recordFilter, searchSummaryRows, searchHasValue]);
+  }, [inventoryRows]);
   const visibleRows = useMemo(() => orderTwentyFourHourRowsByPriority(searchSummaryRows), [searchSummaryRows]);
   const progressText = pagination ? `Showing ${inventoryRows.length.toLocaleString()} of ${pagination.total_count.toLocaleString()}` : "Loading";
   const summaryCards: Array<{ label: string; count: number; filter: TwentyFourHourRecordFilter }> = metadataResponse ? [
