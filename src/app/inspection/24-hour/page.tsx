@@ -498,14 +498,15 @@ export default function TwentyFourHourInspectionPage() {
     recordFilter,
   }), [facilityFilterValue, inventoryRows, recordFilter, search]);
   const summaryCounts = useMemo(() => {
+    const summary = metadataResponse?.summary;
     return {
-      totalActive: inventoryRows.length,
-      needsInspected: inventoryRows.filter((row) => !row.inspected).length,
-      inspected: inventoryRows.filter((row) => row.inspected).length,
-      critical: inventoryRows.filter((row) => row.severity === "critical").length,
-      overdue: inventoryRows.filter((row) => row.severity === "overdue").length,
+      totalActive: summary?.total_active ?? 0,
+      needsInspected: summary?.needs_inspected ?? 0,
+      inspected: summary?.inspected ?? 0,
+      critical: summary?.critical ?? 0,
+      overdue: summary?.overdue ?? 0,
     };
-  }, [inventoryRows]);
+  }, [metadataResponse?.summary]);
   const visibleRows = useMemo(() => orderTwentyFourHourRowsByPriority(searchSummaryRows), [searchSummaryRows]);
   const progressText = pagination ? `Showing ${inventoryRows.length.toLocaleString()} of ${pagination.total_count.toLocaleString()}` : "Loading";
   const summaryCards: Array<{ label: string; count: number; filter: TwentyFourHourRecordFilter }> = metadataResponse ? [

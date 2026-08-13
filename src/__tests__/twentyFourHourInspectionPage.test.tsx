@@ -280,7 +280,7 @@ describe("24-hour inspection page", () => {
     expect(serviceMocks.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("derives headline totals from all imported rows and keeps them fixed while filters change visible rows", async () => {
+  it("uses full-snapshot backend totals immediately and keeps them fixed while filters change visible rows", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -306,6 +306,45 @@ describe("24-hour inspection page", () => {
     expect(uninspected).toHaveTextContent("1");
     expect(inspected).toHaveTextContent("1");
     expect(overdue).toHaveTextContent("1");
+  });
+
+  it("shows full backend totals before later inventory pages finish loading", async () => {
+    const firstPage = responseFromFetch({ page: 1, pageSize: 250 });
+    firstPage.summary = {
+      ...firstPage.summary,
+      total_active: 600,
+      needs_inspected: 420,
+      inspected: 180,
+      critical: 90,
+      overdue: 70,
+    };
+    firstPage.pagination = {
+      ...firstPage.pagination,
+      total_count: 600,
+      has_more: true,
+    };
+    let resolveSecondPage!: (value: TwentyFourHourInspectionResponse) => void;
+    const secondPage = new Promise<TwentyFourHourInspectionResponse>((resolve) => {
+      resolveSecondPage = resolve;
+    });
+    serviceMocks.fetch
+      .mockResolvedValueOnce(firstPage)
+      .mockReturnValueOnce(secondPage);
+
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: "Filter records by Active" })).toHaveTextContent("600");
+    expect(screen.getByRole("button", { name: "Filter records by Uninspected" })).toHaveTextContent("420");
+    expect(screen.getByRole("button", { name: "Filter records by Inspected" })).toHaveTextContent("180");
+    expect(screen.getByRole("button", { name: "Filter records by Critical" })).toHaveTextContent("90");
+    expect(screen.getByRole("button", { name: "Filter records by Overdue" })).toHaveTextContent("70");
+
+    resolveSecondPage({
+      ...responseFromFetch({ page: 2, pageSize: 250 }),
+      pagination: { page: 2, page_size: 250, total_count: 600, returned_count: 0, has_more: false },
+      rows: [],
+    });
+    await waitFor(() => expect(serviceMocks.fetch).toHaveBeenCalledTimes(2));
   });
 
   it("searches both inspected and uninspected records", async () => {
