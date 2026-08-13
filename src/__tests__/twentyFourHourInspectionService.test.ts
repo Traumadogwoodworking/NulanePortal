@@ -58,13 +58,12 @@ function rawResponse(rows: unknown[] = [rawRow()]) {
 }
 
 describe("24-hour inspection data contract", () => {
-  it("uses a unique refresh token while preserving the facility scope", () => {
+  it("uses stable pagination parameters without a refresh cache-buster", () => {
     const first = buildTwentyFourHourDisplayEndpoint({ facility: "SHAP", requestId: "refresh-1" });
     const second = buildTwentyFourHourDisplayEndpoint({ facility: "SHAP", requestId: "refresh-2" });
 
-    expect(first).toBe("/inspection/24-hour/portal-display?refresh=refresh-1&facility=SHAP");
-    expect(second).toBe("/inspection/24-hour/portal-display?refresh=refresh-2&facility=SHAP");
-    expect(second).not.toBe(first);
+    expect(first).toBe("/inspection/24-hour/display?page=1&pageSize=250&facility=SHAP");
+    expect(second).toBe(first);
   });
 
   it("accepts rows explicitly associated with the latest completed snapshot", () => {
