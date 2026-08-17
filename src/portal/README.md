@@ -56,8 +56,9 @@ sibling portal profiles but is not Definian's selected API base.
 Portal data and session state load when the application starts and after an
 explicit user or mutation refresh. Idle timers, focus events, visibility
 events, and reconnect events do not refresh the page or replace the current UI
-state. The shared header intentionally has no organization selector; Definian
-must not expose Inspection-Trac organization scopes in its global navigation.
+state. The shared header and Definian Home filters intentionally have no
+organization selector; Definian must not expose or inherit Inspection-Trac
+AWCT/Signature organization scopes in its navigation or Home data requests.
 
 ```sh
 nulane-dev site definian-portal

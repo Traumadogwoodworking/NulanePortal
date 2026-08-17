@@ -41,7 +41,6 @@ import {
   useHomeAnalyticsSnapshot,
 } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
-import { getPortalSuborgValue } from "@/lib/portalOrganizations";
 import { buildFacilityDamageStats } from "@/lib/facilityDamageStats";
 import { chartTheme } from "@/lib/chartTheme";
 import { DAMAGE_SEVERITIES } from "@/lib/docudent/damageTaxonomy";
@@ -3227,12 +3226,9 @@ export default function HomeDashboard() {
     organizationId,
     session,
     status: sessionStatus,
-    organizationScopes,
-    selectedOrganizationScopeKey,
-    selectedOrganizationScope,
-    switchOrganizationScope,
   } = usePortalSession();
-  const { data: directory, isLoading, error } = usePortalDirectorySnapshot();
+  const homeOrganizationScopeKey = "all" as const;
+  const { data: directory, isLoading, error } = usePortalDirectorySnapshot(homeOrganizationScopeKey);
   const [initialHomeAnalyticsFilters] = useState<HomeAnalyticsFilters>(() =>
     typeof window === "undefined"
       ? getDefaultHomeAnalyticsFilters()
@@ -3275,7 +3271,6 @@ export default function HomeDashboard() {
   const [activeHomeFilterKeys, setActiveHomeFilterKeys] = useState<HomeFilterKey[]>(() =>
     getHomeFilterKeysWithValues(initialHomeAnalyticsFilters)
   );
-  const didMountOrganizationResetRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3308,13 +3303,13 @@ export default function HomeDashboard() {
   const analyticsParams = useMemo(
     () => ({
       ...buildDashboardAnalyticsParams(currentHomeAnalyticsFilters),
-      suborg: getPortalSuborgValue(selectedOrganizationScopeKey),
+      suborg: "",
     }),
-    [currentHomeAnalyticsFilters, selectedOrganizationScopeKey]
+    [currentHomeAnalyticsFilters]
   );
   const organizationScopeParams = useMemo(
-    () => ({ suborg: getPortalSuborgValue(selectedOrganizationScopeKey) }),
-    [selectedOrganizationScopeKey]
+    () => ({ suborg: "" }),
+    []
   );
   const {
     data: baseAnalyticsSnapshot,
@@ -3374,7 +3369,7 @@ export default function HomeDashboard() {
       selectedDamageAreaFilter
   );
   const fallbackSummary = useMemo(() => buildDashboardSummary([], [], []), []);
-  const currentOrganizationLabel = selectedOrganizationScope.label;
+  const currentOrganizationLabel = session?.organization?.name || "Definian Inspection";
   const normalizedOrganizationName = normalizeOrganizationName(currentOrganizationLabel);
   const isInspectionTracOrg =
     normalizedOrganizationName === "american wheel & car" ||
@@ -3507,29 +3502,6 @@ export default function HomeDashboard() {
   };
 
   useEffect(() => {
-    if (!didMountOrganizationResetRef.current) {
-      didMountOrganizationResetRef.current = true;
-      return;
-    }
-    setSelectedFacilityKey("all");
-    setSelectedSeverityLevel("all");
-    setSelectedDamageAreaFilter("");
-    setCreatedFrom("");
-    setCreatedTo("");
-    setReportIdFilter("");
-    setVinFilter("");
-    setInspectionTypeFilter("");
-    setMakeFilter("");
-    setModelFilter("");
-    setYardFilter("");
-    setInspectorEmailFilter("");
-    setStatusFilter("");
-    setSeverityFacilityBreakdown({ key: "", status: "idle", items: [] });
-    setAreaFacilityBreakdown({ key: "", status: "idle", items: [] });
-    pieFacilityBreakdownCacheRef.current.clear();
-  }, [selectedOrganizationScopeKey]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     const params = serializeHomeAnalyticsFilters(currentHomeAnalyticsFilters);
     const query = params.toString();
@@ -3633,7 +3605,7 @@ export default function HomeDashboard() {
       return;
     }
     console.debug("[home.data]", {
-      selectedOrganizationScopeKey,
+      homeOrganizationScopeKey,
       activeFilterCount: activeHomeFilterKeys.length,
       damageReportCount: dashboardAnalytics?.totals?.damageReports ?? 0,
       rsaReportCount: dashboardAnalytics?.totals?.rsaReports ?? 0,
@@ -3648,7 +3620,7 @@ export default function HomeDashboard() {
     dashboardAnalytics?.totals?.damageReports,
     dashboardAnalytics?.totals?.rsaReports,
     activeHomeFilterKeys.length,
-    selectedOrganizationScopeKey,
+    homeOrganizationScopeKey,
   ]);
 
   const summary = useMemo(
@@ -4048,7 +4020,7 @@ export default function HomeDashboard() {
       purpose: "Compact visual data audit. Each section below maps to one visible home dashboard visual.",
       filters: {
         organizationId,
-        selectedOrganizationScopeKey,
+        selectedOrganizationScopeKey: homeOrganizationScopeKey,
         homeCountMode,
         analyticsParams,
         selectedFacilityKey,
@@ -4245,7 +4217,7 @@ export default function HomeDashboard() {
 		      organizationId,
 	      selectedDamageAreaFilter,
       selectedFacilityKey,
-      selectedOrganizationScopeKey,
+      homeOrganizationScopeKey,
       selectedSeverityLevel,
       severityFooterRows,
       visibleAreaPieData,
@@ -4483,25 +4455,7 @@ export default function HomeDashboard() {
               }
             />
             <CardContent>
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-semibold text-slate-700">Organization</span>
-                  <select
-                    value={selectedOrganizationScopeKey}
-                    onChange={(event) =>
-                      switchOrganizationScope(
-                        event.target.value as typeof selectedOrganizationScopeKey
-                      )
-                    }
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
-                  >
-                    {organizationScopes.map((scope) => (
-                      <option key={scope.key} value={scope.key}>
-                        {scope.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
                 {!hideFacilitySelector ? (
                   <label className="flex flex-col gap-1.5">
                     <span className="text-sm font-semibold text-slate-700">Facility</span>

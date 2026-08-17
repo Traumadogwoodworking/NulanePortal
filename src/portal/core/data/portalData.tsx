@@ -5,7 +5,7 @@ import useSWR, { SWRConfig, useSWRConfig } from "swr";
 import { useEffect, useState, type ReactNode } from "react";
 import { getPortalFetchDebugSnapshot, PortalSnapshotTimeoutError } from "@/lib/apiClient";
 import { usePortalSession } from "@/lib/portalSession";
-import { getPortalSuborgValue } from "@/lib/portalOrganizations";
+import { getPortalSuborgValue, type PortalOrganizationScopeKey } from "@/lib/portalOrganizations";
 import { fetchBranding } from "@/lib/services/brandingService";
 import { fetchControlPlaneBootstrap, fetchOperationsStatus, fetchReadinessStatus } from "@/lib/services/controlPlaneService";
 import { FacilitiesAdapter } from "@/lib/services/facilitiesService";
@@ -571,12 +571,13 @@ export function usePortalControlSnapshots() {
   );
 }
 
-export function usePortalDirectorySnapshot() {
+export function usePortalDirectorySnapshot(scopeKeyOverride?: PortalOrganizationScopeKey) {
   const { organizationId, selectedOrganizationScopeKey, session } = usePortalSession();
   const resolvedOrgId = ensureOrgId(organizationId);
   const userScope = session?.user?.user_id?.trim() || "anonymous";
+  const effectiveOrganizationScopeKey = scopeKeyOverride ?? selectedOrganizationScopeKey;
   const directoryScopeKey = resolvedOrgId
-    ? `${userScope}:${resolvedOrgId}:${selectedOrganizationScopeKey}`
+    ? `${userScope}:${resolvedOrgId}:${effectiveOrganizationScopeKey}`
     : null;
   const scope = getPortalScopeKey(directoryScopeKey, userScope);
   const cachedValue = directoryScopeKey
@@ -590,7 +591,7 @@ export function usePortalDirectorySnapshot() {
     console.debug("[portalData] usePortalDirectorySnapshot", {
       organizationId,
       resolvedOrgId,
-      selectedOrganizationScopeKey,
+      selectedOrganizationScopeKey: effectiveOrganizationScopeKey,
       swrKey: directoryScopeKey ? ["portal/directory", directoryScopeKey] : null,
       cachedValuePresent: Boolean(cachedValue),
       usableCache,
@@ -614,10 +615,10 @@ export function usePortalDirectorySnapshot() {
       const ENABLE_ADMIN_DATA = true;
       const [usersResult, facilitiesResult, membershipsResult, emailListsResult] = await Promise.allSettled([
         ENABLE_ADMIN_DATA
-          ? UsersAdapter.getUsers(resolvedOrgId, selectedOrganizationScopeKey)
+          ? UsersAdapter.getUsers(resolvedOrgId, effectiveOrganizationScopeKey)
           : Promise.resolve([]),
         ENABLE_ADMIN_DATA
-          ? FacilitiesAdapter.getFacilities(resolvedOrgId, selectedOrganizationScopeKey)
+          ? FacilitiesAdapter.getFacilities(resolvedOrgId, effectiveOrganizationScopeKey)
           : Promise.resolve([]),
         ENABLE_ADMIN_DATA ? UsersAdapter.getLocationMemberships(resolvedOrgId) : Promise.resolve([]),
         fetchEmailLists(resolvedOrgId),
