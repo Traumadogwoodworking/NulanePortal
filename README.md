@@ -42,7 +42,7 @@ cp .env.example .env.local
 
 | Env var | Purpose | Default / notes |
 | --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | Base for `/api` routes (people, facilities, branding, notifications, etc.) | `https://api.nulanesystems.com/api` |
+| `NEXT_PUBLIC_API_BASE_URL` | Ignored by the Definian build; retained only for compatibility with sibling portal profiles | Definian is pinned to `https://api.nulanesystems.com/api` |
 | `NEXT_PUBLIC_DOCUFIT_BASE` | Base for DocuFit health and future contract endpoints | `/docufit` |
 | `NEXT_PUBLIC_DOCUDENT_EMBED_URL` | Absolute URL to the Flutter web bundle embedded on `/docudent` | `https://nulanesystems.com/portal/app/index.html` |
 | `NEXT_PUBLIC_AUTH0_DOMAIN` | Auth0 tenant domain that backs the portal SSO | `nulanesystems.us.auth0.com` |
@@ -54,7 +54,7 @@ The Auth0 values above mirror the legacy portal; override them via `.env.local` 
 
 The portal validates `NEXT_PUBLIC_DOCUDENT_EMBED_URL` at runtime and surfaces guidance when it is missing or malformed.
 
-The default API base mirrors the legacy `resolveApiBase()` helper in `nulane_systems_site/index.html` (stripping `/api` when needed) so the same backend host is used unless `NEXT_PUBLIC_API_BASE_URL` overrides it.
+The Definian API base is fixed at `https://api.nulanesystems.com/api`. Runtime environment values cannot redirect this product build to a staging, local, or same-origin proxy base.
 
 ## Local development and validation
 
@@ -78,7 +78,7 @@ Definian uses a top-level Auth0 Authorization Code + PKCE redirect from `/login/
 - Allowed Web Origins: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`
 - Allowed Origins / CORS: `http://localhost:3000` when the API tenant enforces browser origins for local API calls
 
-`https://www.definian.com/signal` is the public entry point, but authentication and callback storage stay on the portal origin. `/signal` must navigate the top-level window to the portal; it must not iframe Auth0 or the authenticated portal.
+`https://www.definian.com/signal` remains the public entry point, but Universal Login cannot run reliably inside its iframe. When authentication is required, the portal deliberately navigates the top-level window to Auth0 and returns to `https://vercel-portal-exact.vercel.app/auth/callback/`, then continues on the Vercel-hosted portal.
 
 An invalid or backend-rejected token is cleared before Universal Login is opened again. Existing Auth0 SSO sessions are allowed to continue without forcing credential entry.
 

@@ -20,6 +20,7 @@ if (manifest.product !== "definian-portal" || manifest.environment !== "producti
 
 const brandingSource = readFileSync(resolve(root, "src/portal/products/definian/config.ts"), "utf8");
 const authSource = readFileSync(resolve(root, "src/lib/portalAuth.ts"), "utf8");
+const apiConfigSource = readFileSync(resolve(root, "src/lib/config.ts"), "utf8");
 const loginSource = readFileSync(resolve(root, "src/app/login/page.tsx"), "utf8");
 
 for (const [label, source, expected] of [
@@ -33,6 +34,9 @@ for (const [label, source, expected] of [
 
 if (!loginSource.includes("LoginRedirectClient") || loginSource.includes("EmbeddedLoginPage")) {
   failures.push("/login is not wired to the Universal Login redirect client");
+}
+if (!apiConfigSource.includes('const DEFAULT_API_BASE = "https://api.nulanesystems.com/api"')) {
+  failures.push("Definian production API is not pinned in the client configuration");
 }
 if (authSource.includes('prompt: "login"')) {
   failures.push("Auth0 login forces credential entry instead of allowing an existing SSO session");
@@ -48,7 +52,6 @@ for (const retiredPath of [
 if (productionBuild) {
   const expectedEnvironment = {
     NEXT_PUBLIC_PORTAL_BRANDING: manifest.brandingPreset,
-    NEXT_PUBLIC_API_BASE_URL: manifest.browserApiBaseUrl,
     PORTAL_API_UPSTREAM: manifest.apiUpstream,
     NEXT_PUBLIC_AUTH0_DOMAIN: manifest.auth0.domain,
     NEXT_PUBLIC_AUTH0_CLIENT_ID: manifest.auth0.clientId,

@@ -47,11 +47,11 @@ development, the public Auth0 values and server-only API upstream are supplied
 by the managed runner environment. Passwords and Auth0 client secrets do not
 belong in the portal login flow.
 
-Browser API requests use `NEXT_PUBLIC_API_BASE_URL=/api/portal`. The dynamic
-Next.js route at `src/app/api/portal/[...path]/route.ts` forwards them to the
-server-only `PORTAL_API_UPSTREAM`. This is the required local contract: do not
-point browser code directly at the production API or weaken production CORS to
-make localhost work.
+Definian browser API requests are pinned in `src/lib/config.ts` to
+`https://api.nulanesystems.com/api`; environment overrides are intentionally
+ignored for this product. The production API permits the Definian Vercel origin
+and the managed local origin. The dynamic same-origin proxy route remains for
+sibling portal profiles but is not Definian's selected API base.
 
 ```sh
 nulane-dev site definian-portal

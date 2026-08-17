@@ -231,6 +231,14 @@ export function buildAuthRedirectUri(origin: string, redirectOverride = "", redi
     ? origin.replace("://127.0.0.1", "://localhost").replace("://::1", "://localhost")
     : origin;
   const derivedRedirectUri = `${normalizedOrigin.replace(/\/+$/, "")}/auth/callback/`;
+  const isLocalOrigin = (() => {
+    try {
+      return new URL(normalizedOrigin).hostname === "localhost";
+    } catch {
+      return false;
+    }
+  })();
+  if (isLocalOrigin) return derivedRedirectUri;
   return redirectOverride.trim() && redirectMode.trim().toLowerCase() === FIXED_REDIRECT_MODE
     ? redirectOverride.trim()
     : derivedRedirectUri;

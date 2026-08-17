@@ -245,7 +245,13 @@ describe("buildAuthRedirectUri", () => {
   it("normalizes localhost aliases for local Auth0 callback allow-listing", async () => {
     const { buildAuthRedirectUri } = await importPortalAuth();
 
-    expect(buildAuthRedirectUri("http://127.0.0.1:3000")).toBe("http://localhost:3000/auth/callback/");
+    expect(
+      buildAuthRedirectUri(
+        "http://127.0.0.1:3000",
+        "https://vercel-portal-exact.vercel.app/auth/callback/",
+        "fixed",
+      ),
+    ).toBe("http://localhost:3000/auth/callback/");
   });
 
   it("uses the explicit override only when fixed redirect mode is enabled", async () => {

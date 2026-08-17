@@ -43,6 +43,12 @@ describe("reportService paginated snapshots", () => {
       expect(parsedUrl.searchParams.get("severity")).toBe("high");
       expect(parsedUrl.searchParams.get("damage_area")).toBe("hood");
       expect(parsedUrl.searchParams.get("damage_type")).toBe("scratch");
+      expect(parsedUrl.searchParams.get("include_damage_entries")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_overview")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_location")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_pdf")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_media")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_image_thumbs")).toBe("true");
       return { rows: [], page: 1, pageSize: 50, total: 0, hasNextPage: false };
     });
 
@@ -62,6 +68,12 @@ describe("reportService paginated snapshots", () => {
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {
       const parsedUrl = new URL(url, "http://localhost");
       expect(parsedUrl.pathname).toBe("/report/pull");
+      expect(parsedUrl.searchParams.get("include_damage_entries")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_overview")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_location")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_pdf")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_media")).toBe("true");
+      expect(parsedUrl.searchParams.get("include_image_thumbs")).toBe("true");
       return {
         reports: [
           {
@@ -81,6 +93,20 @@ describe("reportService paginated snapshots", () => {
     expect(analytics.totals?.totalReports).toBe(1);
     expect(analytics.totals?.damageReports).toBe(1);
     expect(analytics.byFacility?.[0]).toEqual(expect.objectContaining({ label: "Detroit" }));
+    expect(analytics.byFacilityDaily?.[0]).toEqual(expect.objectContaining({
+      label: "Detroit",
+      totalReports: 1,
+      damageReports: 1,
+    }));
+    expect(analytics.byInspectorDaily?.[0]).toEqual(expect.objectContaining({
+      email: "inspector@example.com",
+      totalReports: 1,
+      damageReports: 1,
+    }));
+    expect(analytics.dailyTrend?.[0]).toEqual(expect.objectContaining({
+      totalReports: 1,
+      damageReports: 1,
+    }));
     expect(analytics.filters?.inspectors?.[0]?.value).toBe("inspector@example.com");
   });
 

@@ -47,39 +47,39 @@ test("development defaults to the Definian API when no explicit base is set", as
   );
 });
 
-test("explicit local API base overrides are honored", async () => {
+test("explicit local API base overrides cannot redirect Definian away from production", async () => {
   vi.resetModules();
   vi.stubEnv("NODE_ENV", "development");
   delete process.env.NEXT_PUBLIC_API_BASE;
   process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:4000/api";
   const { buildApiUrl, portalConfig } = await import("@/lib/config");
 
-  expect(portalConfig.apiBase).toBe("http://localhost:4000/api");
-  expect(portalConfig.usesDefaultApiBase).toBe(false);
-  expect(buildApiUrl("/reports/list")).toBe("http://localhost:4000/api/reports/list");
+  expect(portalConfig.apiBase).toBe("https://api.nulanesystems.com/api");
+  expect(portalConfig.usesDefaultApiBase).toBe(true);
+  expect(buildApiUrl("/reports/list")).toBe("https://api.nulanesystems.com/api/reports/list");
 });
 
-test("the documented NEXT_PUBLIC_API_BASE_URL development override is honored", async () => {
+test("NEXT_PUBLIC_API_BASE_URL cannot redirect Definian away from production", async () => {
   vi.resetModules();
   vi.stubEnv("NODE_ENV", "development");
   delete process.env.NEXT_PUBLIC_API_BASE;
   process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:3102/api";
   const { buildApiUrl, portalConfig } = await import("@/lib/config");
 
-  expect(portalConfig.apiBase).toBe("http://localhost:3102/api");
-  expect(portalConfig.usesDefaultApiBase).toBe(false);
+  expect(portalConfig.apiBase).toBe("https://api.nulanesystems.com/api");
+  expect(portalConfig.usesDefaultApiBase).toBe(true);
   expect(buildApiUrl("/inspection/24-hour/portal-display")).toBe(
-    "http://localhost:3102/api/inspection/24-hour/portal-display"
+    "https://api.nulanesystems.com/api/inspection/24-hour/portal-display"
   );
 });
 
-test("buildApiUrl preserves a same-origin proxy base", async () => {
+test("a same-origin proxy environment value cannot redirect Definian away from production", async () => {
   process.env.NEXT_PUBLIC_API_BASE_URL = "/api/portal";
   vi.resetModules();
   const { buildApiUrl, portalConfig } = await import("@/lib/config");
 
-  expect(portalConfig.apiBase).toBe("/api/portal");
-  expect(buildApiUrl("/user/me")).toBe("/api/portal/user/me");
+  expect(portalConfig.apiBase).toBe("https://api.nulanesystems.com/api");
+  expect(buildApiUrl("/user/me")).toBe("https://api.nulanesystems.com/api/user/me");
 });
 
 afterEach(() => {

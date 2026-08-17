@@ -96,7 +96,13 @@ export type DashboardAnalyticsResponse = {
     medium?: number;
     high?: number;
   };
-  dailyTrend?: Array<{ date: string; damageReports: number; rsaReports: number }>;
+  dailyTrend?: Array<{
+    date: string;
+    totalReports?: number;
+    damageReports: number;
+    noDamageReports?: number;
+    rsaReports: number;
+  }>;
   byFacilityDaily?: Array<Record<string, unknown>>;
   facilityDaily?: Array<Record<string, unknown>>;
   byFacility?: Array<Record<string, unknown>>;
@@ -158,6 +164,12 @@ export type ReportListParams = {
   severity?: string;
   damage_area?: string;
   damage_type?: string;
+  include_damage_entries?: boolean;
+  include_overview?: boolean;
+  include_location?: boolean;
+  include_pdf?: boolean;
+  include_media?: boolean;
+  include_image_thumbs?: boolean;
 };
 
 export type ReportFilterOptionsResponse = Record<string, unknown>;
@@ -717,13 +729,27 @@ function buildLegacyDashboardAnalytics(
     Array.from(counts.entries())
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([value, count]) => ({ value, label: value, count }));
-  const timestampFor = (report: ReportDamageApiRow) =>
-    report.created_at || report.updated_at || "";
+  const timestampFor = (report: ReportDamageApiRow) => {
+    const record = report as unknown as Record<string, unknown>;
+    return String(
+      record.submitted_at ||
+      record.submittedAt ||
+      report.created_at ||
+      report.updated_at ||
+      ""
+    );
+  };
+  const localDayForDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
   const dayFor = (report: ReportDamageApiRow) => {
     const timestamp = timestampFor(report);
     if (!timestamp) return "";
     const date = new Date(timestamp);
-    return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+    return Number.isNaN(date.getTime()) ? "" : localDayForDate(date);
   };
   const facilityFor = (report: ReportDamageApiRow) =>
     String(
@@ -753,7 +779,7 @@ function buildLegacyDashboardAnalytics(
   };
 
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = localDayForDate(now);
   const weekAgo = new Date(now);
   weekAgo.setDate(weekAgo.getDate() - 7);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -777,6 +803,41 @@ function buildLegacyDashboardAnalytics(
     reports.flatMap((report) => entriesFor(report).map((entry) => String(entry.damage_type ?? entry.damage_type_code ?? "").trim()))
   );
   const dailyCounts = countBy(reports.map(dayFor));
+  const dailyDamageCounts = countBy(damaged.map(dayFor));
+  const dailyClearCounts = countBy(clear.map(dayFor));
+  const facilityDaily = new Map<string, { date: string; label: string; totalReports: number; damageReports: number; noDamageReports: number }>();
+  const inspectorDaily = new Map<string, { date: string; email: string; label: string; totalReports: number; damageReports: number; noDamageReports: number }>();
+  const facilitySummaries = new Map<string, { totalReports: number; damageReports: number; noDamageReports: number }>();
+  const inspectorSummaries = new Map<string, { reportCount: number; damageReports: number; noDamageReports: number }>();
+  for (const report of reports) {
+    const date = dayFor(report);
+    const facility = facilityFor(report);
+    const inspector = report.inspector_email?.trim() || "Unassigned";
+    const clearReport = isClear(report);
+    const facilitySummary = facilitySummaries.get(facility) ?? { totalReports: 0, damageReports: 0, noDamageReports: 0 };
+    facilitySummary.totalReports += 1;
+    facilitySummary.damageReports += clearReport ? 0 : 1;
+    facilitySummary.noDamageReports += clearReport ? 1 : 0;
+    facilitySummaries.set(facility, facilitySummary);
+    const inspectorSummary = inspectorSummaries.get(inspector) ?? { reportCount: 0, damageReports: 0, noDamageReports: 0 };
+    inspectorSummary.reportCount += 1;
+    inspectorSummary.damageReports += clearReport ? 0 : 1;
+    inspectorSummary.noDamageReports += clearReport ? 1 : 0;
+    inspectorSummaries.set(inspector, inspectorSummary);
+    if (!date) continue;
+    const facilityDailyKey = `${date}\n${facility}`;
+    const facilityDay = facilityDaily.get(facilityDailyKey) ?? { date, label: facility, totalReports: 0, damageReports: 0, noDamageReports: 0 };
+    facilityDay.totalReports += 1;
+    facilityDay.damageReports += clearReport ? 0 : 1;
+    facilityDay.noDamageReports += clearReport ? 1 : 0;
+    facilityDaily.set(facilityDailyKey, facilityDay);
+    const inspectorDailyKey = `${date}\n${inspector}`;
+    const inspectorDay = inspectorDaily.get(inspectorDailyKey) ?? { date, email: inspector, label: inspector, totalReports: 0, damageReports: 0, noDamageReports: 0 };
+    inspectorDay.totalReports += 1;
+    inspectorDay.damageReports += clearReport ? 0 : 1;
+    inspectorDay.noDamageReports += clearReport ? 1 : 0;
+    inspectorDaily.set(inspectorDailyKey, inspectorDay);
+  }
 
   return {
     totals: {
@@ -815,20 +876,27 @@ function buildLegacyDashboardAnalytics(
     })),
     dailyTrend: Array.from(dailyCounts.entries())
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, count]) => ({ date, damageReports: count, rsaReports: 0 })),
-    byFacility: Array.from(facilityCounts.entries()).map(([label, count]) => ({
+      .map(([date, count]) => ({
+        date,
+        totalReports: count,
+        damageReports: dailyDamageCounts.get(date) ?? 0,
+        noDamageReports: dailyClearCounts.get(date) ?? 0,
+        rsaReports: 0,
+      })),
+    byFacilityDaily: Array.from(facilityDaily.values()),
+    byInspectorDaily: Array.from(inspectorDaily.values()),
+    byFacility: Array.from(facilitySummaries.entries()).map(([label, counts]) => ({
       id: label,
       label,
       name: label,
-      damageReports: count,
-      totalReports: count,
+      ...counts,
     })),
     topAreas: Array.from(areaCounts.entries()).map(([name, count]) => ({ name, count })),
     topTypes: Array.from(typeCounts.entries()).map(([name, count]) => ({ name, count })),
-    byInspector: Array.from(inspectorCounts.entries()).map(([email, reportCount]) => ({
+    byInspector: Array.from(inspectorSummaries.entries()).map(([email, counts]) => ({
       email,
       label: email,
-      reportCount,
+      ...counts,
     })),
     recentActivity: reports.slice(0, 50) as unknown as Array<Record<string, unknown>>,
     filters: {
@@ -895,6 +963,7 @@ export async function fetchReportFilterOptions(
 
 export async function fetchReportList(params: ReportListParams = {}): Promise<ReportListResponse> {
   const resolvedPageSize = params.limit ?? params.pageSize ?? 50;
+  const hydrateDefinianReports = ACTIVE_PORTAL_BRANDING === "definianInspection";
   const queryParams = {
     suborg: params.suborg,
     page: params.page ?? 1,
@@ -918,6 +987,12 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
     severity: params.severity,
     damage_area: params.damage_area,
     damage_type: params.damage_type,
+    include_damage_entries: params.include_damage_entries ?? hydrateDefinianReports,
+    include_overview: params.include_overview ?? hydrateDefinianReports,
+    include_location: params.include_location ?? hydrateDefinianReports,
+    include_pdf: params.include_pdf ?? hydrateDefinianReports,
+    include_media: params.include_media ?? hydrateDefinianReports,
+    include_image_thumbs: params.include_image_thumbs ?? hydrateDefinianReports,
   };
   const response = await apiFetchReport<unknown>(
     `${REPORTS_LIST_ENDPOINT}${buildNamedQueryString(queryParams)}`,
@@ -1461,7 +1536,19 @@ export async function fetchDamageReportsUncached(filters: ReportFilters = {}): P
   const currentOrganizationId = getDamageReportOrganizationId(damageFilters);
   delete damageFilters.organization_id;
   delete damageFilters.org_id;
-  const queryString = buildReportQueryString(damageFilters);
+  const queryString = buildNamedQueryString({
+    ...damageFilters,
+    ...(ACTIVE_PORTAL_BRANDING === "definianInspection"
+      ? {
+          include_damage_entries: true,
+          include_overview: true,
+          include_location: true,
+          include_pdf: true,
+          include_media: true,
+          include_image_thumbs: true,
+        }
+      : {}),
+  });
   const response = await apiFetchReport<unknown>(
     `${REPORTS_ENDPOINT}${queryString}`,
     {},

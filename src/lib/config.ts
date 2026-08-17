@@ -16,18 +16,17 @@ export function normalizeBaseUrl(value?: string | null): string | null {
   return trimmed.replace(/\/+$/, "");
 }
 
-const envApiBase = normalizeBaseUrl(process.env.EXT_PUBLIC_DOCUDENT_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL);
 const envPortalBasePath = normalizeBaseUrl(process.env.NEXT_PUBLIC_PORTAL_BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH);
 const defaultPortalBasePath = "";
 
-/** Use the configured absolute API or same-origin proxy base verbatim. */
+/** Definian always reads and writes against the canonical production API. */
 const selectApiBase = () => {
-  return envApiBase ?? DEFAULT_API_BASE;
+  return DEFAULT_API_BASE;
 };
 
 export const portalConfig = {
   apiBase: selectApiBase(),
-  usesDefaultApiBase: envApiBase == null,
+  usesDefaultApiBase: true,
   docuFitBase: normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUFIT_BASE) ?? DEFAULT_DOCUFIT_API_BASE,
   docuDentEmbedUrl:
     normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUDENT_EMBED_URL) ?? DEFAULT_DOCUDENT_EMBED_URL,

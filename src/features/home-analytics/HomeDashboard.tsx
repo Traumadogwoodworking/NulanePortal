@@ -4595,11 +4595,7 @@ export default function HomeDashboard() {
                 <MetricCard
                   label="Damage vs Clear"
                   value={<DamageClearMetricValue damageCount={primaryDamageTotal} clearCount={clearInspectionCount} />}
-                  detail={
-                    hasBackendClearReports
-                      ? "From /api/dashboard/analytics totals"
-                      : "Clear count falls back to loaded VIN preview"
-                  }
+                  detail={hasBackendClearReports ? undefined : "Clear count falls back to loaded VIN preview"}
                   icon={<FileText className="h-4 w-4" />}
                 />
                 <MetricCard label="RSA Reports" value={summary.totals.rsaReports} detail={`RSA today ${formatNumber(summary.currentPeriod.rsaToday)}`} icon={<FileText className="h-4 w-4" />} />
