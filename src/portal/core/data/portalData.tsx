@@ -48,9 +48,8 @@ import type {
 
 const STALE_TIME_MS = 1000 * 60 * 5;
 const FOCUS_THROTTLE_MS = 15_000;
-const LOCATION_DATA_REFRESH_MS = 30_000;
-const REVALIDATE_ON_FOCUS = true;
-const REVALIDATE_ON_RECONNECT = true;
+const REVALIDATE_ON_FOCUS = false;
+const REVALIDATE_ON_RECONNECT = false;
 const KEEP_PREVIOUS_DATA = true;
 const CACHE_TTL_MS = STALE_TIME_MS;
 
@@ -480,11 +479,8 @@ export function useControlPlaneBootstrap() {
     },
     {
       revalidateIfStale: true,
-      revalidateOnFocus: true,
-      revalidateOnReconnect: true,
-      refreshInterval: LOCATION_DATA_REFRESH_MS,
-      refreshWhenHidden: false,
-      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
       dedupingInterval: 5_000,
       keepPreviousData: true,
       fallbackData: undefined,
@@ -732,11 +728,8 @@ export function usePortalDirectorySnapshot() {
       keepPreviousData: false,
       revalidateIfStale: true,
       revalidateOnMount: true,
-      revalidateOnFocus: true,
-      revalidateOnReconnect: true,
-      refreshInterval: LOCATION_DATA_REFRESH_MS,
-      refreshWhenHidden: false,
-      refreshWhenOffline: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
       dedupingInterval: 5_000,
     }
   );
@@ -895,8 +888,8 @@ export function usePortalReportsSnapshot() {
       keepPreviousData: true,
       revalidateIfStale: true,
       revalidateOnMount: !usableCache,
-      revalidateOnFocus: true,
-      revalidateOnReconnect: true,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
     }
   );
 }

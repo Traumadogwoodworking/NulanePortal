@@ -53,6 +53,12 @@ ignored for this product. The production API permits the Definian Vercel origin
 and the managed local origin. The dynamic same-origin proxy route remains for
 sibling portal profiles but is not Definian's selected API base.
 
+Portal data and session state load when the application starts and after an
+explicit user or mutation refresh. Idle timers, focus events, visibility
+events, and reconnect events do not refresh the page or replace the current UI
+state. The shared header intentionally has no organization selector; Definian
+must not expose Inspection-Trac organization scopes in its global navigation.
+
 ```sh
 nulane-dev site definian-portal
 nulane-dev status

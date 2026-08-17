@@ -90,8 +90,6 @@ const DEV_SESSION_BYPASS_WARNING =
   "DEV SESSION BYPASS ACTIVE";
 let devSessionBypassWarningEmitted = false;
 const FRESH_CALLBACK_SESSION_RETRY_DELAY_MS = 750;
-const SESSION_BACKGROUND_REFRESH_MS = 30_000;
-const SESSION_EVENT_REFRESH_THROTTLE_MS = 2_000;
 
 type DevSessionWindow = Window & {
   __PORTAL_DEV_SESSION_BYPASS__?: boolean;
@@ -491,31 +489,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     }, 0);
     return () => clearTimeout(t);
   }, [loadSession]);
-
-  useEffect(() => {
-    if (status !== "success" || isDevSessionBypassEnabled()) return;
-    let lastRefreshAt = 0;
-    const refreshSession = () => {
-      if (document.visibilityState === "hidden") return;
-      const now = Date.now();
-      if (now - lastRefreshAt < SESSION_EVENT_REFRESH_THROTTLE_MS) return;
-      lastRefreshAt = now;
-      void loadSession({ background: true });
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") refreshSession();
-    };
-    const intervalId = window.setInterval(refreshSession, SESSION_BACKGROUND_REFRESH_MS);
-    window.addEventListener("focus", refreshSession);
-    window.addEventListener("online", refreshSession);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshSession);
-      window.removeEventListener("online", refreshSession);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [loadSession, status]);
 
   const value = useMemo(() => {
     const sessionRoles = [

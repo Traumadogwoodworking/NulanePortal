@@ -151,6 +151,24 @@ describe("PortalSessionProvider", () => {
     expect(screen.getByTestId("organization")).toHaveTextContent("org-1");
   });
 
+  it("does not refresh the session from idle browser focus or connectivity events", async () => {
+    sessionServiceMocks.fetchPortalSession.mockResolvedValue(makeSession());
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("success");
+    });
+
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => {
+      expect(sessionServiceMocks.fetchPortalSession).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("resolves administrative access from the active organization membership", async () => {
     sessionServiceMocks.fetchPortalSession.mockResolvedValue(
       makeSession({
