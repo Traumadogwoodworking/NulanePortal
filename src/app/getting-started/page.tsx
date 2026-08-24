@@ -1,28 +1,71 @@
 import Image from "next/image";
-import { FacilityStartupSteps } from "@/components/facilities/FacilityStartupSteps";
 import { publicBranding } from "@/lib/publicBranding";
+
+const signupUrl = "https://vercel-portal-exact.vercel.app/signup/";
+
+const steps = [
+  ["Scan or open the signup link", "Use the QR code or the secure Definian signup button below."],
+  ["Create your account", "Use your work email and complete Auth0 email verification when prompted."],
+  ["Open the portal", "After verification, sign in and return to the Definian home page."],
+  ["Install Inspection-Trac", "Download the app for iPhone or Android using the verified store links below."],
+  ["Use the same email", "Sign in to Inspection-Trac with the same verified account you used for Definian."],
+] as const;
 
 export default function GettingStartedPage() {
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-950">
-      <div className="mx-auto max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-7 shadow-xl sm:p-10">
-        <Image
-          src={publicBranding.logoPath}
-          alt={publicBranding.appName}
-          width={160}
-          height={40}
-          className="h-10 w-auto"
-          priority
-        />
-        <p className="mt-8 text-xs font-black uppercase tracking-[0.25em] text-slate-400">Getting Started</p>
-        <h1 className="mt-2 text-3xl font-black">Start using {publicBranding.appName}</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600">If your facility provided a QR code, scan it first so your account receives the correct facility and role.</p>
-        <div className="mt-7"><FacilityStartupSteps /></div>
+      <div className="mx-auto max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl">
+        <header className="bg-[#0d2c71] p-7 text-white sm:p-10">
+          <Image
+            src={publicBranding.logoPath}
+            alt={publicBranding.appName}
+            width={240}
+            height={64}
+            className="h-14 w-auto object-contain"
+            priority
+          />
+          <p className="mt-8 text-xs font-black uppercase tracking-[0.25em] text-[#8ae1b8]">Getting Started</p>
+          <h1 className="mt-2 text-3xl font-black">Definian Inspection quick start</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-200">Scan, create your secure account, and use the same verified email in Inspection-Trac.</p>
+        </header>
+
+        <div className="p-7 sm:p-10">
+          <div className="grid gap-7 sm:grid-cols-[220px_1fr] sm:items-center">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <Image
+                src="/resources/definian/definian-inspection-signup-qr.png"
+                alt="QR code for Definian Inspection signup"
+                width={420}
+                height={420}
+                className="h-auto w-full"
+                unoptimized
+              />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black">Scan to create your account</h2>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">The QR contains only the permanent Definian signup URL. It does not contain a name, email, password, or invitation.</p>
+              <a href="/signup/" className="mt-5 inline-flex rounded-xl bg-[#00ab63] px-5 py-3 text-sm font-black text-white hover:bg-[#008f53]">Open secure signup</a>
+              <p className="mt-3 break-all text-xs font-semibold text-[#0d2c71]">{signupUrl}</p>
+            </div>
+          </div>
+
+          <ol className="mt-9 grid gap-3">
+            {steps.map(([title, detail], index) => (
+              <li key={title} className="grid grid-cols-[2.25rem_1fr] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0d2c71] text-sm font-black text-white">{index + 1}</span>
+                <div><p className="font-black text-slate-900">{title}</p><p className="mt-1 text-sm leading-relaxed text-slate-600">{detail}</p></div>
+              </li>
+            ))}
+          </ol>
+
+          <a href="/resources/definian/definian-inspection-quick-start.pdf" className="mt-7 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 hover:bg-slate-50">Download printable quick-start PDF</a>
+
         <div className="mt-7 grid gap-3 sm:grid-cols-2">
-          <a href={publicBranding.appStoreUrl} className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install for iPhone</a>
-          <a href={publicBranding.googlePlayUrl} className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install for Android</a>
+          <a href={publicBranding.appStoreUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install Inspection-Trac for iPhone</a>
+          <a href={publicBranding.googlePlayUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install Inspection-Trac for Android</a>
         </div>
         <p className="mt-6 text-sm text-slate-600">Need help? <a className="font-bold text-slate-950 underline" href={`mailto:${publicBranding.supportEmail}`}>{publicBranding.supportEmail}</a></p>
+        </div>
       </div>
     </main>
   );
