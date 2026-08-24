@@ -43,14 +43,14 @@ export async function submitSupportTicket(
     if (payload && "details" in payload && Array.isArray(payload.details)) {
       error.details = payload.details;
     }
-    console.error("[inspection-trac.trace] support.submit.failed", {
+    console.error("[portal.trace] support.submit.failed", {
       status: response.status,
       hasToken: Boolean(token),
     });
     throw error;
   }
 
-  console.info("[inspection-trac.trace] support.submit.succeeded", {
+  console.info("[portal.trace] support.submit.succeeded", {
     status: response.status,
     hasToken: Boolean(token),
   });

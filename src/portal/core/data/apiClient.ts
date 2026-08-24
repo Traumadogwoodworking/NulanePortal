@@ -263,7 +263,7 @@ function trackRequest(details: {
     update(patch) {
       Object.assign(entry, patch, { durationMs: Math.round(nowMs() - entry.startedAt) });
       if (isPerfEnabled()) {
-        console.info("[inspection-trac.perf] apiFetch.phase", cloneEntry(entry));
+        console.info("[portal.perf] apiFetch.phase", cloneEntry(entry));
       }
     },
   };
@@ -298,7 +298,8 @@ function finishRequest(entry: ActiveEntry, patch: Partial<RequestDebugEntry>) {
 }
 
 function stripPortalOptions(options: PortalApiRequestInit = {}): RequestInit {
-  const { portal: _portal, ...requestOptions } = options;
+  const requestOptions: PortalApiRequestInit = { ...options };
+  delete requestOptions.portal;
   return requestOptions;
 }
 

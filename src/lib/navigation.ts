@@ -121,6 +121,13 @@ const portalRoutes: PortalRoute[] = [
 
   // Support
   {
+    label: "Quick Start",
+    href: "/quick-start",
+    description: "Signup, app installation, and onboarding guide",
+    section: "support",
+    icon: "quick-start",
+  },
+  {
     label: "Support Tickets",
     href: "/support",
     description: "Contact platform support",

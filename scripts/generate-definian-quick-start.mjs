@@ -56,12 +56,18 @@ function stepRow([title, detail], index) {
     columns: [
       {
         width: 30,
-        text: String(index + 1),
-        alignment: "center",
-        bold: true,
-        color: colors.white,
-        fillColor: colors.navy,
-        margin: [0, 6, 0, 6],
+        table: {
+          widths: [30],
+          body: [[{
+            text: String(index + 1),
+            alignment: "center",
+            bold: true,
+            color: colors.navy,
+            fontSize: 14,
+            margin: [0, 6, 0, 6],
+          }]],
+        },
+        layout: "noBorders",
       },
       {
         width: "*",
@@ -161,9 +167,9 @@ const definition = {
     {
       columns: [
         {
-          width: 62,
+          width: 110,
           image: appLogoPath,
-          fit: [54, 54],
+          fit: [96, 40],
         },
         {
           width: "*",

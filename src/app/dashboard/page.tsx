@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
@@ -9,14 +9,12 @@ import {
   resolvePortalBranding,
   resolvePowerBiEmbedUrl,
 } from "@/lib/branding";
+import { publicBranding } from "@/lib/publicBranding";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function DashboardPage() {
   const { session, status } = usePortalSession();
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
-  const [frameReady, setFrameReady] = useState(false);
-  const [frameErrored, setFrameErrored] = useState(false);
-
   const branding = useMemo(
     () =>
       resolvePortalBranding({
@@ -28,11 +26,6 @@ export default function DashboardPage() {
   );
   const rawEmbedUrl = branding.powerBiEmbedUrl || INSPECTION_TRAC_POWER_BI_EMBED_URL;
   const embedUrl = resolvePowerBiEmbedUrl(rawEmbedUrl);
-
-  useEffect(() => {
-    setFrameReady(false);
-    setFrameErrored(false);
-  }, [embedUrl]);
 
   if (status === "unauthenticated") {
     return (
@@ -50,7 +43,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.32em] text-slate-500">Dashboard</p>
-          <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">Inspection Trac Analytics</h1>
+          <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">{publicBranding.appName} Analytics</h1>
         </div>
         {embedUrl ? (
           <a
@@ -65,16 +58,26 @@ export default function DashboardPage() {
         ) : null}
       </div>
 
-      <div className="relative min-h-[720px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm">
-        {frameErrored || !embedUrl ? (
+      <PowerBiPanel key={embedUrl || "missing"} embedUrl={embedUrl} />
+    </div>
+  );
+}
+
+function PowerBiPanel({ embedUrl }: { embedUrl: string | null }) {
+  const [frameReady, setFrameReady] = useState(false);
+  const [frameErrored, setFrameErrored] = useState(false);
+
+  return (
+    <div className="relative min-h-[720px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm">
+      {frameErrored || !embedUrl ? (
           <div className="absolute inset-0 flex items-center justify-center bg-white">
             <EmptyState
               title="Power BI unavailable"
-              description="The Inspection Trac Power BI report could not be loaded. Check the embed URL and report permissions."
+              description={`The ${publicBranding.appName} Power BI report could not be loaded. Check the embed URL and report permissions.`}
               tone="danger"
             />
           </div>
-        ) : (
+      ) : (
           <>
             {!frameReady ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
@@ -85,7 +88,7 @@ export default function DashboardPage() {
               </div>
             ) : null}
             <iframe
-              title="Inspection Trac Power BI dashboard"
+              title={`${publicBranding.appName} Power BI dashboard`}
               src={embedUrl}
               className="h-full min-h-[720px] w-full border-0"
               allowFullScreen
@@ -93,8 +96,7 @@ export default function DashboardPage() {
               onError={() => setFrameErrored(true)}
             />
           </>
-        )}
-      </div>
+      )}
     </div>
   );
 }

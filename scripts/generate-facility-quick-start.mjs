@@ -26,22 +26,20 @@ function fileSlug(value) {
 const facilityName = requiredArgument("facility");
 const organizationName = requiredArgument("organization");
 const registrationUrl = requiredArgument("url");
-const supportName = argument("support-name", "Inspection-Trac Support");
-const supportEmail = argument("support-email", "support@inspection-trac.com");
+const supportName = argument("support-name", "Definian Inspection Support");
+const supportEmail = argument("support-email", "support@definian.com");
 const supportPhone = argument("support-phone");
-const appStoreUrl = argument("ios-url", "https://apps.apple.com/us/app/inspection-trac/id6774376762");
-const googlePlayUrl = argument("android-url", "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac");
+const appStoreUrl = argument("ios-url", "https://apps.apple.com/us/app/definian-inspection/id6778651028");
+const googlePlayUrl = argument("android-url", "https://play.google.com/store/apps/details?id=com.nulanesystems.definian");
 const packetRevision = Math.max(1, Number.parseInt(argument("revision", "1"), 10) || 1);
 const outputPath = path.resolve(argument(
   "output",
-  path.join(projectRoot, `output/pdf/${fileSlug(facilityName)}-inspection-trac-facility-access.pdf`)
+  path.join(projectRoot, `output/pdf/${fileSlug(facilityName)}-definian-inspection-facility-access.pdf`)
 ));
 
 const contentPath = path.join(projectRoot, "src/components/facilities/facilityStartupGuideContent.json");
 const guideContent = JSON.parse(fs.readFileSync(contentPath, "utf8"));
-const shieldLogoPath = path.join(projectRoot, "public/media/inspection-trac-logo.png");
-const appHomeScreenshotPath = path.join(projectRoot, "public/images/app-photo-2.png");
-const damageReviewScreenshotPath = path.join(projectRoot, "public/images/app-photo-5.png");
+const shieldLogoPath = path.join(projectRoot, "public/media/definian-logo-chatgpt.png");
 
 const colors = {
   navy: "#06234f",
@@ -112,29 +110,16 @@ function stepRow(step, index) {
   };
 }
 
-function screenshotPanel(imagePath, title, detail) {
-  return card([
-    {
-      image: imagePath,
-      fit: [192, 400],
-      alignment: "center",
-      margin: [0, 0, 0, 10],
-    },
-    { text: title, alignment: "center", bold: true, fontSize: 10.5, color: colors.navy, margin: [0, 0, 0, 4] },
-    { text: detail, alignment: "center", fontSize: 8.5, color: colors.slate, lineHeight: 1.16 },
-  ], { padding: 12 });
-}
-
 const supportLine = [supportName, supportEmail, supportPhone].filter(Boolean).join(" - ");
 const frontChecklist = [
-  ["1", "Scan", "Open the secure Chicago Heights registration page."],
+  ["1", "Scan", `Open the secure ${facilityName} registration page.`],
   ["2", "Use your work email", "Existing users sign in. New users create an account and verify the email."],
-  ["3", "Finish access", "Return to the registration page and confirm Chicago Heights before opening the app."],
+  ["3", "Finish access", `Return to the registration page and confirm ${facilityName} before opening the app.`],
 ];
 
 const definition = {
   info: {
-    title: `${facilityName} Inspection-Trac Facility Access`,
+    title: `${facilityName} Definian Inspection Facility Access`,
     author: "Nulane Systems",
     subject: `Facility registration and quick start for ${facilityName}`,
   },
@@ -192,7 +177,7 @@ const definition = {
           width: 196,
           stack: [
             card([
-              { text: "SCAN FOR CHICAGO HEIGHTS", alignment: "center", bold: true, fontSize: 8.5, color: colors.navy, characterSpacing: 0.8, margin: [0, 0, 0, 8] },
+              { text: `SCAN FOR ${facilityName.toUpperCase()}`, alignment: "center", bold: true, fontSize: 8.5, color: colors.navy, characterSpacing: 0.8, margin: [0, 0, 0, 8] },
               {
                 table: {
                   widths: [150],
@@ -247,14 +232,14 @@ const definition = {
           width: "*",
           ...card([
             { text: "ALREADY HAVE AN ACCOUNT?", bold: true, color: colors.green, fontSize: 8.5, characterSpacing: 0.6, margin: [0, 0, 0, 4] },
-            { text: "Enter that same email and choose Sign in. After the verified login returns, Chicago Heights is added to your access.", color: colors.ink, fontSize: 8.7, lineHeight: 1.16 },
+            { text: `Enter that same email and choose Sign in. After the verified login returns, ${facilityName} is added to your access.`, color: colors.ink, fontSize: 8.7, lineHeight: 1.16 },
           ], { fill: colors.greenSoft, border: "#b8e3d4", padding: 11 }),
         },
         {
           width: "*",
           ...card([
-            { text: "NEW TO INSPECTION-TRAC?", bold: true, color: colors.orange, fontSize: 8.5, characterSpacing: 0.6, margin: [0, 0, 0, 4] },
-            { text: "Choose Create account, verify the email Auth0 sends, then return here and finish the Chicago Heights assignment.", color: colors.ink, fontSize: 8.7, lineHeight: 1.16 },
+            { text: "NEW TO DEFINIAN INSPECTION?", bold: true, color: colors.orange, fontSize: 8.5, characterSpacing: 0.6, margin: [0, 0, 0, 4] },
+            { text: `Choose Create account, verify the email Auth0 sends, then return here and finish the ${facilityName} assignment.`, color: colors.ink, fontSize: 8.7, lineHeight: 1.16 },
           ], { fill: colors.orangeSoft, border: "#f3cfb5", padding: 11 }),
         },
       ],
@@ -293,7 +278,7 @@ const definition = {
           width: "*",
           ...card([
             { text: "BEFORE YOU OPEN THE APP", bold: true, fontSize: 10, color: colors.navy, margin: [0, 0, 0, 8] },
-            { text: "[ ] The page says Chicago Heights", fontSize: 8.8, color: colors.ink, margin: [0, 0, 0, 5] },
+            { text: `[ ] The page says ${facilityName}`, fontSize: 8.8, color: colors.ink, margin: [0, 0, 0, 5] },
             { text: "[ ] You used the same email to register and sign in", fontSize: 8.8, color: colors.ink, margin: [0, 0, 0, 5] },
             { text: "[ ] New account email verification is complete", fontSize: 8.8, color: colors.ink },
           ], { fill: colors.blueSoft, border: "#bdcff8", padding: 13 }),
@@ -301,7 +286,7 @@ const definition = {
         {
           width: "*",
           ...card([
-            { text: "INSTALL INSPECTION-TRAC", bold: true, fontSize: 10, color: colors.navy, margin: [0, 0, 0, 8] },
+            { text: "INSTALL DEFINIAN INSPECTION", bold: true, fontSize: 10, color: colors.navy, margin: [0, 0, 0, 8] },
             { text: [{ text: "iPhone: ", bold: true }, { text: "Open the App Store", link: appStoreUrl, color: colors.blue }], fontSize: 8.8, margin: [0, 0, 0, 6] },
             { text: [{ text: "Android: ", bold: true }, { text: "Open Google Play", link: googlePlayUrl, color: colors.blue }], fontSize: 8.8, margin: [0, 0, 0, 8] },
             { text: "Sign in with the same verified account used during registration.", color: colors.slate, fontSize: 8.5, lineHeight: 1.15 },
@@ -323,52 +308,11 @@ const definition = {
       ],
       margin: [0, 15, 0, 0],
     },
-    {
-      stack: [
-        { text: "WHAT YOU WILL SEE", color: colors.gold, bold: true, fontSize: 9, characterSpacing: 1.8, margin: [0, 5, 0, 7] },
-        { text: "Recognize the Inspection-Trac app", color: colors.white, bold: true, fontSize: 23 },
-      ],
-      pageBreak: "before",
-      margin: [0, 0, 0, 22],
-    },
-    {
-      text: "These example screens show the Inspection-Trac logo and the two places most new inspectors use first. Your available inspection buttons can vary by facility access.",
-      color: colors.slate,
-      fontSize: 10,
-      lineHeight: 1.2,
-      margin: [0, 0, 0, 16],
-    },
-    {
-      columns: [
-        {
-          width: "*",
-          ...screenshotPanel(
-            appHomeScreenshotPath,
-            "1. Start from the home screen",
-            "Confirm the Inspection-Trac logo, then choose the inspection type assigned to your facility."
-          ),
-        },
-        {
-          width: "*",
-          ...screenshotPanel(
-            damageReviewScreenshotPath,
-            "2. Review captured damage",
-            "Before sending, confirm the damage area, type, severity, photos, and highlighted vehicle zone."
-          ),
-        },
-      ],
-      columnGap: 16,
-      margin: [0, 0, 0, 14],
-    },
-    card([
-      { text: "LOOK FOR THE FULL-COLOR SHIELD", bold: true, color: colors.navy, fontSize: 9.5, margin: [0, 0, 0, 4] },
-      { text: "The fully opaque Inspection-Trac shield shown at the top of this page is the brand mark used in the app and portal.", color: colors.ink, fontSize: 8.8, lineHeight: 1.16 },
-    ], { fill: colors.goldSoft, border: "#f1d46b", padding: 11 }),
   ],
   footer(currentPage, pageCount) {
     return {
       columns: [
-        { width: "*", text: `Inspection-Trac - ${facilityName}`, alignment: "left" },
+        { width: "*", text: `Definian Inspection - ${facilityName}`, alignment: "left" },
         { width: "auto", text: `Revision ${packetRevision} - Page ${currentPage} of ${pageCount}`, alignment: "right" },
       ],
       color: "#6b7b91",
@@ -392,4 +336,4 @@ await new Promise((resolve, reject) => {
   pdf.on("error", reject);
 });
 
-console.log(JSON.stringify({ outputPath, facilityName, registrationUrl, packetRevision, pages: 3 }));
+console.log(JSON.stringify({ outputPath, facilityName, registrationUrl, packetRevision, pages: 2 }));

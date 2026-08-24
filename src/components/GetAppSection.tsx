@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { publicBranding } from "@/lib/publicBranding";
 import { SectionLabel } from "@/components/public-site";
 
@@ -29,6 +30,7 @@ function AndroidIcon({ className }: { className?: string }) {
 export function GetAppSection() {
   const brand = publicBranding;
   const hasGooglePlay = Boolean(brand.googlePlayUrl);
+  const logoPath = brand.mode === "definianInspection" ? "/media/definian-logo-chatgpt.png" : brand.logoPath;
 
   return (
     <section
@@ -37,9 +39,11 @@ export function GetAppSection() {
     >
       <div className="relative z-10 w-full max-w-6xl">
         <div className="mx-auto flex max-w-2xl flex-col items-center">
-          <img
-            src={brand.logoPath}
+          <Image
+            src={logoPath}
             alt={brand.appName}
+            width={1000}
+            height={250}
             className="h-24 w-auto max-w-full object-contain sm:h-28"
             draggable={false}
           />

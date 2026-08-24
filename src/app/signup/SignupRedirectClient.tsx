@@ -34,7 +34,7 @@ export function SignupRedirectClient() {
       <section className="w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/80 bg-white shadow-[0_24px_80px_rgba(13,44,113,0.18)]">
         <header className="bg-[#0d2c71] px-7 py-8 text-white sm:px-10">
           <Image
-            src={publicBranding.logoPath}
+            src="/media/definian-logo-inverted-rgb.svg"
             alt={publicBranding.appName}
             width={260}
             height={72}

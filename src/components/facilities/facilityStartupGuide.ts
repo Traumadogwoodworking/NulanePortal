@@ -44,7 +44,7 @@ export function buildFacilityGuidePdfDefinition(input: {
 
   return {
     info: {
-      title: `${input.facilityName} Inspection-Trac Facility Access`,
+      title: `${input.facilityName} ${input.appName} Facility Access`,
       author: "Nulane Systems",
       subject: `Facility registration and quick start for ${input.facilityName}`,
     },

@@ -1,7 +1,8 @@
 import { PublicRedirect } from "@/components/PublicRedirect";
+import { publicBranding } from "@/lib/publicBranding";
 
 export const metadata = {
-  title: "Contact - Inspection-Trac",
+  title: `Contact - ${publicBranding.appName}`,
 };
 
 export default function ContactAliasPage() {

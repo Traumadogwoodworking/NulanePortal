@@ -1,18 +1,18 @@
 {
   "front": {
-    "eyebrow": "INSPECTION-TRAC FACILITY ACCESS",
+    "eyebrow": "DEFINIAN INSPECTION FACILITY ACCESS",
     "title": "Scan to get started",
-    "instruction": "Use your phone camera to open the secure Chicago Heights registration page. Enter your work email, then create an account or sign in with that exact address.",
-    "privacy": "Safe to post and print: the QR code identifies Chicago Heights only. It contains no employee name, email, password, invitation, or permission."
+    "instruction": "Use your phone camera to open the secure facility registration page. Enter your work email, then create an account or sign in with that exact address.",
+    "privacy": "Safe to post and print: the QR code identifies the facility only. It contains no employee name, email, password, invitation, or permission."
   },
   "back": {
-    "title": "Your Inspection-Trac quick start",
-    "safety": "If the facility shown after scanning is not Chicago Heights, stop and contact support. No assignment is created until your verified sign-in completes."
+    "title": "Your Definian Inspection quick start",
+    "safety": "If the facility shown after scanning is not the location you expected, stop and contact support. No assignment is created until your verified sign-in completes."
   },
   "steps": [
     {
-      "title": "Install Inspection-Trac",
-      "detail": "Use the iPhone or Android installation link on the registration page or in this guide."
+      "title": "Install Definian Inspection",
+      "detail": "Use the iPhone, iPad, or Android installation link on the registration page or in this guide."
     },
     {
       "title": "Create or access your account",
@@ -20,11 +20,11 @@
     },
     {
       "title": "Confirm your assigned facility",
-      "detail": "Return to the registration page after sign-in. Confirm it says Chicago Heights before continuing."
+      "detail": "Return to the registration page after sign-in and confirm the displayed facility before continuing."
     },
     {
       "title": "Start your first inspection",
-      "detail": "Open Inspection-Trac and sign in with the same verified account. Your Chicago Heights access loads during sign-in."
+      "detail": "Open Definian Inspection and sign in with the same verified account. Your facility access loads during sign-in."
     },
     {
       "title": "Get support",

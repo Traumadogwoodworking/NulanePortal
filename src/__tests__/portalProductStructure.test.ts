@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { resolvePortalBranding } from "@/lib/branding";
+import { navSections } from "@/lib/navigation";
+import type { PortalSessionResponse } from "@/lib/types";
 import { definianProduct, inspectionTracProduct } from "@/portal/products";
 
 describe("portal product structure", () => {
@@ -17,5 +20,38 @@ describe("portal product structure", () => {
     expect(inspectionTracProduct.branding.auth0OrganizationId).not.toBe(
       definianProduct.branding.auth0OrganizationId,
     );
+  });
+
+  it("never renders Inspection-Trac identity inside the Definian preset", () => {
+    const staleInspectionSession = {
+      user: {
+        user_id: "test-user",
+        email: "inspector@example.com",
+        organization_id: "org-stale",
+      },
+      organization: {
+        organization_id: "org-stale",
+        name: "Inspection Trac",
+      },
+    } satisfies PortalSessionResponse;
+
+    const branding = resolvePortalBranding({
+      session: staleInspectionSession,
+      pathname: "/home",
+    });
+
+    expect(branding.mode).toBe("definianInspection");
+    expect(branding.appLabel).toBe("Definian Inspection");
+    expect(branding.logoUrl).toBe("/media/definian-sidebar-logo-white.png");
+  });
+
+  it("exposes the Definian quick start from the signed-in portal navigation", () => {
+    const quickStart = navSections.flatMap((section) => section.items).find((item) => item.href === "/quick-start");
+
+    expect(quickStart).toMatchObject({
+      label: "Quick Start",
+      section: "support",
+      icon: "quick-start",
+    });
   });
 });

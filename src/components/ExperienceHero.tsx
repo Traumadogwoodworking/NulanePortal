@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { CSSProperties } from "react";
 import { publicBranding } from "@/lib/publicBranding";
 
@@ -42,6 +43,9 @@ export function RibbonField() {
 
 export function ExperienceHero() {
   const brand = publicBranding;
+  const heroLogo = brand.mode === "definianInspection"
+    ? "/media/definian-logo-chatgpt.png"
+    : "/media/inspection-trac-center-logo.png";
 
   return (
     <section
@@ -59,9 +63,11 @@ export function ExperienceHero() {
         <div className="relative mx-auto mt-8 flex max-w-[84rem] flex-col items-center gap-10 md:mt-10">
           <div className="relative w-full max-w-[82rem]">
             <div className="absolute inset-0 -z-10 rounded-[3rem] bg-[radial-gradient(circle_at_center,rgba(37,99,235,0.12),rgba(233,235,242,0.96)_45%),radial-gradient(circle_at_left,rgba(59,130,246,0.12),rgba(233,235,242,0.96)_28%),radial-gradient(circle_at_right,rgba(245,158,11,0.1),rgba(233,235,242,0.96)_28%)] blur-2xl" />
-            <img
-              src="/media/inspection-trac-center-logo.png"
-              alt="Inspection-Trac splash screen"
+            <Image
+              src={heroLogo}
+              alt={`${brand.appName} logo`}
+              width={1000}
+              height={250}
               draggable={false}
               className="mx-auto w-full max-w-[1760px] select-none object-contain"
             />

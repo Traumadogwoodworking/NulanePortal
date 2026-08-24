@@ -301,8 +301,8 @@ export function resolvePortalBranding({
     : null;
   const usesInspectionTracPreset = preset.mode === "inspectionTrac";
   const usesInspectionTracIdentity =
-    INSPECTION_TRAC_ORG_KEYS.has(normalizedKey) ||
-    (usesInspectionTracPreset && INSPECTION_TRAC_CUSTOMER_KEYS.has(normalizedKey));
+    usesInspectionTracPreset &&
+    (INSPECTION_TRAC_ORG_KEYS.has(normalizedKey) || INSPECTION_TRAC_CUSTOMER_KEYS.has(normalizedKey));
   const fallbackLogo = normalizeLogoUrl(
     usesInspectionTracPreset
       ? definition.logoUrl ?? PORTAL_LOGO_FALLBACKS[normalizedKey] ?? preset.defaultLogoUrl

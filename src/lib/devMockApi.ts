@@ -132,7 +132,7 @@ function mockRegistrationPayload(locationId: string) {
     registration_url: `http://localhost:3001/join/?facility=${encodeURIComponent(registration.slug)}`,
     onboarding_display_name: registration.displayName || mockFacilityName(locationId),
     support: {
-      displayName: "Inspection-Trac Support",
+      displayName: `${publicBranding.appName} Support`,
       email: registration.supportEmail || publicBranding.supportEmail,
       phone: registration.supportPhone || "",
     },
@@ -163,7 +163,7 @@ function mockEnrollmentSessionPayload(session: NonNullable<ReturnType<typeof moc
     registrationEnabled: registration?.enabled === true,
     roleName: registration?.roleName || "User",
     support: {
-      displayName: "Inspection-Trac Support",
+      displayName: `${publicBranding.appName} Support`,
       email: registration?.supportEmail || publicBranding.supportEmail,
       phone: registration?.supportPhone || "",
     },
@@ -700,7 +700,7 @@ function resolveForcedDevResponse(path: string): Response | null {
       organizationName: "American Wheel & Car",
       registrationEnabled: registration.enabled,
       branding: { companyName: publicBranding.appName, logoUrl: publicBranding.logoPath },
-      support: { displayName: "Inspection-Trac Support", email: publicBranding.supportEmail, phone: "" },
+      support: { displayName: `${publicBranding.appName} Support`, email: publicBranding.supportEmail, phone: "" },
     });
   }
 
@@ -882,7 +882,7 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
       organizationName: "American Wheel & Car",
       registrationEnabled: registration.enabled,
       branding: { companyName: publicBranding.appName, logoUrl: publicBranding.logoPath },
-      support: { displayName: "Inspection-Trac Support", email: publicBranding.supportEmail, phone: "" },
+      support: { displayName: `${publicBranding.appName} Support`, email: publicBranding.supportEmail, phone: "" },
       stores: { ios: publicBranding.appStoreUrl, android: publicBranding.googlePlayUrl },
     };
   }

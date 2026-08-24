@@ -101,21 +101,22 @@ export function FacilityRegistrationPanel({
     return () => { active = false; };
   }, [facilityId, facilityName, organizationId]);
 
+  const configuredRegistrationUrl = configuration?.registrationUrl;
   const registrationUrl = useMemo(() => {
     if (!slug) return "";
-    if (configuration?.registrationUrl) {
+    if (configuredRegistrationUrl) {
       try {
-        const url = new URL(configuration.registrationUrl);
+        const url = new URL(configuredRegistrationUrl);
         url.searchParams.set("facility", slug);
         return url.toString();
       } catch {
-        return configuration.registrationUrl;
+        return configuredRegistrationUrl;
       }
     }
     if (typeof window === "undefined") return "";
     const localJoin = withPortalBasePath(`/join/?facility=${encodeURIComponent(slug)}`);
     return new URL(localJoin, window.location.origin).toString();
-  }, [configuration?.registrationUrl, slug]);
+  }, [configuredRegistrationUrl, slug]);
   const testUrl = useMemo(() => appendTestSource(registrationUrl), [registrationUrl]);
 
   useEffect(() => {
@@ -181,7 +182,7 @@ export function FacilityRegistrationPanel({
         facilityName: displayName || facilityName,
         organizationName: configuration?.organizationName || organizationName || "",
         registrationUrl,
-        supportName: configuration?.support.displayName || "Inspection-Trac Support",
+        supportName: configuration?.support.displayName || `${publicBranding.appName} Support`,
         supportEmail: supportEmail || publicBranding.supportEmail,
         supportPhone,
         appName: publicBranding.appName,
@@ -189,7 +190,7 @@ export function FacilityRegistrationPanel({
         googlePlayUrl: androidStoreUrl || publicBranding.googlePlayUrl,
         packetRevision: configuration?.packetRevision || 1,
       }));
-      saveAs(blob, `${slug || "facility"}-inspection-trac-facility-access.pdf`);
+      saveAs(blob, `${slug || "facility"}-definian-inspection-facility-access.pdf`);
     } catch (pdfError) {
       setError(pdfError instanceof Error ? pdfError.message : "Unable to create the two-sided facility packet.");
     } finally {
@@ -199,7 +200,7 @@ export function FacilityRegistrationPanel({
 
   const downloadSvg = () => {
     if (!qrSvg) return;
-    saveAs(new Blob([qrSvg], { type: "image/svg+xml;charset=utf-8" }), `${slug || "facility"}-inspection-trac-qr.svg`);
+    saveAs(new Blob([qrSvg], { type: "image/svg+xml;charset=utf-8" }), `${slug || "facility"}-definian-inspection-qr.svg`);
   };
 
   return (

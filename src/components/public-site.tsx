@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { publicBranding } from "@/lib/publicBranding";
 
@@ -8,6 +9,7 @@ export const REPORTS_EMAIL = publicBranding.reportsEmail;
 
 export function PublicHeader() {
   const brand = publicBranding;
+  const logoPath = brand.mode === "definianInspection" ? "/media/definian-logo-chatgpt.png" : brand.logoPath;
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur">
@@ -16,7 +18,7 @@ export function PublicHeader() {
           href="/"
           className="flex items-center rounded-[1.35rem] border border-slate-200 bg-white px-4 py-2 text-slate-900 no-underline shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition hover:border-slate-300 hover:shadow-[0_16px_42px_rgba(15,23,42,0.11)]"
         >
-          <img src={brand.logoPath} alt={brand.appName} className="h-16 w-auto max-w-full shrink-0 object-contain sm:h-[4.5rem] lg:h-20" draggable={false} />
+          <Image src={logoPath} alt={brand.appName} width={1000} height={250} className="h-16 w-auto max-w-full shrink-0 object-contain sm:h-[4.5rem] lg:h-20" draggable={false} />
         </Link>
         <nav className="hidden items-center gap-8 text-sm font-bold text-slate-900 lg:flex">
           <Link className="transition hover:text-slate-950 no-underline" href="/">
@@ -47,6 +49,7 @@ export function PublicHeader() {
 
 export function PublicFooter() {
   const brand = publicBranding;
+  const logoPath = brand.mode === "definianInspection" ? "/media/definian-logo-inverted-rgb.svg" : brand.logoPath;
 
   return (
     <footer className="border-t border-slate-200 bg-slate-950 text-slate-200">
@@ -54,7 +57,7 @@ export function PublicFooter() {
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-4 lg:col-span-1">
             <div className="flex items-center gap-3">
-              <img src={brand.logoPath} alt={brand.appName} className="h-16 w-auto max-w-full sm:h-20" draggable={false} />
+              <Image src={logoPath} alt={brand.appName} width={1000} height={250} className="h-16 w-auto max-w-full sm:h-20" draggable={false} />
             </div>
             <p className="max-w-sm text-sm leading-7 text-slate-400">
               {brand.landingExplainer}
@@ -164,7 +167,7 @@ export function ScreenshotCard({
         <div className="bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.1),_transparent_44%),linear-gradient(180deg,#ffffff_0%,#eef2f7_100%)] p-2.5 sm:p-3">
           <div className="overflow-hidden rounded-[1.65rem] border border-slate-200 bg-white p-2.5 shadow-[0_20px_48px_rgba(15,23,42,0.12)] sm:p-3">
             <div className="overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white">
-              <img src={path} alt="" aria-hidden draggable={false} className={`w-full ${imageFit} ${imageHeight} bg-white`} />
+              <Image src={path} alt="" aria-hidden width={1600} height={1000} draggable={false} className={`w-full ${imageFit} ${imageHeight} bg-white`} />
               {caption ? (
                 <div className="border-t border-slate-100 bg-white px-4 py-3 text-center">
                   <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-900 sm:text-base">{caption}</p>

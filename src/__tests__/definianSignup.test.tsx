@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SignupRedirectClient } from "@/app/signup/SignupRedirectClient";
+import { DefinianQuickStart } from "@/components/definian/DefinianQuickStart";
 import { publicBranding } from "@/lib/publicBranding";
 
 const authMocks = vi.hoisted(() => ({
@@ -29,5 +30,20 @@ describe("Definian signup quick start", () => {
   it("uses the published Definian Inspection store listings", () => {
     expect(publicBranding.appStoreUrl).toBe("https://apps.apple.com/us/app/definian-inspection/id6778651028");
     expect(publicBranding.googlePlayUrl).toBe("https://play.google.com/store/apps/details?id=com.nulanesystems.definian");
+  });
+
+  it("renders a Definian-only quick start with both verified store links", () => {
+    render(<DefinianQuickStart embedded />);
+
+    expect(screen.getByRole("heading", { name: "Definian Inspection quick start" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Install Definian for iPhone or iPad" })).toHaveAttribute(
+      "href",
+      "https://apps.apple.com/us/app/definian-inspection/id6778651028",
+    );
+    expect(screen.getByRole("link", { name: "Install Definian for Android" })).toHaveAttribute(
+      "href",
+      "https://play.google.com/store/apps/details?id=com.nulanesystems.definian",
+    );
+    expect(document.body).not.toHaveTextContent(/Inspection-Trac/i);
   });
 });

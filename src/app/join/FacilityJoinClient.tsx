@@ -240,7 +240,7 @@ export function FacilityJoinClient() {
               {errorCode === "USER_EMAIL_UNVERIFIED" ? (
                 <p className="mt-2 text-xs">Open the verification email, verify the address, then return to this page. The button below retries this same secure registration.</p>
               ) : (
-                <p className="mt-2 text-xs">No facility assignment was silently created. Contact {support?.displayName || "Inspection-Trac Support"}{support?.email ? ` at ${support.email}` : ""}.</p>
+                <p className="mt-2 text-xs">No facility assignment was silently created. Contact {support?.displayName || `${publicBranding.appName} Support`}{support?.email ? ` at ${support.email}` : ""}.</p>
               )}
               {supportReference ? <p className="mt-2 text-xs font-bold">Support reference: {supportReference}</p> : null}
               {errorCode === "REGISTRATION_EMAIL_MISMATCH" ? (
@@ -316,7 +316,7 @@ export function FacilityJoinClient() {
           <section className="grid gap-3 sm:grid-cols-2">
             <a href={iosUrl} onClick={() => recordClick("registration.install_clicked", "ios")} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900">Install for iPhone <ExternalLink className="h-4 w-4" /></a>
             <a href={androidUrl} onClick={() => recordClick("registration.install_clicked", "android")} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900">Install for Android <ExternalLink className="h-4 w-4" /></a>
-            {enrollment ? <a href="inspectiontrac://" onClick={() => recordClick("registration.app_open_clicked", "app")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white sm:col-span-2">Open Inspection-Trac</a> : null}
+            {enrollment ? <a href="definian://" onClick={() => recordClick("registration.app_open_clicked", "app")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white sm:col-span-2">Open {publicBranding.appName}</a> : null}
           </section>
         </div>
       </div>
