@@ -39,6 +39,7 @@ function isPublicBrandedPath(pathname: string | null) {
     "/get-app",
     "/join",
     "/getting-started",
+    "/signup",
   ].includes(path);
 }
 
