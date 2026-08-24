@@ -60,7 +60,7 @@ export const definianProduct = {
     loginButtonLabel: "Log In",
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/login",
-    appStoreUrl: "https://apps.apple.com/us/app/inspection-trac/id6774376762",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac",
+    appStoreUrl: "https://apps.apple.com/us/app/definian-inspection/id6778651028",
+    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.definian",
   },
 } satisfies PortalProductConfig;

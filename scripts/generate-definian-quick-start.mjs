@@ -11,8 +11,8 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, "..");
 
 const signupUrl = "https://vercel-portal-exact.vercel.app/signup/";
-const appStoreUrl = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
-const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
+const appStoreUrl = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
+const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
 const supportEmail = "support@definian.com";
 const outputDir = path.join(projectRoot, "public/resources/definian");
 const pdfPath = path.join(outputDir, "definian-inspection-quick-start.pdf");
@@ -21,7 +21,7 @@ const qrSvgPath = path.join(outputDir, "definian-inspection-signup-qr.svg");
 const logoSvgPath = path.join(projectRoot, "public/media/definian-logo-inverted-rgb.svg");
 const tempDir = path.join(projectRoot, "tmp/pdfs");
 const logoPngPath = path.join(tempDir, "definian-logo-inverted.png");
-const inspectionTracLogoPath = path.join(projectRoot, "public/media/inspection-trac-logo.png");
+const appLogoPath = path.join(projectRoot, "public/media/definian-logo-chatgpt.png");
 
 const fonts = {
   Roboto: {
@@ -47,8 +47,8 @@ const steps = [
   ["Scan or open the signup link", "Use the QR code or the permanent Definian signup URL."],
   ["Create your account", "Use your work email and complete Auth0 email verification when prompted."],
   ["Open the Definian portal", "After verification, sign in and return to the Definian home page."],
-  ["Install Inspection-Trac", "Use the verified iPhone or Android store link below."],
-  ["Use the same verified email", "Sign in to Inspection-Trac with the same account you used for Definian."],
+  ["Install Definian Inspection", "Use the verified iPhone, iPad, or Android store link below."],
+  ["Use the same verified email", "Sign in to the Definian app with the same account you created in the portal."],
 ];
 
 function stepRow([title, detail], index) {
@@ -89,7 +89,7 @@ const definition = {
   info: {
     title: "Definian Inspection Quick Start",
     author: "Definian Inspection",
-    subject: "Secure Definian signup and Inspection-Trac installation guide",
+    subject: "Secure Definian signup and Definian Inspection installation guide",
   },
   pageSize: "LETTER",
   pageMargins: [42, 38, 42, 38],
@@ -162,13 +162,13 @@ const definition = {
       columns: [
         {
           width: 62,
-          image: inspectionTracLogoPath,
+          image: appLogoPath,
           fit: [54, 54],
         },
         {
           width: "*",
           stack: [
-            { text: "Install Inspection-Trac", bold: true, fontSize: 12, color: colors.ink, margin: [0, 0, 0, 5] },
+            { text: "Install Definian Inspection", bold: true, fontSize: 12, color: colors.ink, margin: [0, 0, 0, 5] },
             { text: [{ text: "iPhone: ", bold: true }, { text: "Open the App Store", link: appStoreUrl, color: colors.navy }], fontSize: 9 },
             { text: [{ text: "Android: ", bold: true }, { text: "Open Google Play", link: googlePlayUrl, color: colors.navy }], fontSize: 9, margin: [0, 4, 0, 0] },
           ],
@@ -187,8 +187,8 @@ const definition = {
   ],
   footer: {
     columns: [
-      { width: "*", text: "Definian Inspection - powered by Inspection-Trac" },
-      { width: "auto", text: "Quick start - Revision 1" },
+      { width: "*", text: "Definian Inspection" },
+      { width: "auto", text: "Quick start - Revision 2" },
     ],
     color: "#708097",
     fontSize: 7.5,

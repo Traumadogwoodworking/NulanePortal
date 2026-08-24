@@ -7,8 +7,8 @@ const steps = [
   ["Scan or open the signup link", "Use the QR code or the secure Definian signup button below."],
   ["Create your account", "Use your work email and complete Auth0 email verification when prompted."],
   ["Open the portal", "After verification, sign in and return to the Definian home page."],
-  ["Install Inspection-Trac", "Download the app for iPhone or Android using the verified store links below."],
-  ["Use the same email", "Sign in to Inspection-Trac with the same verified account you used for Definian."],
+  ["Install Definian Inspection", "Download the Definian app for iPhone, iPad, or Android using the verified store links below."],
+  ["Use the same email", "Sign in to Definian Inspection with the same verified account you created in the portal."],
 ] as const;
 
 export default function GettingStartedPage() {
@@ -26,7 +26,7 @@ export default function GettingStartedPage() {
           />
           <p className="mt-8 text-xs font-black uppercase tracking-[0.25em] text-[#8ae1b8]">Getting Started</p>
           <h1 className="mt-2 text-3xl font-black">Definian Inspection quick start</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-200">Scan, create your secure account, and use the same verified email in Inspection-Trac.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-200">Scan, create your secure account, and continue in the Definian Inspection app.</p>
         </header>
 
         <div className="p-7 sm:p-10">
@@ -61,8 +61,8 @@ export default function GettingStartedPage() {
           <a href="/resources/definian/definian-inspection-quick-start.pdf" className="mt-7 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 hover:bg-slate-50">Download printable quick-start PDF</a>
 
         <div className="mt-7 grid gap-3 sm:grid-cols-2">
-          <a href={publicBranding.appStoreUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install Inspection-Trac for iPhone</a>
-          <a href={publicBranding.googlePlayUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install Inspection-Trac for Android</a>
+          <a href={publicBranding.appStoreUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install Definian for iPhone or iPad</a>
+          <a href={publicBranding.googlePlayUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white">Install Definian for Android</a>
         </div>
         <p className="mt-6 text-sm text-slate-600">Need help? <a className="font-bold text-slate-950 underline" href={`mailto:${publicBranding.supportEmail}`}>{publicBranding.supportEmail}</a></p>
         </div>

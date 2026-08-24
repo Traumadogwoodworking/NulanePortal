@@ -44,7 +44,7 @@ export function SignupRedirectClient() {
           <p className="mt-6 text-xs font-black uppercase tracking-[0.24em] text-[#8ae1b8]">Secure account setup</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight">Join Definian Inspection</h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-200">
-            Create your Definian account with Auth0, then use the same verified email in Inspection-Trac.
+            Create your Definian account with Auth0, then use the same verified email in the Definian Inspection app.
           </p>
         </header>
 

@@ -26,8 +26,8 @@ describe("Definian signup quick start", () => {
     expect(screen.getByRole("button", { name: "Create Definian account" })).toBeInTheDocument();
   });
 
-  it("uses the published Inspection-Trac store listings", () => {
-    expect(publicBranding.appStoreUrl).toBe("https://apps.apple.com/us/app/inspection-trac/id6774376762");
-    expect(publicBranding.googlePlayUrl).toBe("https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac");
+  it("uses the published Definian Inspection store listings", () => {
+    expect(publicBranding.appStoreUrl).toBe("https://apps.apple.com/us/app/definian-inspection/id6778651028");
+    expect(publicBranding.googlePlayUrl).toBe("https://play.google.com/store/apps/details?id=com.nulanesystems.definian");
   });
 });
