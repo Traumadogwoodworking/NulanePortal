@@ -279,6 +279,24 @@ describe("logoutRejectedPortalSession", () => {
   });
 });
 
+describe("logoutPortal", () => {
+  it("clears the embedded SDK partition before starting top-level Auth0 logout", async () => {
+    const topWindow = window.top;
+    const topLocation = { href: "https://www.definian.com/signal" };
+    Object.defineProperty(window, "top", { configurable: true, value: { location: topLocation } });
+    window.localStorage.setItem("portal_token", "embedded-token");
+    window.localStorage.setItem("@@auth0spajs@@::cached", "embedded-sdk-session");
+    const { logoutPortal } = await importPortalAuth();
+
+    await logoutPortal();
+
+    expect(window.localStorage.getItem("portal_token")).toBeNull();
+    expect(window.localStorage.getItem("@@auth0spajs@@::cached")).toBeNull();
+    expect(topLocation.href).toBe("http://localhost:3000/auth/embedded/start?action=logout");
+    Object.defineProperty(window, "top", { configurable: true, value: topWindow });
+  });
+});
+
 describe("buildAuthRedirectUri", () => {
   it("derives the callback URL from the active deployment origin", async () => {
     const { buildAuthRedirectUri } = await importPortalAuth();

@@ -1090,7 +1090,7 @@ export async function logoutPortal(): Promise<void> {
     }
     return;
   }
-  clearPortalAuthStorage();
+  clearPortalAuthStorage({ includeAuth0Sdk: true });
   if (!isBrowser()) {
     return;
   }
