@@ -22,6 +22,7 @@ const portalAuthMocks = vi.hoisted(() => ({
     }
   },
   authenticateEmbeddedPortal: vi.fn(),
+  canAutoRedirectEmbeddedPortalAuth: vi.fn(() => false),
   buildPortalLoginUrl: vi.fn((returnTo?: string) => `/login?returnTo=${encodeURIComponent(returnTo ?? "/")}`),
   cleanAuthCallbackUrl: vi.fn(() => window.history.replaceState({}, "", "/auth/callback/")),
   clearPortalAuthStorage: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock("@/lib/portalSession", () => ({
 vi.mock("@/lib/portalAuth", () => ({
   AuthRedirectError: portalAuthMocks.AuthRedirectError,
   authenticateEmbeddedPortal: portalAuthMocks.authenticateEmbeddedPortal,
+  canAutoRedirectEmbeddedPortalAuth: portalAuthMocks.canAutoRedirectEmbeddedPortalAuth,
   buildPortalLoginUrl: portalAuthMocks.buildPortalLoginUrl,
   cleanAuthCallbackUrl: portalAuthMocks.cleanAuthCallbackUrl,
   clearPortalAuthStorage: portalAuthMocks.clearPortalAuthStorage,
@@ -104,6 +106,7 @@ beforeEach(() => {
   portalAuthMocks.logoutRejectedPortalSession.mockResolvedValue(undefined);
   portalAuthMocks.authenticateEmbeddedPortal.mockResolvedValue(undefined);
   portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(false);
+  portalAuthMocks.canAutoRedirectEmbeddedPortalAuth.mockReturnValue(false);
   window.history.replaceState({}, "", "/home/");
 });
 
@@ -157,6 +160,19 @@ describe("PortalLayoutShell auth states", () => {
       expect(portalAuthMocks.authenticateEmbeddedPortal).toHaveBeenCalledWith({ signup: true });
       expect(portalSessionMocks.refetch).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("automatically opens top-level Auth0 from the canonical same-site embed", async () => {
+    portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(true);
+    portalAuthMocks.canAutoRedirectEmbeddedPortalAuth.mockReturnValue(true);
+
+    render(<PortalLayoutShell>Portal content</PortalLayoutShell>);
+
+    expect(screen.queryByRole("heading", { name: "Welcome to Definian Signal" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(portalAuthMocks.openPortalLogin).toHaveBeenCalledWith("/home/");
+    });
+    expect(portalAuthMocks.authenticateEmbeddedPortal).not.toHaveBeenCalled();
   });
 });
 

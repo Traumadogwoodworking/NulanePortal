@@ -218,6 +218,14 @@ export function openPortalSignup(returnTo?: string): void {
   );
 }
 
+export function canAutoRedirectEmbeddedPortalAuth(): boolean {
+  return (
+    isBrowser() &&
+    isEmbeddedPortalContext() &&
+    window.location.origin === DEFINIAN_SIGNAL_PORTAL_ORIGIN
+  );
+}
+
 export async function authenticateEmbeddedPortal(options: { signup?: boolean } = {}): Promise<void> {
   ensureBrowserEnv();
   if (!isEmbeddedPortalContext()) {

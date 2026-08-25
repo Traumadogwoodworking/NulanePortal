@@ -9,6 +9,7 @@ import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
 import {
   authenticateEmbeddedPortal,
+  canAutoRedirectEmbeddedPortalAuth,
   clearStalePortalSession,
   isEmbeddedPortalContext,
   openPortalLogin,
@@ -26,6 +27,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
   const embedded = isEmbeddedPortalContext();
+  const canAutoRedirectEmbeddedAuth = canAutoRedirectEmbeddedPortalAuth();
   const autoLoginKeyRef = useRef<string | null>(null);
   const [embeddedAuthAction, setEmbeddedAuthAction] = useState<"login" | "signup" | null>(null);
   const [embeddedAuthError, setEmbeddedAuthError] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
       status === "forbidden" ||
       (status === "success" && session?.portal_access === false);
     const shouldOpenEmbeddedLogin = status === "unauthenticated" || backendRejectedSession;
-    if (!shouldOpenEmbeddedLogin || embedded) {
+    if (!shouldOpenEmbeddedLogin || (embedded && !canAutoRedirectEmbeddedAuth)) {
       autoLoginKeyRef.current = null;
       if (backendRejectedSession) {
         clearStalePortalSession("definian_backend_rejected_session");
@@ -91,7 +93,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
       clearStalePortalSession("definian_backend_rejected_session");
     }
     openPortalLogin(safePathname);
-  }, [embedded, safePathname, session?.portal_access, status]);
+  }, [canAutoRedirectEmbeddedAuth, embedded, safePathname, session?.portal_access, status]);
 
   const startEmbeddedAuth = async (signup: boolean) => {
     if (embeddedAuthAction) return;
@@ -118,6 +120,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     (status === "success" && session?.portal_access === false)
   ) {
     if (!embedded) return null;
+    if (canAutoRedirectEmbeddedAuth) return null;
     return (
       <PortalStatusScreen
         title="Welcome to Definian Signal"

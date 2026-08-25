@@ -497,9 +497,9 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     ].filter(Boolean);
     const hasSessionRole = (role: string) => sessionRoles.includes(role);
     const isSuperAdmin = hasSessionRole("super_admin") || hasSessionRole("superadmin");
-    const isOrgAdmin = hasSessionRole("org_admin") || hasSessionRole("orgadmin") || isSuperAdmin;
-    const isFacilityAdmin = hasSessionRole("facility_admin") || hasSessionRole("facilityadmin") || isOrgAdmin;
     const isAdmin = session?.is_admin === true || hasSessionRole("admin") || isSuperAdmin;
+    const isOrgAdmin = isAdmin || hasSessionRole("org_admin") || hasSessionRole("orgadmin");
+    const isFacilityAdmin = hasSessionRole("facility_admin") || hasSessionRole("facilityadmin") || isOrgAdmin;
     const permissions: string[] = Array.isArray(session?.user?.permissions)
       ? session.user.permissions.map((permission) => permission.toString())
       : [];
