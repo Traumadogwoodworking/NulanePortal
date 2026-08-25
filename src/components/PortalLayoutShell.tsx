@@ -108,14 +108,14 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => openPortalLogin(DEFINIAN_SIGNAL_PARENT_URL)}
-              className="rounded-full bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-100"
+              className="rounded-full bg-[#0d2c71] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#123b91]"
             >
               Sign in
             </button>
             <button
               type="button"
               onClick={() => openPortalSignup(DEFINIAN_SIGNAL_PARENT_URL)}
-              className="rounded-full border border-white/30 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/20"
+              className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-900 shadow-sm transition hover:bg-slate-50"
             >
               Create account
             </button>
