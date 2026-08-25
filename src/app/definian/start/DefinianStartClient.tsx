@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, LogIn, UserPlus } from "lucide-react";
 import { FacilityStartupSteps, type RegistrationStartupStep } from "@/components/facilities/FacilityStartupSteps";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/portalAuth";
 
 export const DEFINIAN_SIGNAL_RETURN_URL = "https://www.definian.com/signal";
+export const DEFINIAN_AUTH_BOOTSTRAP_ORIGIN = "https://vercel-portal-exact.vercel.app";
 export const DEFINIAN_IOS_APP_URL = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
 export const DEFINIAN_ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
 
@@ -32,6 +33,16 @@ function isUsableEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
 }
 
+export function buildDefinianAuthBootstrapUrl(email: string, signup: boolean, returnTo: string) {
+  const url = new URL("/definian/start/", DEFINIAN_AUTH_BOOTSTRAP_ORIGIN);
+  url.hash = new URLSearchParams({
+    action: signup ? "signup" : "login",
+    email: normalizeEmail(email),
+    returnTo,
+  }).toString();
+  return url;
+}
+
 export function DefinianStartClient() {
   const searchParams = useSearchParams();
   const requestedReturnTo = searchParams?.get("returnTo");
@@ -45,21 +56,45 @@ export function DefinianStartClient() {
   const [startingAction, setStartingAction] = useState<"signup" | "login" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const launchAuth = useCallback(async (expectedEmail: string, signup: boolean, target: string) => {
+    setError(null);
+    setStartingAction(signup ? "signup" : "login");
+    try {
+      await startFacilityRegistrationAuth(target, { email: expectedEmail, signup });
+    } catch (authError) {
+      if (authError instanceof AuthRedirectError) return;
+      setError(authError instanceof Error ? authError.message : "Unable to open secure authentication.");
+      setStartingAction(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (window.location.origin !== DEFINIAN_AUTH_BOOTSTRAP_ORIGIN || !window.location.hash) return;
+    const bridgeParams = new URLSearchParams(window.location.hash.slice(1));
+    const action = bridgeParams.get("action");
+    const bridgedEmail = normalizeEmail(bridgeParams.get("email") || "");
+    if ((action !== "signup" && action !== "login") || !isUsableEmail(bridgedEmail)) return;
+    const bridgedReturnTo = resolveSafePortalReturnTo(
+      bridgeParams.get("returnTo") || DEFINIAN_SIGNAL_RETURN_URL,
+    );
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+    setEmail(bridgedEmail);
+    void launchAuth(bridgedEmail, action === "signup", bridgedReturnTo);
+  }, [launchAuth]);
+
   const startAuth = async (signup: boolean) => {
     const expectedEmail = normalizeEmail(email);
     if (!isUsableEmail(expectedEmail)) {
       setError("Enter a valid email address before continuing.");
       return;
     }
-    setError(null);
     setStartingAction(signup ? "signup" : "login");
-    try {
-      await startFacilityRegistrationAuth(returnTo, { email: expectedEmail, signup });
-    } catch (authError) {
-      if (authError instanceof AuthRedirectError) return;
-      setError(authError instanceof Error ? authError.message : "Unable to open secure authentication.");
-      setStartingAction(null);
+    const localDevelopmentOrigin = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+    if (window.location.origin !== DEFINIAN_AUTH_BOOTSTRAP_ORIGIN && !localDevelopmentOrigin) {
+      window.location.assign(buildDefinianAuthBootstrapUrl(expectedEmail, signup, returnTo));
+      return;
     }
+    await launchAuth(expectedEmail, signup, returnTo);
   };
 
   return (

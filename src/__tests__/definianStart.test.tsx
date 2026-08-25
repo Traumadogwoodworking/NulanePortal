@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFINIAN_ANDROID_APP_URL,
+  DEFINIAN_AUTH_BOOTSTRAP_ORIGIN,
   DEFINIAN_IOS_APP_URL,
   DEFINIAN_SIGNAL_RETURN_URL,
   DefinianStartClient,
+  buildDefinianAuthBootstrapUrl,
 } from "@/app/definian/start/DefinianStartClient";
 
 const authMocks = vi.hoisted(() => ({
@@ -34,6 +36,20 @@ beforeEach(() => {
 });
 
 describe("Definian onboarding start page", () => {
+  it("bridges auth to the fixed callback origin without sending the email to the server", () => {
+    const url = buildDefinianAuthBootstrapUrl(
+      " Person@Example.com ",
+      true,
+      DEFINIAN_SIGNAL_RETURN_URL,
+    );
+
+    expect(url.origin).toBe(DEFINIAN_AUTH_BOOTSTRAP_ORIGIN);
+    expect(url.pathname).toBe("/definian/start/");
+    expect(url.search).toBe("");
+    expect(new URLSearchParams(url.hash.slice(1)).get("email")).toBe("person@example.com");
+    expect(new URLSearchParams(url.hash.slice(1)).get("action")).toBe("signup");
+  });
+
   it("renders the proven email-first registration experience and verified app links", () => {
     render(<DefinianStartClient />);
 
