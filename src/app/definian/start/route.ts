@@ -1,14 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 export const DEFINIAN_SIGNAL_RETURN_URL = "https://www.definian.com/signal";
+export const DEFINIAN_AUTH_BOOTSTRAP_ORIGIN = "https://vercel-portal-exact.vercel.app";
 
-export function buildDefinianStartLoginUrl(requestUrl: string) {
-  const request = new URL(requestUrl);
-  const loginUrl = new URL("/login/", request.origin);
+export function buildDefinianStartLoginUrl() {
+  const loginUrl = new URL("/login/", DEFINIAN_AUTH_BOOTSTRAP_ORIGIN);
   loginUrl.searchParams.set("returnTo", DEFINIAN_SIGNAL_RETURN_URL);
   return loginUrl;
 }
 
-export function GET(request: NextRequest) {
-  return NextResponse.redirect(buildDefinianStartLoginUrl(request.url), 307);
+export function GET() {
+  return NextResponse.redirect(buildDefinianStartLoginUrl(), 307);
 }
