@@ -7,6 +7,7 @@ const auth0Mocks = vi.hoisted(() => ({
   createAuth0Client: vi.fn(),
   handleRedirectCallback: vi.fn(),
   getTokenSilently: vi.fn(),
+  loginWithRedirect: vi.fn(),
 }));
 
 vi.mock("@auth0/auth0-spa-js", () => ({
@@ -22,7 +23,9 @@ beforeEach(() => {
   auth0Mocks.createAuth0Client.mockResolvedValue({
     handleRedirectCallback: auth0Mocks.handleRedirectCallback,
     getTokenSilently: auth0Mocks.getTokenSilently,
+    loginWithRedirect: auth0Mocks.loginWithRedirect,
   });
+
 });
 
 describe("AuthCallbackClient Strict Mode ownership", () => {
@@ -37,5 +40,24 @@ describe("AuthCallbackClient Strict Mode ownership", () => {
       expect(auth0Mocks.handleRedirectCallback).toHaveBeenCalledTimes(1);
     });
     expect(auth0Mocks.createAuth0Client).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts the preserved signup flow when the callback URL lost its query parameters", async () => {
+    window.history.replaceState({}, "", "/auth/callback/");
+    window.sessionStorage.setItem("portal_auth_login_action", "signup");
+    window.sessionStorage.setItem("portal_login_return_to", "https://www.definian.com/signal");
+    auth0Mocks.loginWithRedirect.mockResolvedValue(undefined);
+
+    render(<AuthCallbackClient />);
+
+    await waitFor(() => {
+      expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appState: { returnTo: "https://www.definian.com/signal" },
+          authorizationParams: expect.objectContaining({ screen_hint: "signup" }),
+        }),
+      );
+    });
+    expect(auth0Mocks.handleRedirectCallback).not.toHaveBeenCalled();
   });
 });

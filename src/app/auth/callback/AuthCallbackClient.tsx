@@ -9,8 +9,10 @@ import {
   hasPersistedPortalToken,
   logAuthFlow,
   prepareExplicitAuthRetry,
+  readStoredPortalLoginAction,
   readStoredPortalLoginReturnTo,
   startAuth0Login,
+  startAuth0Signup,
 } from "@/lib/portalAuth";
 
 type CallbackStatus = "starting" | "processing" | "redirecting" | "failed";
@@ -27,6 +29,7 @@ export function AuthCallbackClient() {
   const [status, setStatus] = useState<CallbackStatus>("starting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [destination, setDestination] = useState("/home/");
+  const [loginAction, setLoginAction] = useState<"login" | "signup">("login");
 
   useEffect(() => {
     let cancelled = false;
@@ -35,11 +38,15 @@ export function AuthCallbackClient() {
       setStatus("processing");
       setErrorMessage(null);
       const callbackParams = new URLSearchParams(window.location.search);
+      const hasCode = callbackParams.has("code");
+      const hasState = callbackParams.has("state");
       const authError = callbackParams.get("error");
       const authErrorDescription = callbackParams.get("error_description");
+      const recoveryDestination = readStoredPortalLoginReturnTo("/home/");
+      const storedLoginAction = readStoredPortalLoginAction();
+      setDestination(recoveryDestination);
+      setLoginAction(storedLoginAction === "signup" ? "signup" : "login");
       if (authError) {
-        const recoveryDestination = readStoredPortalLoginReturnTo("/home/");
-        setDestination(recoveryDestination);
         clearPortalAuthStorage();
         cleanAuthCallbackUrl();
         logAuthFlow("AuthCallbackClient.run", {
@@ -51,10 +58,30 @@ export function AuthCallbackClient() {
         setStatus("failed");
         return;
       }
+      if (!hasCode || !hasState) {
+        if (hasPersistedPortalToken()) {
+          setStatus("redirecting");
+          window.location.replace(recoveryDestination);
+          return;
+        }
+        if (storedLoginAction) {
+          setStatus("redirecting");
+          try {
+            await (storedLoginAction === "signup"
+              ? startAuth0Signup(recoveryDestination)
+              : startAuth0Login(recoveryDestination));
+          } catch (error) {
+            if (error instanceof AuthRedirectError) return;
+            setErrorMessage(error instanceof Error ? error.message : "Unable to restart authentication.");
+            setStatus("failed");
+          }
+          return;
+        }
+      }
       logAuthFlow("AuthCallbackClient.run", {
         reason: "start",
-        hasCode: new URLSearchParams(window.location.search).has("code"),
-        hasState: new URLSearchParams(window.location.search).has("state"),
+        hasCode,
+        hasState,
         tokenExists: hasPersistedPortalToken(),
       });
       try {
@@ -123,7 +150,7 @@ export function AuthCallbackClient() {
               prepareExplicitAuthRetry();
               setStatus("processing");
               setErrorMessage(null);
-              void startAuth0Login(destination).catch((error) => {
+              void (loginAction === "signup" ? startAuth0Signup(destination) : startAuth0Login(destination)).catch((error) => {
                 if (error instanceof AuthRedirectError) return;
                 setErrorMessage(error instanceof Error ? error.message : "Unable to restart sign in.");
                 setStatus("failed");
@@ -131,7 +158,7 @@ export function AuthCallbackClient() {
             }}
             className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
           >
-            Try sign in again
+            {loginAction === "signup" ? "Try account setup again" : "Try sign in again"}
           </button>
         </div> : null}
       </div>

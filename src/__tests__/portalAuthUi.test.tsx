@@ -34,8 +34,10 @@ const portalAuthMocks = vi.hoisted(() => ({
   logoutRejectedPortalSession: vi.fn(),
   openPortalLogin: vi.fn(),
   prepareExplicitAuthRetry: vi.fn(),
+  readStoredPortalLoginAction: vi.fn(() => null as "login" | "signup" | null),
   readStoredPortalLoginReturnTo: vi.fn(() => "/join/?enrollment=opaque-session-token"),
   startAuth0Login: vi.fn(),
+  startAuth0Signup: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -66,8 +68,10 @@ vi.mock("@/lib/portalAuth", () => ({
   logoutRejectedPortalSession: portalAuthMocks.logoutRejectedPortalSession,
   openPortalLogin: portalAuthMocks.openPortalLogin,
   prepareExplicitAuthRetry: portalAuthMocks.prepareExplicitAuthRetry,
+  readStoredPortalLoginAction: portalAuthMocks.readStoredPortalLoginAction,
   readStoredPortalLoginReturnTo: portalAuthMocks.readStoredPortalLoginReturnTo,
   startAuth0Login: portalAuthMocks.startAuth0Login,
+  startAuth0Signup: portalAuthMocks.startAuth0Signup,
 }));
 
 vi.mock("@/lib/portalData", () => ({
@@ -103,6 +107,10 @@ beforeEach(() => {
   portalAuthMocks.startAuth0Login.mockRejectedValue(
     new portalAuthMocks.AuthRedirectError()
   );
+  portalAuthMocks.startAuth0Signup.mockRejectedValue(
+    new portalAuthMocks.AuthRedirectError()
+  );
+  portalAuthMocks.readStoredPortalLoginAction.mockReturnValue(null);
   portalAuthMocks.logoutRejectedPortalSession.mockResolvedValue(undefined);
   portalAuthMocks.authenticateEmbeddedPortal.mockResolvedValue(undefined);
   portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(false);

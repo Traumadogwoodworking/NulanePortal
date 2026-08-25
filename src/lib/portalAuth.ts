@@ -29,6 +29,7 @@ const FIXED_REDIRECT_MODE = "fixed";
 const FRESH_CALLBACK_STORAGE_KEY = "portal_auth_callback_completed_at";
 const AUTH_FLOW_ID_STORAGE_KEY = "portal_auth_flow_id";
 const LOGIN_STARTED_AT_STORAGE_KEY = "portal_auth_login_started_at";
+const LOGIN_ACTION_STORAGE_KEY = "portal_auth_login_action";
 
 type Auth0Client = Auth0SpaClient;
 
@@ -743,6 +744,16 @@ export function readStoredPortalLoginReturnTo(fallback = "/home/") {
   }
 }
 
+export function readStoredPortalLoginAction(): "login" | "signup" | null {
+  if (!isBrowser()) return null;
+  try {
+    const action = window.sessionStorage.getItem(LOGIN_ACTION_STORAGE_KEY);
+    return action === "login" || action === "signup" ? action : null;
+  } catch {
+    return null;
+  }
+}
+
 function isLocalDevOrigin() {
   if (!isBrowser() || process.env.NODE_ENV === "production") {
     return false;
@@ -925,6 +936,7 @@ async function performAuth0LoginRedirect(
   if (isBrowser()) {
     try {
       window.sessionStorage.setItem("portal_login_return_to", safeReturnTo);
+      window.sessionStorage.setItem(LOGIN_ACTION_STORAGE_KEY, options.signup ? "signup" : "login");
       window.sessionStorage.setItem(LOGIN_STARTED_AT_STORAGE_KEY, String(Date.now()));
     } catch (error) {
       console.warn("[Auth0] unable to persist returnTo", error);
