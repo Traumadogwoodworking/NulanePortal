@@ -121,7 +121,7 @@ describe("completeAuth0Callback", () => {
 
     expect(auth0Mocks.handleRedirectCallback).toHaveBeenCalledTimes(1);
     const invocationLogs = logSpy.mock.calls
-      .map((call) => call[1] as Record<string, unknown>)
+      .map((call) => JSON.parse(String(call[1])) as Record<string, unknown>)
       .filter((entry) => entry?.functionName === "completeAuth0Callback" && entry?.reason === "invoked");
     expect(invocationLogs).toEqual([
       expect.objectContaining({ invocationCount: 1, stateSuffix: "ending", pkceTransactionPresent: true }),

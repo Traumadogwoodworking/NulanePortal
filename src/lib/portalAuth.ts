@@ -87,12 +87,13 @@ function getAuthFlowId(create = true): string | null {
 }
 
 export function logAuthFlow(functionName: string, fields: AuthFlowLogFields = {}) {
-  console.info("[auth-flow]", {
+  const entry = {
     correlationId: getAuthFlowId(),
     functionName,
     pathname: currentPathname(),
     ...fields,
-  });
+  };
+  console.info("[auth-flow]", JSON.stringify(entry));
 }
 
 function maskSecret(value: string, leading = 3, trailing = 3) {
