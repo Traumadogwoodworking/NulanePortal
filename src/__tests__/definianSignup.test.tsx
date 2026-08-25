@@ -43,15 +43,15 @@ describe("Definian signup quick start", () => {
     expect(screen.getByRole("heading", { name: "Definian Inspection quick start" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Install Definian for iPhone or iPad" })).toHaveAttribute(
       "href",
-      "https://apps.apple.com/us/app/definian-inspection/id6778651028",
+      "https://apps.apple.com/us/app/inspection-trac/id6774376762",
     );
     expect(screen.getByRole("link", { name: "Install Definian for Android" })).toHaveAttribute(
       "href",
-      "https://play.google.com/store/apps/details?id=com.nulanesystems.definian",
+      "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac",
     );
     expect(screen.getByRole("link", { name: "Download printable quick-start PDF" })).toHaveAttribute(
       "href",
-      "/resources/definian/definian-inspection-quick-start.pdf?v=5",
+      "/resources/definian/definian-inspection-quick-start.pdf?v=6",
     );
     expect(document.body).not.toHaveTextContent(/Inspection-Trac/i);
   });

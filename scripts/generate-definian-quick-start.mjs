@@ -12,8 +12,8 @@ const projectRoot = path.resolve(scriptDir, "..");
 
 const portalAccessUrl = "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start";
 const secureLoginDomain = "definian-inspection.us.auth0.com";
-const appStoreUrl = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
-const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
+const appStoreUrl = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
+const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
 const supportEmail = "support@definian.com";
 const outputDir = path.join(projectRoot, "public/resources/definian");
 const pdfPath = path.join(outputDir, "definian-inspection-quick-start.pdf");
@@ -47,11 +47,11 @@ const colors = {
 };
 
 const steps = [
-  ["Scan or open secure login", "The dedicated start link bypasses the embedded portal and opens Definian's secure Auth0 login."],
-  ["Sign in or create your account", "Existing users sign in. New users choose Sign up and use their work email."],
-  ["Open the Definian portal", "After verification, sign in and return to the Definian home page."],
-  ["Install Definian Inspection", "Use the verified iPhone, iPad, or Android store link below."],
-  ["Use the same verified email", "Sign in to the Definian app with the same account you created in the portal."],
+  ["Open Definian registration", "Scan the QR or open the dedicated registration link."],
+  ["Enter your email", "Use the email address you will use with Definian."],
+  ["Create an account or sign in", "Choose the secure Auth0 action that matches your account."],
+  ["Verify and continue", "Verify your email when prompted, then continue into Definian Signal."],
+  ["Install Definian Inspection", "Use the iPhone, iPad, or Android store link below and sign in with the same verified email."],
 ];
 
 function stepRow([title, detail], index) {
@@ -131,7 +131,7 @@ const definition = {
             widths: [166],
             body: [[{
               stack: [
-                { text: "SCAN TO SIGN IN OR SIGN UP", alignment: "center", bold: true, fontSize: 9, color: colors.navy, margin: [0, 0, 0, 8] },
+                { text: "SCAN TO GET STARTED", alignment: "center", bold: true, fontSize: 9, color: colors.navy, margin: [0, 0, 0, 8] },
                 { qr: portalAccessUrl, fit: 150, eccLevel: "M", foreground: colors.navy, background: colors.white, alignment: "center" },
                 { text: "Definian Inspection", alignment: "center", bold: true, fontSize: 9, color: colors.ink, margin: [0, 8, 0, 0] },
               ],
@@ -165,7 +165,7 @@ const definition = {
       table: {
         widths: ["*"],
         body: [[{
-          text: `Safe to print and post: the QR code contains only ${portalAccessUrl}. This dedicated URL bypasses the embedded Signal page and opens secure authentication at ${secureLoginDomain}; the QR contains no employee name, email, password, invitation, or permission.`,
+          text: `Safe to print and post: the QR code contains only ${portalAccessUrl}. The page collects the user's email before opening secure authentication at ${secureLoginDomain}; the QR contains no employee name, email, password, invitation, or permission.`,
           color: colors.navy,
           bold: true,
           fontSize: 8.8,
@@ -207,7 +207,7 @@ const definition = {
   footer: {
     columns: [
       { width: "*", text: "Definian Inspection" },
-      { width: "auto", text: "Quick start - Revision 5" },
+      { width: "auto", text: "Quick start - Revision 6" },
     ],
     color: "#708097",
     fontSize: 7.5,

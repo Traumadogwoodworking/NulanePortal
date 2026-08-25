@@ -2,13 +2,15 @@ import Image from "next/image";
 import { publicBranding } from "@/lib/publicBranding";
 
 const portalAccessUrl = "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start";
+const appStoreUrl = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
+const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
 
 const steps = [
-  ["Scan or open secure login", "The dedicated start link bypasses the embedded Signal page and opens Definian's secure login."],
-  ["Sign in or create your account", "Existing users sign in. New users choose Sign up and use their work email."],
-  ["Open the portal", "After verification, sign in and return to the Definian home page."],
-  ["Install Definian Inspection", "Download the Definian app for iPhone, iPad, or Android using the verified store links below."],
-  ["Use the same email", "Sign in to Definian Inspection with the same verified account you created in the portal."],
+  ["Open Definian registration", "Scan the QR or open the dedicated registration link."],
+  ["Enter your email", "Use the email address you will use with Definian."],
+  ["Create an account or sign in", "Choose the secure Auth0 action that matches your account."],
+  ["Verify and continue", "Verify your email when prompted, then continue into Definian Signal."],
+  ["Install Definian Inspection", "Use the iPhone, iPad, or Android link and sign in with the same verified email."],
 ] as const;
 
 export function DefinianQuickStart({ embedded = false }: { embedded?: boolean }) {
@@ -44,12 +46,12 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
               />
             </div>
             <div>
-              <h2 className="text-2xl font-black">Scan to sign in or sign up</h2>
+              <h2 className="text-2xl font-black">Scan to get started</h2>
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                The QR contains only the dedicated Definian start URL. It bypasses the embedded Signal page and contains no name, email, password, or invitation.
+                The QR contains only the dedicated Definian start URL. The registration page collects your email before secure authentication and contains no name, email, password, or invitation in the QR.
               </p>
               <a href={portalAccessUrl} className="mt-5 inline-flex rounded-xl bg-[#00ab63] px-5 py-3 text-sm font-black text-white transition hover:bg-[#008f53]">
-                Open secure login
+                Open Definian registration
               </a>
               <p className="mt-3 break-all text-xs font-semibold text-[#0d2c71]">{portalAccessUrl}</p>
             </div>
@@ -70,17 +72,17 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
           </ol>
 
           <a
-            href="/resources/definian/definian-inspection-quick-start.pdf?v=5"
+            href="/resources/definian/definian-inspection-quick-start.pdf?v=6"
             className="mt-7 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:bg-slate-50"
           >
             Download printable quick-start PDF
           </a>
 
           <div className="mt-7 grid gap-3 sm:grid-cols-2">
-            <a href={publicBranding.appStoreUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-slate-800">
+            <a href={appStoreUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-slate-800">
               Install Definian for iPhone or iPad
             </a>
-            <a href={publicBranding.googlePlayUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-slate-800">
+            <a href={googlePlayUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-slate-800">
               Install Definian for Android
             </a>
           </div>

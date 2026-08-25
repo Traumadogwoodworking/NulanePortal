@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, LogIn, RotateCcw, UserPlus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, LogIn, RotateCcw, UserPlus } from "lucide-react";
 import { FacilityStartupSteps } from "@/components/facilities/FacilityStartupSteps";
+import { RegistrationInstallLinks, RegistrationPageFrame } from "@/components/registration/RegistrationPageFrame";
 import { withPortalBasePath } from "@/lib/config";
 import { publicBranding } from "@/lib/publicBranding";
 import {
@@ -205,16 +205,11 @@ export function FacilityJoinClient() {
   const closedSession = session?.status === "expired" || session?.status === "failed" || session?.status === "cancelled";
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950 sm:py-12">
-      <div className="mx-auto max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl">
-        <header className="bg-slate-950 px-6 py-7 text-white sm:px-10">
-          <Image src={publicBranding.logoPath} alt={publicBranding.appName} width={240} height={48} priority className="h-10 w-auto object-contain" />
-          <p className="mt-6 text-xs font-black uppercase tracking-[0.25em] text-slate-400">Facility Registration</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Join {displayName}</h1>
-          {session?.organizationName ? <p className="mt-2 text-sm font-semibold text-slate-300">{session.organizationName}</p> : null}
-        </header>
-
-        <div className="space-y-6 p-6 sm:p-10">
+    <RegistrationPageFrame
+      eyebrow="Facility Registration"
+      title={`Join ${displayName}`}
+      subtitle={session?.organizationName}
+    >
           {loading ? (
             <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-600"><Loader2 className="h-5 w-5 animate-spin" /> Starting secure facility registration…</div>
           ) : null}
@@ -313,13 +308,13 @@ export function FacilityJoinClient() {
             <div className="mt-3"><FacilityStartupSteps /></div>
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2">
-            <a href={iosUrl} onClick={() => recordClick("registration.install_clicked", "ios")} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900">Install for iPhone <ExternalLink className="h-4 w-4" /></a>
-            <a href={androidUrl} onClick={() => recordClick("registration.install_clicked", "android")} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900">Install for Android <ExternalLink className="h-4 w-4" /></a>
+          <RegistrationInstallLinks
+            iosUrl={iosUrl}
+            androidUrl={androidUrl}
+            onInstall={(platform) => recordClick("registration.install_clicked", platform)}
+          >
             {enrollment ? <a href="definian://" onClick={() => recordClick("registration.app_open_clicked", "app")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white sm:col-span-2">Open {publicBranding.appName}</a> : null}
-          </section>
-        </div>
-      </div>
-    </main>
+          </RegistrationInstallLinks>
+    </RegistrationPageFrame>
   );
 }
