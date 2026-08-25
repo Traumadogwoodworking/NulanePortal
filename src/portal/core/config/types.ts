@@ -18,6 +18,7 @@ export interface PortalBrandPreset {
   portalBrandColor: string;
   portalBrandAccentColor: string;
   portalBrandLightColor: string;
+  auth0Domain?: string;
   auth0ClientId: string;
   auth0OrganizationId: string;
   sidebarBgEnforced: string;

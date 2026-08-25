@@ -7,8 +7,9 @@ import { definianProduct, inspectionTracProduct } from "@/portal/products";
 describe("portal product structure", () => {
   it("keeps Definian identity and verified Auth0 organization in its product config", () => {
     expect(definianProduct.id).toBe("definianInspection");
-    expect(definianProduct.branding.auth0ClientId).toBe("WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc");
-    expect(definianProduct.branding.auth0OrganizationId).toBe("org_GRicZ7Jqg1r3aerr");
+    expect(definianProduct.branding.auth0Domain).toBe("definian-inspection.us.auth0.com");
+    expect(definianProduct.branding.auth0ClientId).toBe("YRnnNwl2hEYbYIe4jSIYNiE457nEWek4");
+    expect(definianProduct.branding.auth0OrganizationId).toBe("org_Da9cTbhrMc9e5tdw");
     expect(definianProduct.publicBranding.portalUrl).toBe("/login");
   });
 
@@ -16,6 +17,9 @@ describe("portal product structure", () => {
     expect(inspectionTracProduct.id).toBe("inspectionTrac");
     expect(inspectionTracProduct.branding.auth0ClientId).not.toBe(
       definianProduct.branding.auth0ClientId,
+    );
+    expect(inspectionTracProduct.branding.auth0Domain).not.toBe(
+      definianProduct.branding.auth0Domain,
     );
     expect(inspectionTracProduct.branding.auth0OrganizationId).not.toBe(
       definianProduct.branding.auth0OrganizationId,

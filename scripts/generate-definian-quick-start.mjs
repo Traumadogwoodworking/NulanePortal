@@ -10,7 +10,8 @@ const sharp = require("sharp");
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, "..");
 
-const signupUrl = "https://vercel-portal-exact.vercel.app/signup/";
+const signupUrl = "https://www.definian.com/signal";
+const secureLoginDomain = "definian-inspection.us.auth0.com";
 const appStoreUrl = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
 const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
 const supportEmail = "support@definian.com";
@@ -46,8 +47,8 @@ const colors = {
 };
 
 const steps = [
-  ["Scan or open the signup link", "Use the QR code or the permanent Definian signup URL."],
-  ["Create your account", "Use your work email and complete Auth0 email verification when prompted."],
+  ["Scan or open the Definian portal", "Use the QR code, then choose Sign Up in the Definian portal."],
+  ["Create your account", "Use your work email on Definian's secure sign-in page, then complete email verification."],
   ["Open the Definian portal", "After verification, sign in and return to the Definian home page."],
   ["Install Definian Inspection", "Use the verified iPhone, iPad, or Android store link below."],
   ["Use the same verified email", "Sign in to the Definian app with the same account you created in the portal."],
@@ -130,7 +131,7 @@ const definition = {
             widths: [166],
             body: [[{
               stack: [
-                { text: "SCAN TO SIGN UP", alignment: "center", bold: true, fontSize: 9, color: colors.navy, margin: [0, 0, 0, 8] },
+                { text: "SCAN TO OPEN DEFINIAN", alignment: "center", bold: true, fontSize: 9, color: colors.navy, margin: [0, 0, 0, 8] },
                 { qr: signupUrl, fit: 150, eccLevel: "M", foreground: colors.navy, background: colors.white, alignment: "center" },
                 { text: "Definian Inspection", alignment: "center", bold: true, fontSize: 9, color: colors.ink, margin: [0, 8, 0, 0] },
               ],
@@ -164,7 +165,7 @@ const definition = {
       table: {
         widths: ["*"],
         body: [[{
-          text: "Safe to print and post: the QR code contains only the permanent Definian signup URL. It contains no employee name, email, password, invitation, or permission.",
+          text: `Safe to print and post: the QR code contains only ${signupUrl}. Secure account creation continues at ${secureLoginDomain}; the QR contains no employee name, email, password, invitation, or permission.`,
           color: colors.navy,
           bold: true,
           fontSize: 8.8,
@@ -206,7 +207,7 @@ const definition = {
   footer: {
     columns: [
       { width: "*", text: "Definian Inspection" },
-      { width: "auto", text: "Quick start - Revision 3" },
+      { width: "auto", text: "Quick start - Revision 4" },
     ],
     color: "#708097",
     fontSize: 7.5,

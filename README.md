@@ -45,12 +45,13 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_API_BASE_URL` | Ignored by the Definian build; retained only for compatibility with sibling portal profiles | Definian is pinned to `https://api.nulanesystems.com/api` |
 | `NEXT_PUBLIC_DOCUFIT_BASE` | Base for DocuFit health and future contract endpoints | `/docufit` |
 | `NEXT_PUBLIC_DOCUDENT_EMBED_URL` | Absolute URL to the Flutter web bundle embedded on `/docudent` | `https://nulanesystems.com/portal/app/index.html` |
-| `NEXT_PUBLIC_AUTH0_DOMAIN` | Auth0 tenant domain that backs the portal SSO | `nulanesystems.us.auth0.com` |
-| `NEXT_PUBLIC_AUTH0_CLIENT_ID` | Auth0 application client ID used when redirecting to login | `WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc` |
+| `NEXT_PUBLIC_AUTH0_DOMAIN` | Auth0 tenant domain that backs the portal SSO | `definian-inspection.us.auth0.com` |
+| `NEXT_PUBLIC_AUTH0_CLIENT_ID` | Auth0 application client ID used when redirecting to login | `YRnnNwl2hEYbYIe4jSIYNiE457nEWek4` |
+| `NEXT_PUBLIC_AUTH0_ORGANIZATION_ID` | Required Definian organization context | `org_Da9cTbhrMc9e5tdw` |
 | `NEXT_PUBLIC_AUTH0_AUDIENCE` | Auth0 audience registered for this portal | `https://api.nulanesystems.com` |
 | `NEXT_PUBLIC_AUTH0_REDIRECT_URI` | Auth0 callback target | `<portal-origin>/auth/callback/` |
 
-The Auth0 values above mirror the legacy portal; override them via `.env.local` when you run staging or local builds that point at a different Auth0 tenant or redirect URI.
+The Definian identity has moved from the legacy `nulanesystems.us.auth0.com` tenant and its `WkYT...QsPc` client to `definian-inspection.us.auth0.com` and the Definian `YRnn...Wek4` client. Other portal products retain their own tenant/client configuration.
 
 The portal validates `NEXT_PUBLIC_DOCUDENT_EMBED_URL` at runtime and surfaces guidance when it is missing or malformed.
 
@@ -73,12 +74,12 @@ Recurring local development is owned by the `next-site` Process Compose runner. 
 
 Definian uses a top-level Auth0 Authorization Code + PKCE redirect from `/login/` and completes the callback at `/auth/callback/`. The verified Definian Auth0 organization is required so Universal Login applies the Definian organization context and branding.
 
-- Allowed Callback URLs: `http://localhost:3000/auth/callback/`, `https://vercel-portal-exact.vercel.app/auth/callback/`
-- Allowed Logout URLs: `http://localhost:3000/`, `https://vercel-portal-exact.vercel.app/`
-- Allowed Web Origins: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`
-- Allowed Origins / CORS: `http://localhost:3000` when the API tenant enforces browser origins for local API calls
+- Allowed Callback URLs: `http://localhost:3000/auth/callback/`, `https://vercel-portal-exact.vercel.app/auth/callback/`, `https://signal.definian.com/auth/callback/`
+- Allowed Logout URLs: `http://localhost:3000/`, `https://vercel-portal-exact.vercel.app/`, `https://www.definian.com/signal`, `https://signal.definian.com/`
+- Allowed Web Origins: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`, `https://signal.definian.com`
+- Allowed Origins / CORS: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`, `https://signal.definian.com`
 
-`https://www.definian.com/signal` remains the public entry point, but Universal Login cannot run reliably inside its iframe. When authentication is required, the portal deliberately navigates the top-level window to Auth0 and returns to `https://vercel-portal-exact.vercel.app/auth/callback/`, then continues on the Vercel-hosted portal.
+`https://www.definian.com/signal` remains the public entry point and the onboarding QR target. Universal Login cannot run reliably inside its iframe, so authentication opens at `https://definian-inspection.us.auth0.com` and returns to the portal callback before continuing.
 
 An invalid or backend-rejected token is cleared before Universal Login is opened again. Existing Auth0 SSO sessions are allowed to continue without forcing credential entry.
 

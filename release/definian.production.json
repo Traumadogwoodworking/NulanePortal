@@ -15,11 +15,11 @@
   "browserApiBaseUrl": "https://api.nulanesystems.com/api",
   "apiUpstream": "https://api.nulanesystems.com/api/",
   "auth0": {
-    "domain": "nulanesystems.us.auth0.com",
-    "clientId": "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc",
+    "domain": "definian-inspection.us.auth0.com",
+    "clientId": "YRnnNwl2hEYbYIe4jSIYNiE457nEWek4",
     "audience": "https://api.nulanesystems.com",
     "organizationRequired": true,
-    "organizationId": "org_GRicZ7Jqg1r3aerr",
+    "organizationId": "org_Da9cTbhrMc9e5tdw",
     "callbackUrl": "https://vercel-portal-exact.vercel.app/auth/callback/",
     "canonicalCallbackUrl": "https://signal.definian.com/auth/callback/",
     "logoutUrl": "https://www.definian.com/signal"

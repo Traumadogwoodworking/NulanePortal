@@ -26,9 +26,9 @@ const loginSource = readFileSync(resolve(root, "src/app/login/page.tsx"), "utf8"
 const nextConfigSource = readFileSync(resolve(root, "next.config.mjs"), "utf8");
 
 for (const [label, source, expected] of [
+  ["branding Auth0 domain", brandingSource, manifest.auth0.domain],
   ["branding client ID", brandingSource, manifest.auth0.clientId],
   ["branding organization", brandingSource, manifest.auth0.organizationId],
-  ["Auth0 domain", authSource, manifest.auth0.domain],
   ["Auth0 audience", authSource, manifest.auth0.audience],
 ]) {
   if (!source.includes(expected)) failures.push(`${label} is not pinned in the expected source boundary`);

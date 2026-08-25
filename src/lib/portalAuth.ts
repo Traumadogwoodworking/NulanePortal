@@ -346,8 +346,8 @@ export function buildAuthRedirectUri(origin: string, redirectOverride = "", redi
 
 function buildAuthConfig(): AuthConfig {
   ensureBrowserEnv();
-  const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
   const preset = getPortalBrandingPreset(ACTIVE_PORTAL_BRANDING);
+  const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || preset.auth0Domain || DEFAULT_AUTH0_DOMAIN).trim();
   const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || preset.auth0ClientId || DEFAULT_AUTH0_CLIENT_ID).trim();
   const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || preset.auth0OrganizationId || DEFAULT_AUTH0_ORGANIZATION_ID).trim();
   const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || DEFAULT_AUTH0_AUDIENCE).trim();

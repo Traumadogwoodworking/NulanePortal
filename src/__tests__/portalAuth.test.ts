@@ -196,7 +196,7 @@ describe("authenticateEmbeddedPortal", () => {
       expect.objectContaining({
         authorizationParams: expect.objectContaining({
           audience: "https://api.nulanesystems.com",
-          organization: "org_GRicZ7Jqg1r3aerr",
+          organization: "org_Da9cTbhrMc9e5tdw",
         }),
       }),
       { popup },
@@ -241,7 +241,7 @@ describe("startFacilityRegistrationAuth", () => {
       expect.objectContaining({
         appState: { returnTo: "/join/?enrollment=opaque-session-token" },
         authorizationParams: expect.objectContaining({
-          organization: "org_GRicZ7Jqg1r3aerr",
+          organization: "org_Da9cTbhrMc9e5tdw",
           login_hint: "person@example.com",
           screen_hint: "signup",
         }),
