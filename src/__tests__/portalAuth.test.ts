@@ -76,6 +76,21 @@ describe("getPortalAccessToken", () => {
 });
 
 describe("completeAuth0Callback", () => {
+  it("keeps the registration destination authoritative over a generic callback appState", async () => {
+    window.history.replaceState({}, "", "/auth/callback/?code=present&state=present");
+    window.sessionStorage.setItem(
+      "portal_facility_registration_return_to",
+      "https://www.definian.com/signal",
+    );
+    window.sessionStorage.setItem("portal_login_return_to", "https://www.definian.com/signal");
+    auth0Mocks.handleRedirectCallback.mockResolvedValue({ appState: { returnTo: "/home/" } });
+    auth0Mocks.getTokenSilently.mockResolvedValue("callback-token");
+    const { completeAuth0Callback } = await importPortalAuth();
+
+    await expect(completeAuth0Callback()).resolves.toBe("https://www.definian.com/signal");
+    expect(window.sessionStorage.getItem("portal_facility_registration_return_to")).toBeNull();
+  });
+
   it("guards concurrent callback completion with one Auth0 callback exchange", async () => {
     window.history.replaceState({}, "", "/auth/callback/?code=present&state=present");
     auth0Mocks.isAuthenticated.mockResolvedValue(true);
@@ -246,6 +261,9 @@ describe("startFacilityRegistrationAuth", () => {
           screen_hint: "signup",
         }),
       })
+    );
+    expect(window.sessionStorage.getItem("portal_facility_registration_return_to")).toBe(
+      "/join/?enrollment=opaque-session-token",
     );
   });
 });

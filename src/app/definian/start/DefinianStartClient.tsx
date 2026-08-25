@@ -78,7 +78,6 @@ export function DefinianStartClient() {
       bridgeParams.get("returnTo") || DEFINIAN_SIGNAL_RETURN_URL,
     );
     window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
-    setEmail(bridgedEmail);
     void launchAuth(bridgedEmail, action === "signup", bridgedReturnTo);
   }, [launchAuth]);
 

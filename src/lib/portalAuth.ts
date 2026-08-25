@@ -30,6 +30,7 @@ const FRESH_CALLBACK_STORAGE_KEY = "portal_auth_callback_completed_at";
 const AUTH_FLOW_ID_STORAGE_KEY = "portal_auth_flow_id";
 const LOGIN_STARTED_AT_STORAGE_KEY = "portal_auth_login_started_at";
 const LOGIN_ACTION_STORAGE_KEY = "portal_auth_login_action";
+const FACILITY_REGISTRATION_RETURN_TO_STORAGE_KEY = "portal_facility_registration_return_to";
 
 type Auth0Client = Auth0SpaClient;
 
@@ -615,6 +616,14 @@ async function completeAuth0CallbackOnce(): Promise<string> {
         return "";
       }
     })().trim();
+  const facilityRegistrationReturnTo =
+    (() => {
+      try {
+        return window.sessionStorage.getItem(FACILITY_REGISTRATION_RETURN_TO_STORAGE_KEY) || "";
+      } catch {
+        return "";
+      }
+    })().trim();
   if (storedReturnTo) {
     try {
       window.sessionStorage.removeItem("portal_login_return_to");
@@ -622,7 +631,16 @@ async function completeAuth0CallbackOnce(): Promise<string> {
       console.warn("[Auth0] unable to clear stored returnTo", error);
     }
   }
-  const destination = resolveSafePortalReturnTo(returnTo || storedReturnTo);
+  if (facilityRegistrationReturnTo) {
+    try {
+      window.sessionStorage.removeItem(FACILITY_REGISTRATION_RETURN_TO_STORAGE_KEY);
+    } catch (error) {
+      console.warn("[Auth0] unable to clear stored registration returnTo", error);
+    }
+  }
+  const destination = resolveSafePortalReturnTo(
+    facilityRegistrationReturnTo || returnTo || storedReturnTo,
+  );
   try {
     const token = await waitForToken(
       client.getTokenSilently({
@@ -909,7 +927,7 @@ export function clearStalePortalSession(reason = "stale_session") {
 
 async function performAuth0LoginRedirect(
   returnTo?: string,
-  options: { signup?: boolean; loginHint?: string } = {}
+  options: { signup?: boolean; loginHint?: string; facilityRegistration?: boolean } = {}
 ): Promise<never> {
   logAuthFlow("redirectToAuth0Login", {
     reason: "explicit_login_redirect",
@@ -938,6 +956,11 @@ async function performAuth0LoginRedirect(
       window.sessionStorage.setItem("portal_login_return_to", safeReturnTo);
       window.sessionStorage.setItem(LOGIN_ACTION_STORAGE_KEY, options.signup ? "signup" : "login");
       window.sessionStorage.setItem(LOGIN_STARTED_AT_STORAGE_KEY, String(Date.now()));
+      if (options.facilityRegistration) {
+        window.sessionStorage.setItem(FACILITY_REGISTRATION_RETURN_TO_STORAGE_KEY, safeReturnTo);
+      } else {
+        window.sessionStorage.removeItem(FACILITY_REGISTRATION_RETURN_TO_STORAGE_KEY);
+      }
     } catch (error) {
       console.warn("[Auth0] unable to persist returnTo", error);
     }
@@ -1035,6 +1058,7 @@ export async function startFacilityRegistrationAuth(
   loginRedirectPromise = performAuth0LoginRedirect(safeReturnTo, {
     signup: options.signup,
     loginHint: email,
+    facilityRegistration: true,
   }).catch((error) => {
     if (!(error instanceof AuthRedirectError)) {
       loginRedirectPromise = null;
