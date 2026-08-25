@@ -10,7 +10,7 @@ const sharp = require("sharp");
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, "..");
 
-const signupUrl = "https://www.definian.com/signal";
+const portalAccessUrl = "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start";
 const secureLoginDomain = "definian-inspection.us.auth0.com";
 const appStoreUrl = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
 const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
@@ -47,8 +47,8 @@ const colors = {
 };
 
 const steps = [
-  ["Scan or open the Definian portal", "Use the QR code, then choose Sign Up in the Definian portal."],
-  ["Create your account", "Use your work email on Definian's secure sign-in page, then complete email verification."],
+  ["Scan or open secure login", "The dedicated start link bypasses the embedded portal and opens Definian's secure Auth0 login."],
+  ["Sign in or create your account", "Existing users sign in. New users choose Sign up and use their work email."],
   ["Open the Definian portal", "After verification, sign in and return to the Definian home page."],
   ["Install Definian Inspection", "Use the verified iPhone, iPad, or Android store link below."],
   ["Use the same verified email", "Sign in to the Definian app with the same account you created in the portal."],
@@ -99,8 +99,8 @@ function stepRow([title, detail], index) {
 fs.mkdirSync(outputDir, { recursive: true });
 fs.mkdirSync(tempDir, { recursive: true });
 await Promise.all([
-  QRCode.toFile(qrPngPath, signupUrl, { width: 900, margin: 4, errorCorrectionLevel: "M", color: { dark: colors.navy, light: colors.white } }),
-  QRCode.toFile(qrSvgPath, signupUrl, { type: "svg", margin: 4, errorCorrectionLevel: "M", color: { dark: colors.navy, light: colors.white } }),
+  QRCode.toFile(qrPngPath, portalAccessUrl, { width: 900, margin: 4, errorCorrectionLevel: "M", color: { dark: colors.navy, light: colors.white } }),
+  QRCode.toFile(qrSvgPath, portalAccessUrl, { type: "svg", margin: 4, errorCorrectionLevel: "M", color: { dark: colors.navy, light: colors.white } }),
   sharp(logoSvgPath).resize({ width: 960 }).png().toFile(logoPngPath),
 ]);
 
@@ -131,8 +131,8 @@ const definition = {
             widths: [166],
             body: [[{
               stack: [
-                { text: "SCAN TO OPEN DEFINIAN", alignment: "center", bold: true, fontSize: 9, color: colors.navy, margin: [0, 0, 0, 8] },
-                { qr: signupUrl, fit: 150, eccLevel: "M", foreground: colors.navy, background: colors.white, alignment: "center" },
+                { text: "SCAN TO SIGN IN OR SIGN UP", alignment: "center", bold: true, fontSize: 9, color: colors.navy, margin: [0, 0, 0, 8] },
+                { qr: portalAccessUrl, fit: 150, eccLevel: "M", foreground: colors.navy, background: colors.white, alignment: "center" },
                 { text: "Definian Inspection", alignment: "center", bold: true, fontSize: 9, color: colors.ink, margin: [0, 8, 0, 0] },
               ],
               fillColor: colors.white,
@@ -165,7 +165,7 @@ const definition = {
       table: {
         widths: ["*"],
         body: [[{
-          text: `Safe to print and post: the QR code contains only ${signupUrl}. Secure account creation continues at ${secureLoginDomain}; the QR contains no employee name, email, password, invitation, or permission.`,
+          text: `Safe to print and post: the QR code contains only ${portalAccessUrl}. This dedicated URL bypasses the embedded Signal page and opens secure authentication at ${secureLoginDomain}; the QR contains no employee name, email, password, invitation, or permission.`,
           color: colors.navy,
           bold: true,
           fontSize: 8.8,
@@ -197,7 +197,7 @@ const definition = {
           stack: [
             { text: "Need help?", bold: true, fontSize: 11, color: colors.ink, margin: [0, 0, 0, 5] },
             { text: supportEmail, link: `mailto:${supportEmail}`, color: colors.navy, fontSize: 9 },
-            { text: signupUrl, link: signupUrl, color: colors.slate, fontSize: 7.5, margin: [0, 5, 0, 0] },
+            { text: portalAccessUrl, link: portalAccessUrl, color: colors.slate, fontSize: 7.5, margin: [0, 5, 0, 0] },
           ],
         },
       ],
@@ -207,7 +207,7 @@ const definition = {
   footer: {
     columns: [
       { width: "*", text: "Definian Inspection" },
-      { width: "auto", text: "Quick start - Revision 4" },
+      { width: "auto", text: "Quick start - Revision 5" },
     ],
     color: "#708097",
     fontSize: 7.5,
@@ -228,4 +228,4 @@ await new Promise((resolve, reject) => {
   pdf.on("error", reject);
 });
 
-console.log(JSON.stringify({ pdfPath, qrPngPath, qrSvgPath, signupUrl }, null, 2));
+console.log(JSON.stringify({ pdfPath, qrPngPath, qrSvgPath, portalAccessUrl }, null, 2));

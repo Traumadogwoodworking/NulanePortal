@@ -1,11 +1,11 @@
 import Image from "next/image";
 import { publicBranding } from "@/lib/publicBranding";
 
-const signupUrl = "https://vercel-portal-exact.vercel.app/signup/";
+const portalAccessUrl = "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start";
 
 const steps = [
-  ["Scan or open the signup link", "Use the QR code or the secure Definian signup button below."],
-  ["Create your account", "Use your work email and complete Auth0 email verification when prompted."],
+  ["Scan or open secure login", "The dedicated start link bypasses the embedded Signal page and opens Definian's secure login."],
+  ["Sign in or create your account", "Existing users sign in. New users choose Sign up and use their work email."],
   ["Open the portal", "After verification, sign in and return to the Definian home page."],
   ["Install Definian Inspection", "Download the Definian app for iPhone, iPad, or Android using the verified store links below."],
   ["Use the same email", "Sign in to Definian Inspection with the same verified account you created in the portal."],
@@ -44,14 +44,14 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
               />
             </div>
             <div>
-              <h2 className="text-2xl font-black">Scan to create your account</h2>
+              <h2 className="text-2xl font-black">Scan to sign in or sign up</h2>
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                The QR contains only the permanent Definian signup URL. It does not contain a name, email, password, or invitation.
+                The QR contains only the dedicated Definian start URL. It bypasses the embedded Signal page and contains no name, email, password, or invitation.
               </p>
-              <a href="/signup/" className="mt-5 inline-flex rounded-xl bg-[#00ab63] px-5 py-3 text-sm font-black text-white transition hover:bg-[#008f53]">
-                Open secure signup
+              <a href={portalAccessUrl} className="mt-5 inline-flex rounded-xl bg-[#00ab63] px-5 py-3 text-sm font-black text-white transition hover:bg-[#008f53]">
+                Open secure login
               </a>
-              <p className="mt-3 break-all text-xs font-semibold text-[#0d2c71]">{signupUrl}</p>
+              <p className="mt-3 break-all text-xs font-semibold text-[#0d2c71]">{portalAccessUrl}</p>
             </div>
           </div>
 
@@ -70,7 +70,7 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
           </ol>
 
           <a
-            href="/resources/definian/definian-inspection-quick-start.pdf?v=3"
+            href="/resources/definian/definian-inspection-quick-start.pdf?v=5"
             className="mt-7 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:bg-slate-50"
           >
             Download printable quick-start PDF

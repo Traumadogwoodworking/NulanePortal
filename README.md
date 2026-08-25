@@ -79,7 +79,7 @@ Definian uses a top-level Auth0 Authorization Code + PKCE redirect from `/login/
 - Allowed Web Origins: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`, `https://signal.definian.com`
 - Allowed Origins / CORS: `http://localhost:3000`, `https://vercel-portal-exact.vercel.app`, `https://signal.definian.com`
 
-`https://www.definian.com/signal` remains the public entry point and the onboarding QR target. Universal Login cannot run reliably inside its iframe, so authentication opens at `https://definian-inspection.us.auth0.com` and returns to the portal callback before continuing.
+`https://www.definian.com/signal` remains the embedded portal page. The onboarding QR deliberately uses the separate stable production route `https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start`. That route performs a server-side redirect to `/login/?returnTo=https%3A%2F%2Fwww.definian.com%2Fsignal`, which creates a fresh Universal Login request at `https://definian-inspection.us.auth0.com` and returns the completed session to the embedded Signal page. New users choose **Sign up** on the Auth0 screen; existing users sign in.
 
 An invalid or backend-rejected token is cleared before Universal Login is opened again. Existing Auth0 SSO sessions are allowed to continue without forcing credential entry.
 

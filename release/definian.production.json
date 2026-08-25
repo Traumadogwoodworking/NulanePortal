@@ -4,6 +4,7 @@
   "environment": "production",
   "brandingPreset": "definianInspection",
   "publicEntryUrl": "https://www.definian.com/signal",
+  "onboardingUrl": "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start",
   "portalUrl": "https://signal.definian.com",
   "compatibilityPortalUrl": "https://vercel-portal-exact.vercel.app",
   "embeddedPortalUrl": "https://signal.definian.com/embed/definian-signal/",

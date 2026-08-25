@@ -51,7 +51,7 @@ describe("Definian signup quick start", () => {
     );
     expect(screen.getByRole("link", { name: "Download printable quick-start PDF" })).toHaveAttribute(
       "href",
-      "/resources/definian/definian-inspection-quick-start.pdf?v=3",
+      "/resources/definian/definian-inspection-quick-start.pdf?v=5",
     );
     expect(document.body).not.toHaveTextContent(/Inspection-Trac/i);
   });
