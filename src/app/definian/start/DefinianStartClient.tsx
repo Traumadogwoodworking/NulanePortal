@@ -13,8 +13,8 @@ import {
 
 export const DEFINIAN_SIGNAL_RETURN_URL = "https://www.definian.com/signal";
 export const DEFINIAN_AUTH_BOOTSTRAP_ORIGIN = "https://vercel-portal-exact.vercel.app";
-export const DEFINIAN_IOS_APP_URL = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
-export const DEFINIAN_ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
+export const DEFINIAN_IOS_APP_URL = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
+export const DEFINIAN_ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
 
 const DEFINIAN_STARTUP_STEPS: readonly RegistrationStartupStep[] = [
   { title: "Open this registration page", detail: "Scan the QR or open the Definian registration link." },
@@ -103,6 +103,7 @@ export function DefinianStartClient() {
       subtitle="Definian Inspection"
       headerClassName="bg-[#0d2c71]"
       eyebrowClassName="text-[#8ae1b8]"
+      logoShellClassName="inline-flex rounded-xl border-2 border-white bg-white px-4 py-3 shadow-sm"
     >
       <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
         <h2 className="text-xl font-black">Secure your account</h2>

@@ -2,8 +2,8 @@ import Image from "next/image";
 import { publicBranding } from "@/lib/publicBranding";
 
 const portalAccessUrl = "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start";
-const appStoreUrl = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
-const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
+const appStoreUrl = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
+const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
 
 const steps = [
   ["Open Definian registration", "Scan the QR or open the dedicated registration link."],
@@ -72,7 +72,7 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
           </ol>
 
           <a
-            href="/resources/definian/definian-inspection-quick-start.pdf?v=6"
+            href="/resources/definian/definian-inspection-quick-start.pdf?v=7"
             className="mt-7 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:bg-slate-50"
           >
             Download printable quick-start PDF

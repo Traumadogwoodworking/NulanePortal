@@ -12,8 +12,8 @@ const projectRoot = path.resolve(scriptDir, "..");
 
 const portalAccessUrl = "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/definian/start";
 const secureLoginDomain = "definian-inspection.us.auth0.com";
-const appStoreUrl = "https://apps.apple.com/us/app/inspection-trac/id6774376762";
-const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac";
+const appStoreUrl = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
+const googlePlayUrl = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";
 const supportEmail = "support@definian.com";
 const outputDir = path.join(projectRoot, "public/resources/definian");
 const pdfPath = path.join(outputDir, "definian-inspection-quick-start.pdf");
@@ -207,7 +207,7 @@ const definition = {
   footer: {
     columns: [
       { width: "*", text: "Definian Inspection" },
-      { width: "auto", text: "Quick start - Revision 6" },
+      { width: "auto", text: "Quick start - Revision 7" },
     ],
     color: "#708097",
     fontSize: 7.5,

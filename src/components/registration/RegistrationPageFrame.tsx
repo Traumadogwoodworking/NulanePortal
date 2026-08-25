@@ -10,6 +10,7 @@ export function RegistrationPageFrame({
   children,
   headerClassName = "bg-slate-950",
   eyebrowClassName = "text-slate-400",
+  logoShellClassName,
 }: {
   eyebrow: string;
   title: string;
@@ -17,19 +18,24 @@ export function RegistrationPageFrame({
   children: ReactNode;
   headerClassName?: string;
   eyebrowClassName?: string;
+  logoShellClassName?: string;
 }) {
+  const logo = (
+    <Image
+      src={publicBranding.logoPath}
+      alt={publicBranding.appName}
+      width={240}
+      height={48}
+      priority
+      className="h-10 w-auto object-contain"
+    />
+  );
+
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950 sm:py-12">
       <div className="mx-auto max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl">
         <header className={`${headerClassName} px-6 py-7 text-white sm:px-10`}>
-          <Image
-            src={publicBranding.logoPath}
-            alt={publicBranding.appName}
-            width={240}
-            height={48}
-            priority
-            className="h-10 w-auto object-contain"
-          />
+          {logoShellClassName ? <div className={logoShellClassName}>{logo}</div> : logo}
           <p className={`mt-6 text-xs font-black uppercase tracking-[0.25em] ${eyebrowClassName}`}>
             {eyebrow}
           </p>
