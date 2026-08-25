@@ -68,3 +68,25 @@ nulane-dev logs next-site
 
 Open `http://localhost:3000/`. Do not launch `npm run dev` separately or add a
 second portal process; switch the existing `next-site` profile instead.
+
+## Definian Signal embedded authentication
+
+The production embedded surface is `/embed/definian-signal/` on
+`https://signal.definian.com`. It may be framed only by
+`https://www.definian.com`. Login, signup, callback, and logout routes are
+top-level-only surfaces.
+
+An embedded login, signup, or logout click navigates the top-level browser
+through `/auth/embedded/start`. That server route ignores arbitrary destinations
+and emits only the fixed approved parent return before Auth0 Universal Login
+starts with Authorization Code + PKCE. The Auth0 transaction state carries a
+return destination that is accepted only when
+it is either a same-origin portal path or the exact fixed parent URL
+`https://www.definian.com/signal`. The callback stores the portal token only in
+portal-origin storage, then returns the top-level browser to that parent URL;
+the iframe reloads the authenticated portal without a token in its URL.
+
+Embedded logout uses the same top-level handoff and returns to the exact parent
+URL after clearing the local portal/Auth0 session. The flow does not use
+`postMessage`; if messaging is added later, it must validate `event.origin`
+against the exact Definian parent origin.

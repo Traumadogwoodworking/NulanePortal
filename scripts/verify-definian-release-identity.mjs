@@ -20,8 +20,10 @@ if (manifest.product !== "definian-portal" || manifest.environment !== "producti
 
 const brandingSource = readFileSync(resolve(root, "src/portal/products/definian/config.ts"), "utf8");
 const authSource = readFileSync(resolve(root, "src/lib/portalAuth.ts"), "utf8");
+const embeddedAuthSource = readFileSync(resolve(root, "src/portal/products/definian/auth/embeddedAuth.ts"), "utf8");
 const apiConfigSource = readFileSync(resolve(root, "src/lib/config.ts"), "utf8");
 const loginSource = readFileSync(resolve(root, "src/app/login/page.tsx"), "utf8");
+const nextConfigSource = readFileSync(resolve(root, "next.config.mjs"), "utf8");
 
 for (const [label, source, expected] of [
   ["branding client ID", brandingSource, manifest.auth0.clientId],
@@ -41,6 +43,16 @@ if (!apiConfigSource.includes('const DEFAULT_API_BASE = "https://api.nulanesyste
 if (authSource.includes('prompt: "login"')) {
   failures.push("Auth0 login forces credential entry instead of allowing an existing SSO session");
 }
+for (const [label, expected] of [
+  ["Definian parent origin", new URL(manifest.publicEntryUrl).origin],
+  ["Definian parent path", new URL(manifest.publicEntryUrl).pathname],
+  ["canonical portal origin", manifest.portalUrl],
+]) {
+  if (!embeddedAuthSource.includes(expected)) failures.push(`${label} is not pinned in the product auth contract`);
+}
+if (!nextConfigSource.includes('url.origin === "https://www.definian.com"')) {
+  failures.push("iframe CSP is not restricted to the exact Definian parent origin");
+}
 for (const retiredPath of [
   "src/app/api/auth/embedded-login/route.ts",
   "src/portal/products/definian/auth/EmbeddedLoginPage.tsx",
@@ -58,7 +70,8 @@ if (productionBuild) {
     NEXT_PUBLIC_AUTH0_AUDIENCE: manifest.auth0.audience,
     NEXT_PUBLIC_AUTH0_ORGANIZATION_ID: manifest.auth0.organizationId,
     NEXT_PUBLIC_AUTH0_REDIRECT_URI: manifest.auth0.callbackUrl,
-    NEXT_PUBLIC_AUTH0_REDIRECT_MODE: "fixed"
+    NEXT_PUBLIC_AUTH0_REDIRECT_MODE: "fixed",
+    NEXT_PUBLIC_IFRAME_PARENT_ORIGINS: "https://www.definian.com"
   };
   for (const [key, expected] of Object.entries(expectedEnvironment)) {
     requireEqual(key, process.env[key], expected);
@@ -102,6 +115,8 @@ console.log(JSON.stringify({
     auth0ClientId: manifest.auth0.clientId,
     auth0Audience: manifest.auth0.audience,
     auth0OrganizationId: manifest.auth0.organizationId,
-    auth0CallbackUrl: manifest.auth0.callbackUrl
+    auth0CallbackUrl: manifest.auth0.callbackUrl,
+    auth0CanonicalCallbackUrl: manifest.auth0.canonicalCallbackUrl,
+    embeddedPortalUrl: manifest.embeddedPortalUrl
   }
 }, null, 2));

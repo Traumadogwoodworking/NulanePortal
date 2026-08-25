@@ -254,6 +254,18 @@ describe("buildAuthRedirectUri", () => {
     ).toBe("http://localhost:3000/auth/callback/");
   });
 
+  it("uses the canonical Signal hostname callback even while the legacy fixed override remains configured", async () => {
+    const { buildAuthRedirectUri } = await importPortalAuth();
+
+    expect(
+      buildAuthRedirectUri(
+        "https://signal.definian.com",
+        "https://vercel-portal-exact.vercel.app/auth/callback/",
+        "fixed",
+      ),
+    ).toBe("https://signal.definian.com/auth/callback/");
+  });
+
   it("uses the explicit override only when fixed redirect mode is enabled", async () => {
     const { buildAuthRedirectUri } = await importPortalAuth();
 
@@ -264,6 +276,22 @@ describe("buildAuthRedirectUri", () => {
         "fixed"
       )
     ).toBe("https://inspection-trac.com/auth/callback/");
+  });
+});
+
+describe("resolveSafePortalReturnTo", () => {
+  it("accepts only the exact Definian Signal parent URL as a cross-origin return", async () => {
+    const { resolveSafePortalReturnTo } = await importPortalAuth();
+
+    expect(resolveSafePortalReturnTo("https://www.definian.com/signal")).toBe(
+      "https://www.definian.com/signal",
+    );
+    expect(resolveSafePortalReturnTo("https://www.definian.com/signal/")).toBe(
+      "https://www.definian.com/signal",
+    );
+    expect(resolveSafePortalReturnTo("https://www.definian.com/signal?next=https://evil.example")).toBe("/home/");
+    expect(resolveSafePortalReturnTo("https://www.definian.com.evil.example/signal")).toBe("/home/");
+    expect(resolveSafePortalReturnTo("https://evil.example/")).toBe("/home/");
   });
 });
 

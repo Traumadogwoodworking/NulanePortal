@@ -4,6 +4,11 @@ import {
 } from "@auth0/auth0-spa-js";
 import { ACTIVE_PORTAL_BRANDING, getPortalBrandingPreset } from "@/lib/brandingPresets";
 import { clearPortalCachedStorage } from "@/lib/portalCacheStorage";
+import {
+  DEFINIAN_SIGNAL_PARENT_URL,
+  DEFINIAN_SIGNAL_PORTAL_ORIGIN,
+  resolveDefinianSignalParentReturnTo,
+} from "@/portal/products/definian/auth/embeddedAuth";
 
 const STORAGE_KEYS = {
   token: "portal_token",
@@ -162,25 +167,54 @@ export function buildPortalLoginUrl(returnTo?: string): string {
   return `${DEFAULT_LOGIN_PATH}?${new URLSearchParams({ returnTo: safeReturnTo }).toString()}`;
 }
 
-export function openPortalLogin(returnTo?: string): void {
-  if (!isBrowser()) {
-    return;
-  }
-  const loginUrl = buildPortalLoginUrl(returnTo);
-  logAuthFlow("openPortalLogin", {
-    reason: "embedded_login",
-    redirectTarget: resolveSafePortalReturnTo(returnTo),
+function buildPortalSignupUrl(returnTo?: string): string {
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo);
+  return `/signup?${new URLSearchParams({ returnTo: safeReturnTo }).toString()}`;
+}
+
+function openTopLevelPortalRoute(route: string, returnTo?: string): void {
+  if (!isBrowser()) return;
+  const safeReturnTo = isEmbeddedPortalContext()
+    ? DEFINIAN_SIGNAL_PARENT_URL
+    : resolveSafePortalReturnTo(returnTo);
+  const routeUrl = new URL(route, window.location.origin).toString();
+  logAuthFlow("openTopLevelPortalRoute", {
+    reason: isEmbeddedPortalContext() ? "embedded_auth_handoff" : "top_level_auth_handoff",
+    redirectTarget: safeReturnTo,
+    route: new URL(routeUrl).pathname,
   });
   if (isEmbeddedPortalContext()) {
     try {
-      window.top?.location.assign(loginUrl);
+      window.top?.location.assign(routeUrl);
       return;
     } catch {
-      window.open(loginUrl, "_blank", "noopener,noreferrer");
+      window.open(routeUrl, "_blank", "noopener,noreferrer");
       return;
     }
   }
-  window.location.assign(loginUrl);
+  window.location.assign(routeUrl);
+}
+
+export function openPortalLogin(returnTo?: string): void {
+  const embedded = isEmbeddedPortalContext();
+  const safeReturnTo = embedded
+    ? DEFINIAN_SIGNAL_PARENT_URL
+    : resolveSafePortalReturnTo(returnTo);
+  openTopLevelPortalRoute(
+    embedded ? "/auth/embedded/start?action=login" : buildPortalLoginUrl(safeReturnTo),
+    safeReturnTo,
+  );
+}
+
+export function openPortalSignup(returnTo?: string): void {
+  const embedded = isEmbeddedPortalContext();
+  const safeReturnTo = embedded
+    ? DEFINIAN_SIGNAL_PARENT_URL
+    : resolveSafePortalReturnTo(returnTo);
+  openTopLevelPortalRoute(
+    embedded ? "/auth/embedded/start?action=signup" : buildPortalSignupUrl(safeReturnTo),
+    safeReturnTo,
+  );
 }
 
 function ensureBrowserEnv() {
@@ -238,7 +272,7 @@ export function buildAuthRedirectUri(origin: string, redirectOverride = "", redi
       return false;
     }
   })();
-  if (isLocalOrigin) return derivedRedirectUri;
+  if (isLocalOrigin || normalizedOrigin === DEFINIAN_SIGNAL_PORTAL_ORIGIN) return derivedRedirectUri;
   return redirectOverride.trim() && redirectMode.trim().toLowerCase() === FIXED_REDIRECT_MODE
     ? redirectOverride.trim()
     : derivedRedirectUri;
@@ -272,6 +306,10 @@ export function resolveSafePortalReturnTo(rawReturnTo?: string | null): string {
     return fallback;
   }
   try {
+    const approvedParentReturn = resolveDefinianSignalParentReturnTo(value);
+    if (approvedParentReturn) {
+      return approvedParentReturn;
+    }
     const parsed = new URL(value, window.location.origin);
     if (parsed.origin !== window.location.origin) {
       return fallback;
@@ -876,6 +914,10 @@ export async function redirectToAuth0Login(returnTo?: string): Promise<never> {
 }
 
 export async function startAuth0Signup(returnTo?: string): Promise<never> {
+  if (isEmbeddedPortalContext()) {
+    openPortalSignup(returnTo);
+    throw new AuthRedirectError("Opening secure signup in a top-level window");
+  }
   const safeReturnTo = resolveSafePortalReturnTo(returnTo);
   const redirectKey = `${isBrowser() ? window.location.origin : "server"}:signup:${safeReturnTo}`;
   if (loginRedirectPromise && loginRedirectKey === redirectKey) {
@@ -994,22 +1036,38 @@ export async function logoutPortal(): Promise<void> {
   if (!isBrowser()) {
     return;
   }
+  if (isEmbeddedPortalContext()) {
+    const logoutUrl = new URL("/auth/embedded/start?action=logout", window.location.origin).toString();
+    try {
+      window.top?.location.assign(logoutUrl);
+    } catch {
+      window.open(logoutUrl, "_blank", "noopener,noreferrer");
+    }
+    return;
+  }
+  return finishPortalLogout(window.location.origin || DEFAULT_LOGOUT_RETURN_TO);
+}
+
+export async function finishPortalLogout(returnTo?: string): Promise<void> {
+  clearPortalAuthStorage();
+  if (!isBrowser()) return;
+  const safeReturnTo = resolveSafePortalReturnTo(returnTo || window.location.origin || DEFAULT_LOGOUT_RETURN_TO);
   if (DEBUG_AUTH0) {
     console.debug("[Auth0] starting logout", {
       path: window.location.pathname,
+      returnTo: safeReturnTo,
     });
   }
   try {
     const client = await getAuth0Client();
-    const returnTo = window.location.origin || DEFAULT_LOGOUT_RETURN_TO;
     await client.logout({
       logoutParams: {
-        returnTo,
+        returnTo: safeReturnTo,
       },
     });
   } catch (error) {
     console.warn("[Auth0] logout failed, falling back to local redirect", error);
-    window.location.assign(window.location.origin || DEFAULT_LOGOUT_RETURN_TO);
+    window.location.assign(safeReturnTo);
   }
 }
 

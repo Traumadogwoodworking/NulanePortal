@@ -4,7 +4,9 @@
   "environment": "production",
   "brandingPreset": "definianInspection",
   "publicEntryUrl": "https://www.definian.com/signal",
-  "portalUrl": "https://vercel-portal-exact.vercel.app",
+  "portalUrl": "https://signal.definian.com",
+  "compatibilityPortalUrl": "https://vercel-portal-exact.vercel.app",
+  "embeddedPortalUrl": "https://signal.definian.com/embed/definian-signal/",
   "deploymentTarget": {
     "provider": "vercel",
     "projectName": "vercel-portal-exact",
@@ -19,6 +21,7 @@
     "organizationRequired": true,
     "organizationId": "org_GRicZ7Jqg1r3aerr",
     "callbackUrl": "https://vercel-portal-exact.vercel.app/auth/callback/",
-    "logoutUrl": "https://vercel-portal-exact.vercel.app/"
+    "canonicalCallbackUrl": "https://signal.definian.com/auth/callback/",
+    "logoutUrl": "https://www.definian.com/signal"
   }
 }

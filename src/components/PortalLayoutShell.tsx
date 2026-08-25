@@ -7,7 +7,13 @@ import { AlertStack } from "@/components/AlertStack";
 import { PortalStatusScreen } from "@/components/PortalStatusScreen";
 import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
-import { clearStalePortalSession, openPortalLogin } from "@/lib/portalAuth";
+import {
+  clearStalePortalSession,
+  isEmbeddedPortalContext,
+  openPortalLogin,
+  openPortalSignup,
+} from "@/lib/portalAuth";
+import { DEFINIAN_SIGNAL_PARENT_URL } from "@/portal/products/definian/auth/embeddedAuth";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
@@ -20,6 +26,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const { status, error, refetch, session } = usePortalSession();
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
+  const embedded = isEmbeddedPortalContext();
   const autoLoginKeyRef = useRef<string | null>(null);
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
   const branding = useMemo(
@@ -67,8 +74,11 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
       status === "forbidden" ||
       (status === "success" && session?.portal_access === false);
     const shouldOpenEmbeddedLogin = status === "unauthenticated" || backendRejectedSession;
-    if (!shouldOpenEmbeddedLogin) {
+    if (!shouldOpenEmbeddedLogin || embedded) {
       autoLoginKeyRef.current = null;
+      if (backendRejectedSession) {
+        clearStalePortalSession("definian_backend_rejected_session");
+      }
       return;
     }
     const redirectKey = `${backendRejectedSession ? "logout" : "login"}:${safePathname}`;
@@ -80,7 +90,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
       clearStalePortalSession("definian_backend_rejected_session");
     }
     openPortalLogin(safePathname);
-  }, [safePathname, session?.portal_access, status]);
+  }, [embedded, safePathname, session?.portal_access, status]);
 
   if (
     status === "unauthenticated" ||
@@ -88,7 +98,31 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     status === "forbidden" ||
     (status === "success" && session?.portal_access === false)
   ) {
-    return null;
+    if (!embedded) return null;
+    return (
+      <PortalStatusScreen
+        title="Welcome to Definian Signal"
+        description="Sign in or create an account using Auth0. Secure authentication opens at the top level, then returns you here automatically."
+        actions={
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => openPortalLogin(DEFINIAN_SIGNAL_PARENT_URL)}
+              className="rounded-full bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-100"
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => openPortalSignup(DEFINIAN_SIGNAL_PARENT_URL)}
+              className="rounded-full border border-white/30 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/20"
+            >
+              Create account
+            </button>
+          </div>
+        }
+      />
+    );
   }
   if (status === "transient-error") {
     return (

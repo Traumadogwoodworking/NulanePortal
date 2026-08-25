@@ -27,9 +27,11 @@ const portalAuthMocks = vi.hoisted(() => ({
   clearStalePortalSession: vi.fn(),
   completeAuth0Callback: vi.fn(() => new Promise<string>(() => {})),
   hasPersistedPortalToken: vi.fn(() => false),
+  isEmbeddedPortalContext: vi.fn(() => false),
   logAuthFlow: vi.fn(),
   logoutRejectedPortalSession: vi.fn(),
   openPortalLogin: vi.fn(),
+  openPortalSignup: vi.fn(),
   prepareExplicitAuthRetry: vi.fn(),
   readStoredPortalLoginReturnTo: vi.fn(() => "/join/?enrollment=opaque-session-token"),
   startAuth0Login: vi.fn(),
@@ -56,9 +58,11 @@ vi.mock("@/lib/portalAuth", () => ({
   clearStalePortalSession: portalAuthMocks.clearStalePortalSession,
   completeAuth0Callback: portalAuthMocks.completeAuth0Callback,
   hasPersistedPortalToken: portalAuthMocks.hasPersistedPortalToken,
+  isEmbeddedPortalContext: portalAuthMocks.isEmbeddedPortalContext,
   logAuthFlow: portalAuthMocks.logAuthFlow,
   logoutRejectedPortalSession: portalAuthMocks.logoutRejectedPortalSession,
   openPortalLogin: portalAuthMocks.openPortalLogin,
+  openPortalSignup: portalAuthMocks.openPortalSignup,
   prepareExplicitAuthRetry: portalAuthMocks.prepareExplicitAuthRetry,
   readStoredPortalLoginReturnTo: portalAuthMocks.readStoredPortalLoginReturnTo,
   startAuth0Login: portalAuthMocks.startAuth0Login,
@@ -98,6 +102,7 @@ beforeEach(() => {
     new portalAuthMocks.AuthRedirectError()
   );
   portalAuthMocks.logoutRejectedPortalSession.mockResolvedValue(undefined);
+  portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(false);
   window.history.replaceState({}, "", "/home/");
 });
 
@@ -132,6 +137,18 @@ describe("PortalLayoutShell auth states", () => {
       );
       expect(portalAuthMocks.openPortalLogin).toHaveBeenCalledWith("/home/");
     });
+  });
+
+  it("renders explicit top-level login and signup controls inside the embedded portal", async () => {
+    portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(true);
+
+    render(<PortalLayoutShell>Portal content</PortalLayoutShell>);
+
+    expect(await screen.findByRole("heading", { name: "Welcome to Definian Signal" })).toBeInTheDocument();
+    screen.getByRole("button", { name: "Sign in" }).click();
+    screen.getByRole("button", { name: "Create account" }).click();
+    expect(portalAuthMocks.openPortalLogin).toHaveBeenCalledWith("https://www.definian.com/signal");
+    expect(portalAuthMocks.openPortalSignup).toHaveBeenCalledWith("https://www.definian.com/signal");
   });
 });
 

@@ -13,7 +13,7 @@ type RootRouteShellProps = {
 
 function isAuthStartPath(pathname: string | null) {
   if (!pathname) return false;
-  return pathname === "/login" || pathname === "/login/" || pathname === "/portal/login" || pathname === "/portal/login/";
+  return ["/login", "/login/", "/logout", "/logout/", "/portal/login", "/portal/login/"].includes(pathname);
 }
 
 function normalizePathname(pathname: string | null) {

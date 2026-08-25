@@ -14,10 +14,9 @@ function parseFrameAncestors() {
     .map((origin) => origin.trim())
     .filter((origin) => {
       if (!origin) return false;
-      if (origin === "*") return true;
       try {
         const url = new URL(origin);
-        return url.protocol === "https:" || url.protocol === "http:";
+        return url.origin === "https://www.definian.com";
       } catch {
         return false;
       }
@@ -28,6 +27,13 @@ const iframeHeaders = [
   {
     key: "Content-Security-Policy",
     value: `frame-ancestors ${["'self'", ...parseFrameAncestors()].join(" ")};`,
+  },
+];
+
+const topLevelOnlyHeaders = [
+  {
+    key: "Content-Security-Policy",
+    value: "frame-ancestors 'none';",
   },
 ];
 
@@ -78,9 +84,14 @@ const nextConfig = withAnalyzer({
     ],
   },
   async headers() {
-    return ["/login", "/login/:path*", "/portal", "/portal/:path*", "/home", "/home/:path*"].map(
-      (source) => ({ source, headers: iframeHeaders }),
-    );
+    return [
+      ...["/portal", "/portal/:path*", "/home", "/home/:path*", "/embed/definian-signal", "/embed/definian-signal/:path*"].map(
+        (source) => ({ source, headers: iframeHeaders }),
+      ),
+      ...["/login", "/login/:path*", "/signup", "/signup/:path*", "/logout", "/logout/:path*", "/auth/callback", "/auth/callback/:path*", "/auth/embedded/:path*"].map(
+        (source) => ({ source, headers: topLevelOnlyHeaders }),
+      ),
+    ];
   },
 });
 

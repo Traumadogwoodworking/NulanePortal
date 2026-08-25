@@ -3,12 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { ExternalLink, Loader2, UserPlus } from "lucide-react";
-import { AuthRedirectError, startAuth0Signup } from "@/lib/portalAuth";
+import {
+  AuthRedirectError,
+  isEmbeddedPortalContext,
+  openPortalSignup,
+  resolveSafePortalReturnTo,
+  startAuth0Signup,
+} from "@/lib/portalAuth";
 import { publicBranding } from "@/lib/publicBranding";
 
-const signupReturnTo = "/home/";
-
 export function SignupRedirectClient() {
+  const signupReturnTo = resolveSafePortalReturnTo(
+    typeof window === "undefined" ? "/home/" : new URLSearchParams(window.location.search).get("returnTo") || "/home/",
+  );
+  const embedded = isEmbeddedPortalContext();
   const [status, setStatus] = useState<"starting" | "redirecting" | "failed">("starting");
   const [error, setError] = useState<string | null>(null);
 
@@ -22,12 +30,13 @@ export function SignupRedirectClient() {
       setStatus("failed");
       setError(signupError instanceof Error ? signupError.message : "Secure signup could not start.");
     }
-  }, []);
+  }, [signupReturnTo]);
 
   useEffect(() => {
+    if (embedded) return;
     const task = window.setTimeout(() => void startSignup(), 0);
     return () => window.clearTimeout(task);
-  }, [startSignup]);
+  }, [embedded, startSignup]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(0,171,99,0.12),_transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eaf0fb_100%)] px-5 py-10 text-slate-950">
@@ -51,8 +60,8 @@ export function SignupRedirectClient() {
         <div className="space-y-5 px-7 py-8 sm:px-10">
           {status !== "failed" ? (
             <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700">
-              <Loader2 className="h-5 w-5 animate-spin text-[#00ab63]" />
-              Opening secure Definian signup...
+              {embedded ? <UserPlus className="h-5 w-5 text-[#00ab63]" /> : <Loader2 className="h-5 w-5 animate-spin text-[#00ab63]" />}
+              {embedded ? "Open secure signup outside the embedded portal." : "Opening secure Definian signup..."}
             </div>
           ) : (
             <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
@@ -63,7 +72,7 @@ export function SignupRedirectClient() {
 
           <button
             type="button"
-            onClick={() => void startSignup()}
+            onClick={() => embedded ? openPortalSignup(signupReturnTo) : void startSignup()}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00ab63] px-5 py-3.5 text-sm font-black text-white shadow-sm transition hover:bg-[#008f53]"
           >
             <UserPlus className="h-4 w-4" /> Create Definian account

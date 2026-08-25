@@ -6,6 +6,9 @@ import { publicBranding } from "@/lib/publicBranding";
 
 const authMocks = vi.hoisted(() => ({
   startAuth0Signup: vi.fn(),
+  isEmbeddedPortalContext: vi.fn(() => false),
+  openPortalSignup: vi.fn(),
+  resolveSafePortalReturnTo: vi.fn((value?: string | null) => value || "/home/"),
   AuthRedirectError: class AuthRedirectError extends Error {},
 }));
 
@@ -13,6 +16,8 @@ vi.mock("@/lib/portalAuth", () => authMocks);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authMocks.isEmbeddedPortalContext.mockReturnValue(false);
+  authMocks.resolveSafePortalReturnTo.mockImplementation((value?: string | null) => value || "/home/");
   authMocks.startAuth0Signup.mockRejectedValue(new authMocks.AuthRedirectError());
 });
 
