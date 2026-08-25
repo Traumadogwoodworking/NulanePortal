@@ -38,16 +38,19 @@ beforeEach(() => {
 });
 
 describe("RootRouteShell public routes", () => {
-  it("keeps the signup route outside the authenticated portal shell", () => {
-    navigationMocks.pathname = "/signup/";
+  it.each([
+    ["signup", "/signup/"],
+    ["Definian onboarding", "/definian/start/"],
+  ])("keeps the %s route outside the authenticated portal shell", (label, pathname) => {
+    navigationMocks.pathname = pathname;
 
     render(
       <RootRouteShell>
-        <div>Definian signup</div>
+        <div>{label}</div>
       </RootRouteShell>
     );
 
-    expect(screen.getByText("Definian signup")).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-session-provider")).not.toBeInTheDocument();
     expect(screen.queryByTestId("portal-data-provider")).not.toBeInTheDocument();
   });
