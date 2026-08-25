@@ -58,7 +58,7 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
           <ol className="mt-9 grid gap-3">
             {steps.map(([title, detail], index) => (
               <li key={title} className="grid grid-cols-[2.25rem_1fr] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0d2c71] text-sm font-black text-white" aria-hidden="true">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#c8d7f0] bg-[#eef4ff] text-sm font-black text-[#081b3a]" aria-hidden="true">
                   {index + 1}
                 </span>
                 <div>
@@ -70,7 +70,7 @@ export function DefinianQuickStart({ embedded = false }: { embedded?: boolean })
           </ol>
 
           <a
-            href="/resources/definian/definian-inspection-quick-start.pdf"
+            href="/resources/definian/definian-inspection-quick-start.pdf?v=3"
             className="mt-7 inline-flex rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800 transition hover:bg-slate-50"
           >
             Download printable quick-start PDF

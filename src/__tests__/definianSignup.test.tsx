@@ -44,6 +44,10 @@ describe("Definian signup quick start", () => {
       "href",
       "https://play.google.com/store/apps/details?id=com.nulanesystems.definian",
     );
+    expect(screen.getByRole("link", { name: "Download printable quick-start PDF" })).toHaveAttribute(
+      "href",
+      "/resources/definian/definian-inspection-quick-start.pdf?v=3",
+    );
     expect(document.body).not.toHaveTextContent(/Inspection-Trac/i);
   });
 });

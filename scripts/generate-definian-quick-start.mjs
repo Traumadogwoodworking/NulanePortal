@@ -34,6 +34,8 @@ const fonts = {
 
 const colors = {
   navy: "#0d2c71",
+  stepNumber: "#081b3a",
+  stepNumberBackground: "#eef4ff",
   green: "#00ab63",
   ink: "#172033",
   slate: "#526176",
@@ -55,19 +57,29 @@ function stepRow([title, detail], index) {
   return {
     columns: [
       {
-        width: 30,
+        width: 34,
         table: {
-          widths: [30],
+          widths: [34],
           body: [[{
             text: String(index + 1),
             alignment: "center",
             bold: true,
-            color: colors.navy,
-            fontSize: 14,
+            color: colors.stepNumber,
+            fillColor: colors.stepNumberBackground,
+            fontSize: 15,
             margin: [0, 6, 0, 6],
           }]],
         },
-        layout: "noBorders",
+        layout: {
+          hLineColor: () => "#c8d7f0",
+          vLineColor: () => "#c8d7f0",
+          hLineWidth: () => 1,
+          vLineWidth: () => 1,
+          paddingLeft: () => 0,
+          paddingRight: () => 0,
+          paddingTop: () => 0,
+          paddingBottom: () => 0,
+        },
       },
       {
         width: "*",
@@ -194,7 +206,7 @@ const definition = {
   footer: {
     columns: [
       { width: "*", text: "Definian Inspection" },
-      { width: "auto", text: "Quick start - Revision 2" },
+      { width: "auto", text: "Quick start - Revision 3" },
     ],
     color: "#708097",
     fontSize: 7.5,
