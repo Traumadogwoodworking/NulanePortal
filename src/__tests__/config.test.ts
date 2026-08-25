@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const originalApiBase = process.env.NEXT_PUBLIC_API_BASE;
 const originalApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+const originalPortalApiBase = process.env.NEXT_PUBLIC_PORTAL_API_BASE;
 const originalInspectionApiBase = process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_BASE;
 const originalInspectionApiUrl = process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_URL;
 
@@ -15,6 +16,7 @@ function restoreEnv(name: string, value: string | undefined) {
 beforeEach(() => {
   vi.resetModules();
   delete process.env.NEXT_PUBLIC_API_BASE;
+  delete process.env.NEXT_PUBLIC_PORTAL_API_BASE;
   process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.nulanesystems.com/api";
   delete process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_BASE;
   delete process.env.NEXT_PUBLIC_INSPECTION_TRAC_API_URL;
@@ -73,7 +75,7 @@ test("NEXT_PUBLIC_API_BASE_URL cannot redirect Definian away from production", a
   );
 });
 
-test("a same-origin proxy environment value cannot redirect Definian away from production", async () => {
+test("legacy API environment values cannot select the same-origin proxy", async () => {
   process.env.NEXT_PUBLIC_API_BASE_URL = "/api/portal";
   vi.resetModules();
   const { buildApiUrl, portalConfig } = await import("@/lib/config");
@@ -82,11 +84,33 @@ test("a same-origin proxy environment value cannot redirect Definian away from p
   expect(buildApiUrl("/user/me")).toBe("https://api.nulanesystems.com/api/user/me");
 });
 
+test("the dedicated portal API setting selects the trusted same-origin proxy", async () => {
+  process.env.NEXT_PUBLIC_PORTAL_API_BASE = "/api/portal/";
+  vi.resetModules();
+  const { buildApiUrl, portalConfig } = await import("@/lib/config");
+
+  expect(portalConfig.apiBase).toBe("/api/portal");
+  expect(portalConfig.usesDefaultApiBase).toBe(false);
+  expect(buildApiUrl("/user/me")).toBe("/api/portal/user/me");
+  expect(buildApiUrl("/api/report/pull")).toBe("/api/portal/report/pull");
+});
+
+test("the dedicated portal API setting rejects arbitrary upstream URLs", async () => {
+  process.env.NEXT_PUBLIC_PORTAL_API_BASE = "https://attacker.example/api";
+  vi.resetModules();
+  const { buildApiUrl, portalConfig } = await import("@/lib/config");
+
+  expect(portalConfig.apiBase).toBe("https://api.nulanesystems.com/api");
+  expect(portalConfig.usesDefaultApiBase).toBe(true);
+  expect(buildApiUrl("/user/me")).toBe("https://api.nulanesystems.com/api/user/me");
+});
+
 afterEach(() => {
   vi.resetModules();
   vi.unstubAllEnvs();
   restoreEnv("NEXT_PUBLIC_API_BASE", originalApiBase);
   restoreEnv("NEXT_PUBLIC_API_BASE_URL", originalApiBaseUrl);
+  restoreEnv("NEXT_PUBLIC_PORTAL_API_BASE", originalPortalApiBase);
   restoreEnv("NEXT_PUBLIC_INSPECTION_TRAC_API_BASE", originalInspectionApiBase);
   restoreEnv("NEXT_PUBLIC_INSPECTION_TRAC_API_URL", originalInspectionApiUrl);
 });

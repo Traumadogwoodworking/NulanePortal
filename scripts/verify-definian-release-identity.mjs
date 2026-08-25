@@ -40,6 +40,9 @@ if (!loginSource.includes("LoginRedirectClient") || loginSource.includes("Embedd
 if (!apiConfigSource.includes('const DEFAULT_API_BASE = "https://api.nulanesystems.com/api"')) {
   failures.push("Definian production API is not pinned in the client configuration");
 }
+if (!apiConfigSource.includes('const PORTAL_API_PROXY_BASE = "/api/portal"')) {
+  failures.push("Definian same-origin API proxy is not pinned in the client configuration");
+}
 if (authSource.includes('prompt: "login"')) {
   failures.push("Auth0 login forces credential entry instead of allowing an existing SSO session");
 }
@@ -64,7 +67,9 @@ for (const retiredPath of [
 if (productionBuild) {
   const expectedEnvironment = {
     NEXT_PUBLIC_PORTAL_BRANDING: manifest.brandingPreset,
+    NEXT_PUBLIC_PORTAL_API_BASE: manifest.browserApiBaseUrl,
     PORTAL_API_UPSTREAM: manifest.apiUpstream,
+    PORTAL_API_TENANT: manifest.apiTenant,
     NEXT_PUBLIC_AUTH0_DOMAIN: manifest.auth0.domain,
     NEXT_PUBLIC_AUTH0_CLIENT_ID: manifest.auth0.clientId,
     NEXT_PUBLIC_AUTH0_AUDIENCE: manifest.auth0.audience,

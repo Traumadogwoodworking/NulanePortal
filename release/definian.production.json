@@ -13,7 +13,7 @@
     "projectName": "vercel-portal-exact",
     "projectId": "prj_bjUoKFKnJr9zLVl9XStNeHZCKC2I"
   },
-  "browserApiBaseUrl": "https://api.nulanesystems.com/api",
+  "browserApiBaseUrl": "/api/portal",
   "apiUpstream": "https://api.nulanesystems.com/api/",
   "apiTenant": "definian",
   "auth0": {

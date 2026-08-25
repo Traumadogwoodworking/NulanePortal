@@ -43,6 +43,7 @@ cp .env.example .env.local
 | Env var | Purpose | Default / notes |
 | --- | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | Ignored by the Definian build; retained only for compatibility with sibling portal profiles | Definian is pinned to `https://api.nulanesystems.com/api` |
+| `NEXT_PUBLIC_PORTAL_API_BASE` | Selects the trusted same-origin API proxy for the Definian production project | Only `/api/portal` is accepted; all other values fall back to the canonical production API |
 | `NEXT_PUBLIC_DOCUFIT_BASE` | Base for DocuFit health and future contract endpoints | `/docufit` |
 | `NEXT_PUBLIC_DOCUDENT_EMBED_URL` | Absolute URL to the Flutter web bundle embedded on `/docudent` | `https://nulanesystems.com/portal/app/index.html` |
 | `NEXT_PUBLIC_AUTH0_DOMAIN` | Auth0 tenant domain that backs the portal SSO | `definian-inspection.us.auth0.com` |
@@ -55,7 +56,7 @@ The Definian identity has moved from the legacy `nulanesystems.us.auth0.com` ten
 
 The portal validates `NEXT_PUBLIC_DOCUDENT_EMBED_URL` at runtime and surfaces guidance when it is missing or malformed.
 
-The Definian API base is fixed at `https://api.nulanesystems.com/api`. Runtime environment values cannot redirect this product build to a staging, local, or same-origin proxy base.
+The Definian upstream API is fixed at `https://api.nulanesystems.com/api`. The dedicated production project sets `NEXT_PUBLIC_PORTAL_API_BASE=/api/portal`, allowing the browser to reach that upstream only through the existing same-origin proxy. Arbitrary environment URLs cannot redirect this product build.
 
 ## Local development and validation
 

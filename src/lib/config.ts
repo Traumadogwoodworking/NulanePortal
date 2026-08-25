@@ -1,6 +1,7 @@
 // Monolith reference values (see `DEFAULT_API_BASE`, `DEFAULT_DOCUFIT_API_BASE`, and
 // `DEFAULT_DOCUDENT_EMBED_URL` in the inline script).
 const DEFAULT_API_BASE = "https://api.nulanesystems.com/api";
+const PORTAL_API_PROXY_BASE = "/api/portal";
 const DEFAULT_DOCUFIT_API_BASE = "/docufit";
 const DEFAULT_DOCUDENT_EMBED_URL = "https://nulanesystems.com/portal/app/index.html";
 const DEFAULT_DOCUFIT_EMBED_URL = "https://nulanesystems.com/portal/app/docufit/index.html";
@@ -19,14 +20,19 @@ export function normalizeBaseUrl(value?: string | null): string | null {
 const envPortalBasePath = normalizeBaseUrl(process.env.NEXT_PUBLIC_PORTAL_BASE_PATH || process.env.NEXT_PUBLIC_BASE_PATH);
 const defaultPortalBasePath = "";
 
-/** Definian always reads and writes against the canonical production API. */
+/** Definian may reach the canonical production API through its trusted same-origin proxy. */
 const selectApiBase = () => {
+  if (normalizeBaseUrl(process.env.NEXT_PUBLIC_PORTAL_API_BASE) === PORTAL_API_PROXY_BASE) {
+    return PORTAL_API_PROXY_BASE;
+  }
   return DEFAULT_API_BASE;
 };
 
+const selectedApiBase = selectApiBase();
+
 export const portalConfig = {
-  apiBase: selectApiBase(),
-  usesDefaultApiBase: true,
+  apiBase: selectedApiBase,
+  usesDefaultApiBase: selectedApiBase === DEFAULT_API_BASE,
   docuFitBase: normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUFIT_BASE) ?? DEFAULT_DOCUFIT_API_BASE,
   docuDentEmbedUrl:
     normalizeBaseUrl(process.env.NEXT_PUBLIC_DOCUDENT_EMBED_URL) ?? DEFAULT_DOCUDENT_EMBED_URL,
@@ -42,7 +48,8 @@ export const portalConfig = {
 export function buildApiUrl(path: string): string {
   const trimmed = path.replace(/^\/+/, "");
   const normalizedPath =
-    portalConfig.apiBase.endsWith("/api") && trimmed.startsWith("api/")
+    (portalConfig.apiBase.endsWith("/api") || portalConfig.apiBase === PORTAL_API_PROXY_BASE) &&
+    trimmed.startsWith("api/")
       ? trimmed.replace(/^api\//, "")
       : trimmed;
   return `${portalConfig.apiBase}/${normalizedPath}`.replace(/\/+$/g, "");
