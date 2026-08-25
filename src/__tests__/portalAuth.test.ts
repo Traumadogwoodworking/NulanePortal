@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const auth0Mocks = vi.hoisted(() => ({
   createAuth0Client: vi.fn(),
+  loginWithPopup: vi.fn(),
   loginWithRedirect: vi.fn(),
   handleRedirectCallback: vi.fn(),
   getTokenSilently: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@auth0/auth0-spa-js", () => ({
 
 function buildAuth0Client() {
   return {
+    loginWithPopup: auth0Mocks.loginWithPopup,
     loginWithRedirect: auth0Mocks.loginWithRedirect,
     handleRedirectCallback: auth0Mocks.handleRedirectCallback,
     getTokenSilently: auth0Mocks.getTokenSilently,
@@ -175,6 +177,53 @@ describe("startAuth0Login", () => {
     expect(results).toHaveLength(2);
     expect(results.every((result) => result.status === "rejected" && result.reason instanceof AuthRedirectError)).toBe(true);
     expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("authenticateEmbeddedPortal", () => {
+  it("uses Auth0 Universal Login in a popup and persists the iframe-partition token", async () => {
+    const topWindow = window.top;
+    Object.defineProperty(window, "top", { configurable: true, value: {} });
+    const popup = { closed: false, close: vi.fn() } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    auth0Mocks.loginWithPopup.mockResolvedValue(undefined);
+    auth0Mocks.getTokenSilently.mockResolvedValue("embedded-popup-token");
+    const { authenticateEmbeddedPortal } = await importPortalAuth();
+
+    await authenticateEmbeddedPortal();
+
+    expect(auth0Mocks.loginWithPopup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorizationParams: expect.objectContaining({
+          audience: "https://api.nulanesystems.com",
+          organization: "org_GRicZ7Jqg1r3aerr",
+        }),
+      }),
+      { popup },
+    );
+    expect(window.localStorage.getItem("portal_token")).toBe("embedded-popup-token");
+    Object.defineProperty(window, "top", { configurable: true, value: topWindow });
+  });
+
+  it("opens the Definian signup screen without adding entitlement parameters", async () => {
+    const topWindow = window.top;
+    Object.defineProperty(window, "top", { configurable: true, value: {} });
+    const popup = { closed: false, close: vi.fn() } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    auth0Mocks.loginWithPopup.mockResolvedValue(undefined);
+    auth0Mocks.getTokenSilently.mockResolvedValue("embedded-signup-token");
+    const { authenticateEmbeddedPortal } = await importPortalAuth();
+
+    await authenticateEmbeddedPortal({ signup: true });
+
+    expect(auth0Mocks.loginWithPopup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorizationParams: expect.objectContaining({ screen_hint: "signup" }),
+      }),
+      { popup },
+    );
+    expect(JSON.stringify(auth0Mocks.loginWithPopup.mock.calls)).not.toMatch(/role|facility|permission/i);
+    Object.defineProperty(window, "top", { configurable: true, value: topWindow });
   });
 });
 

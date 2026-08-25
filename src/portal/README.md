@@ -76,15 +76,20 @@ The production embedded surface is `/embed/definian-signal/` on
 `https://www.definian.com`. Login, signup, callback, and logout routes are
 top-level-only surfaces.
 
-An embedded login, signup, or logout click navigates the top-level browser
-through `/auth/embedded/start`. That server route ignores arbitrary destinations
-and emits only the fixed approved parent return before Auth0 Universal Login
-starts with Authorization Code + PKCE. The Auth0 transaction state carries a
-return destination that is accepted only when
-it is either a same-origin portal path or the exact fixed parent URL
-`https://www.definian.com/signal`. The callback stores the portal token only in
-portal-origin storage, then returns the top-level browser to that parent URL;
-the iframe reloads the authenticated portal without a token in its URL.
+The embedded entry uses Auth0 SPA SDK popup authentication from the user's
+login or signup click. Universal Login therefore runs in a top-level popup,
+while Auth0 returns the result directly to the originating iframe context and
+the SDK stores the portal token in that iframe's browser-storage partition.
+This keeps the parent at `https://www.definian.com/signal`, avoids third-party
+storage mismatches on the compatibility `vercel.app` hostname, and never puts a
+token in an iframe or parent URL. The custom popup is created synchronously from
+the user gesture so Safari and popup blockers can permit it.
+
+The redirect fallback goes through `/auth/embedded/start`. That server route
+ignores arbitrary destinations and emits only the fixed approved parent return
+before Auth0 Universal Login starts with Authorization Code + PKCE. Any return
+destination is accepted only when it is either a same-origin portal path or the
+exact fixed parent URL `https://www.definian.com/signal`.
 
 Embedded logout uses the same top-level handoff and returns to the exact parent
 URL after clearing the local portal/Auth0 session. The flow does not use

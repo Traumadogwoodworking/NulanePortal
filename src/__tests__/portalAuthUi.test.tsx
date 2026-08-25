@@ -21,6 +21,7 @@ const portalAuthMocks = vi.hoisted(() => ({
       this.name = "AuthRedirectError";
     }
   },
+  authenticateEmbeddedPortal: vi.fn(),
   buildPortalLoginUrl: vi.fn((returnTo?: string) => `/login?returnTo=${encodeURIComponent(returnTo ?? "/")}`),
   cleanAuthCallbackUrl: vi.fn(() => window.history.replaceState({}, "", "/auth/callback/")),
   clearPortalAuthStorage: vi.fn(),
@@ -31,7 +32,6 @@ const portalAuthMocks = vi.hoisted(() => ({
   logAuthFlow: vi.fn(),
   logoutRejectedPortalSession: vi.fn(),
   openPortalLogin: vi.fn(),
-  openPortalSignup: vi.fn(),
   prepareExplicitAuthRetry: vi.fn(),
   readStoredPortalLoginReturnTo: vi.fn(() => "/join/?enrollment=opaque-session-token"),
   startAuth0Login: vi.fn(),
@@ -52,6 +52,7 @@ vi.mock("@/lib/portalSession", () => ({
 
 vi.mock("@/lib/portalAuth", () => ({
   AuthRedirectError: portalAuthMocks.AuthRedirectError,
+  authenticateEmbeddedPortal: portalAuthMocks.authenticateEmbeddedPortal,
   buildPortalLoginUrl: portalAuthMocks.buildPortalLoginUrl,
   cleanAuthCallbackUrl: portalAuthMocks.cleanAuthCallbackUrl,
   clearPortalAuthStorage: portalAuthMocks.clearPortalAuthStorage,
@@ -62,7 +63,6 @@ vi.mock("@/lib/portalAuth", () => ({
   logAuthFlow: portalAuthMocks.logAuthFlow,
   logoutRejectedPortalSession: portalAuthMocks.logoutRejectedPortalSession,
   openPortalLogin: portalAuthMocks.openPortalLogin,
-  openPortalSignup: portalAuthMocks.openPortalSignup,
   prepareExplicitAuthRetry: portalAuthMocks.prepareExplicitAuthRetry,
   readStoredPortalLoginReturnTo: portalAuthMocks.readStoredPortalLoginReturnTo,
   startAuth0Login: portalAuthMocks.startAuth0Login,
@@ -102,6 +102,7 @@ beforeEach(() => {
     new portalAuthMocks.AuthRedirectError()
   );
   portalAuthMocks.logoutRejectedPortalSession.mockResolvedValue(undefined);
+  portalAuthMocks.authenticateEmbeddedPortal.mockResolvedValue(undefined);
   portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(false);
   window.history.replaceState({}, "", "/home/");
 });
@@ -139,16 +140,23 @@ describe("PortalLayoutShell auth states", () => {
     });
   });
 
-  it("renders explicit top-level login and signup controls inside the embedded portal", async () => {
+  it("uses the Auth0 popup flow inside the embedded portal and refreshes the session", async () => {
     portalAuthMocks.isEmbeddedPortalContext.mockReturnValue(true);
 
     render(<PortalLayoutShell>Portal content</PortalLayoutShell>);
 
     expect(await screen.findByRole("heading", { name: "Welcome to Definian Signal" })).toBeInTheDocument();
     screen.getByRole("button", { name: "Sign in" }).click();
+    await waitFor(() => {
+      expect(portalAuthMocks.authenticateEmbeddedPortal).toHaveBeenCalledWith({ signup: false });
+      expect(portalSessionMocks.refetch).toHaveBeenCalledTimes(1);
+    });
+
     screen.getByRole("button", { name: "Create account" }).click();
-    expect(portalAuthMocks.openPortalLogin).toHaveBeenCalledWith("https://www.definian.com/signal");
-    expect(portalAuthMocks.openPortalSignup).toHaveBeenCalledWith("https://www.definian.com/signal");
+    await waitFor(() => {
+      expect(portalAuthMocks.authenticateEmbeddedPortal).toHaveBeenCalledWith({ signup: true });
+      expect(portalSessionMocks.refetch).toHaveBeenCalledTimes(2);
+    });
   });
 });
 

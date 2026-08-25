@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PortalSidebar } from "@/components/PortalSidebar";
 import { PortalTopBar } from "@/components/PortalTopBar";
 import { AlertStack } from "@/components/AlertStack";
@@ -8,12 +8,11 @@ import { PortalStatusScreen } from "@/components/PortalStatusScreen";
 import { AccessGuardClient } from "@/components/AccessGuardClient";
 import { usePortalSession } from "@/lib/portalSession";
 import {
+  authenticateEmbeddedPortal,
   clearStalePortalSession,
   isEmbeddedPortalContext,
   openPortalLogin,
-  openPortalSignup,
 } from "@/lib/portalAuth";
-import { DEFINIAN_SIGNAL_PARENT_URL } from "@/portal/products/definian/auth/embeddedAuth";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePathname } from "next/navigation";
 import { getRouteByPath } from "@/lib/navigation";
@@ -28,6 +27,8 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const safePathname = pathname ?? "/";
   const embedded = isEmbeddedPortalContext();
   const autoLoginKeyRef = useRef<string | null>(null);
+  const [embeddedAuthAction, setEmbeddedAuthAction] = useState<"login" | "signup" | null>(null);
+  const [embeddedAuthError, setEmbeddedAuthError] = useState<string | null>(null);
   const { data: brandingSnapshot } = usePortalBrandingSnapshot();
   const branding = useMemo(
     () => resolvePortalBranding({ session, pathname: safePathname, brandingSnapshot: brandingSnapshot ?? null }),
@@ -92,6 +93,24 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     openPortalLogin(safePathname);
   }, [embedded, safePathname, session?.portal_access, status]);
 
+  const startEmbeddedAuth = async (signup: boolean) => {
+    if (embeddedAuthAction) return;
+    setEmbeddedAuthAction(signup ? "signup" : "login");
+    setEmbeddedAuthError(null);
+    try {
+      await authenticateEmbeddedPortal({ signup });
+      await refetch();
+    } catch (authError) {
+      setEmbeddedAuthError(
+        authError instanceof Error
+          ? authError.message
+          : "Secure authentication did not complete. Please try again.",
+      );
+    } finally {
+      setEmbeddedAuthAction(null);
+    }
+  };
+
   if (
     status === "unauthenticated" ||
     status === "session_error" ||
@@ -102,22 +121,27 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     return (
       <PortalStatusScreen
         title="Welcome to Definian Signal"
-        description="Sign in or create an account using Auth0. Secure authentication opens at the top level, then returns you here automatically."
+        description={
+          embeddedAuthError ??
+          "Sign in or create an account using Auth0. Secure authentication opens in a separate window, then this portal unlocks automatically."
+        }
         actions={
           <div className="flex flex-wrap justify-center gap-3">
             <button
               type="button"
-              onClick={() => openPortalLogin(DEFINIAN_SIGNAL_PARENT_URL)}
+              onClick={() => void startEmbeddedAuth(false)}
+              disabled={embeddedAuthAction !== null}
               className="rounded-full bg-[#0d2c71] px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#123b91]"
             >
-              Sign in
+              {embeddedAuthAction === "login" ? "Signing in..." : "Sign in"}
             </button>
             <button
               type="button"
-              onClick={() => openPortalSignup(DEFINIAN_SIGNAL_PARENT_URL)}
+              onClick={() => void startEmbeddedAuth(true)}
+              disabled={embeddedAuthAction !== null}
               className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-900 shadow-sm transition hover:bg-slate-50"
             >
-              Create account
+              {embeddedAuthAction === "signup" ? "Opening signup..." : "Create account"}
             </button>
           </div>
         }

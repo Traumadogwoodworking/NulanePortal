@@ -218,6 +218,63 @@ export function openPortalSignup(returnTo?: string): void {
   );
 }
 
+export async function authenticateEmbeddedPortal(options: { signup?: boolean } = {}): Promise<void> {
+  ensureBrowserEnv();
+  if (!isEmbeddedPortalContext()) {
+    throw new AuthConfigError("Embedded authentication requires an iframe context.");
+  }
+
+  const popup = window.open("", "_blank", "popup=yes,width=500,height=700");
+  if (!popup) {
+    throw new Error("The browser blocked the secure Auth0 window. Allow popups for Definian and try again.");
+  }
+
+  const config = getAuthConfig();
+  let client: Auth0Client;
+  try {
+    client = await getAuth0Client();
+    clearPortalAuthStorage();
+    logAuthFlow("authenticateEmbeddedPortal", {
+      reason: options.signup ? "embedded_signup_popup" : "embedded_login_popup",
+      tokenExists: false,
+    });
+
+    await client.loginWithPopup(
+      {
+        authorizationParams: {
+          audience: config.audience,
+          redirect_uri: config.redirectUri,
+          organization: config.organizationId,
+          ...(options.signup ? { screen_hint: "signup" } : {}),
+        },
+      },
+      { popup },
+    );
+  } catch (error) {
+    if (!popup.closed) popup.close();
+    throw error;
+  }
+
+  const token = await waitForToken(
+    client.getTokenSilently({
+      authorizationParams: {
+        audience: config.audience,
+      },
+    }),
+    15000,
+  );
+  if (!token.trim()) {
+    throw new Error("Auth0 completed sign-in without a portal access token.");
+  }
+  persistPortalToken(token);
+  markFreshAuthCallbackCompleted();
+  logAuthFlow("authenticateEmbeddedPortal", {
+    reason: "embedded_popup_token_persisted",
+    tokenExists: true,
+    ...describeJwtClaims(token),
+  });
+}
+
 function ensureBrowserEnv() {
   if (!isBrowser()) {
     throw new AuthConfigError("Auth0 requires a browser environment");
