@@ -30,7 +30,7 @@ describe("portal API proxy URL construction", () => {
     const headers = buildPortalUpstreamRequestHeaders(
       request,
       "portal-request-id",
-      "definianInspection",
+      "definian",
     );
 
     expect(headers.get("authorization")).toBe("Bearer redacted");
@@ -40,7 +40,7 @@ describe("portal API proxy URL construction", () => {
     expect(headers.get("referer")).toBe("https://www.definian.com/signal");
   });
 
-  test("does not forward client portal identity headers for other branding presets", () => {
+  test("does not forward client portal identity headers for other portal tenants", () => {
     const request = new Request("https://example.test/api/portal/user/me", {
       headers: {
         "x-portal-request": "1",

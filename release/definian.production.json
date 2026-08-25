@@ -15,6 +15,7 @@
   },
   "browserApiBaseUrl": "https://api.nulanesystems.com/api",
   "apiUpstream": "https://api.nulanesystems.com/api/",
+  "apiTenant": "definian",
   "auth0": {
     "domain": "definian-inspection.us.auth0.com",
     "clientId": "YRnnNwl2hEYbYIe4jSIYNiE457nEWek4",
