@@ -185,7 +185,8 @@ function openTopLevelPortalRoute(route: string, returnTo?: string): void {
   });
   if (isEmbeddedPortalContext()) {
     try {
-      window.top?.location.assign(routeUrl);
+      if (!window.top) throw new Error("Top-level browsing context is unavailable");
+      window.top.location.href = routeUrl;
       return;
     } catch {
       window.open(routeUrl, "_blank", "noopener,noreferrer");
@@ -1039,7 +1040,8 @@ export async function logoutPortal(): Promise<void> {
   if (isEmbeddedPortalContext()) {
     const logoutUrl = new URL("/auth/embedded/start?action=logout", window.location.origin).toString();
     try {
-      window.top?.location.assign(logoutUrl);
+      if (!window.top) throw new Error("Top-level browsing context is unavailable");
+      window.top.location.href = logoutUrl;
     } catch {
       window.open(logoutUrl, "_blank", "noopener,noreferrer");
     }
