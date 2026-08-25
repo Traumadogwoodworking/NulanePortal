@@ -120,7 +120,7 @@ const frontChecklist = [
 const definition = {
   info: {
     title: `${facilityName} Definian Inspection Facility Access`,
-    author: "Nulane Systems",
+    author: "Definian Inspection",
     subject: `Facility registration and quick start for ${facilityName}`,
   },
   pageSize: "LETTER",
