@@ -18,6 +18,9 @@ const HOP_BY_HOP_RESPONSE_HEADERS = [
   "access-control-allow-methods",
 ];
 
+const DEFINIAN_PORTAL_BRANDING_PRESETS = new Set(["definian", "definianinspection"]);
+const DEFINIAN_PORTAL_REFERRER = "https://www.definian.com/signal";
+
 export function buildPortalUpstreamUrl(
   upstreamBase: string,
   path: readonly string[],
@@ -41,11 +44,21 @@ function getPortalApiUpstream(): string {
   return parsed.toString();
 }
 
-function requestHeaders(request: Request, requestId: string): Headers {
+export function buildPortalUpstreamRequestHeaders(
+  request: Request,
+  requestId: string,
+  brandingPreset = process.env.NEXT_PUBLIC_PORTAL_BRANDING || "",
+): Headers {
   const headers = new Headers(request.headers);
   for (const name of HOP_BY_HOP_REQUEST_HEADERS) headers.delete(name);
+  for (const name of ["x-portal-access", "x-portal-request", "x-portal-tenant"]) headers.delete(name);
   headers.set("x-portal-request-id", requestId);
   headers.set("accept-encoding", "identity");
+  if (DEFINIAN_PORTAL_BRANDING_PRESETS.has(brandingPreset.trim().toLowerCase())) {
+    headers.set("x-portal-request", "1");
+    headers.set("x-portal-tenant", "definian");
+    headers.set("referer", DEFINIAN_PORTAL_REFERRER);
+  }
   return headers;
 }
 
@@ -71,7 +84,7 @@ export async function proxyPortalApiRequest(request: Request, path: readonly str
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
     const upstreamResponse = await fetch(target, {
       method: request.method,
-      headers: requestHeaders(request, requestId),
+      headers: buildPortalUpstreamRequestHeaders(request, requestId),
       body: hasBody ? await request.arrayBuffer() : undefined,
       cache: "no-store",
       redirect: "manual",
