@@ -91,7 +91,6 @@ export function AuthCallbackClient() {
         }
         setDestination(target);
         setStatus("redirecting");
-        cleanAuthCallbackUrl();
         logAuthFlow("AuthCallbackClient.run", {
           reason: "redirecting",
           redirectTarget: target,
