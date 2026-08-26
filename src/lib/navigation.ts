@@ -128,6 +128,13 @@ const portalRoutes: PortalRoute[] = [
     icon: "quick-start",
   },
   {
+    label: "Promo Codes",
+    href: "/promo",
+    description: "Enter a promo code or review a tracked campaign",
+    section: "support",
+    icon: "promo",
+  },
+  {
     label: "Support Tickets",
     href: "/support",
     description: "Contact platform support",

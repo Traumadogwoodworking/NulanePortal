@@ -1,0 +1,5 @@
+{
+  "campaign": "definian-launch",
+  "target": "https://vercel-portal-exact-traumadogwoodworkings-projects.vercel.app/promo/definian-launch/",
+  "behavior": "Tracks authenticated scan and download events without redeeming or gating access."
+}

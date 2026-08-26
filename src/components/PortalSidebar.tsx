@@ -8,7 +8,7 @@ import { filterNavSectionsByAccess, navSections } from "@/lib/navigation";
 import { usePortalSession } from "@/lib/portalSession";
 import { resolvePortalBranding } from "@/lib/branding";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
-import { BookOpenCheck, Clock3, Home, LayoutGrid, Mail } from "lucide-react";
+import { BookOpenCheck, Clock3, Gift, Home, LayoutGrid, Mail } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
   if (href === "/") {
@@ -277,6 +277,7 @@ export function PortalSidebar() {
                       {item.icon === "rsa" && <TrainIcon />}
                       {item.icon === "support" && <SupportIcon />}
                       {item.icon === "quick-start" && <BookOpenCheck className={sharedSidebarIconSize} />}
+                      {item.icon === "promo" && <Gift className={sharedSidebarIconSize} />}
                       {item.icon === "settings" && <SettingsIcon />}
                       {item.icon === "pen" && <PenIcon />}
                       {isImageIcon && typeof item.icon === "string" && (
