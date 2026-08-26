@@ -59,6 +59,10 @@ events, and reconnect events do not refresh the page or replace the current UI
 state. The shared header and Definian Home filters intentionally have no
 organization selector; Definian must not expose or inherit Inspection-Trac
 AWCT/Signature organization scopes in its navigation or Home data requests.
+The backend's broad legacy `admin`/`is_admin` identity signal does not grant
+portal administration. Organization, facility, and global administration
+require the explicit `org_admin`, `facility_admin`, or `super_admin` role for
+the active organization membership.
 
 ```sh
 nulane-dev site definian-portal

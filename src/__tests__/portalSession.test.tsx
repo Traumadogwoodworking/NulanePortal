@@ -151,7 +151,7 @@ describe("PortalSessionProvider", () => {
     expect(screen.getByTestId("organization")).toHaveTextContent("org-1");
   });
 
-  it("grants organization and facility administration to a trusted backend admin", async () => {
+  it("does not promote a broad backend admin signal to organization or facility administration", async () => {
     sessionServiceMocks.fetchPortalSession.mockResolvedValue(makeSession());
 
     renderProvider();
@@ -159,7 +159,7 @@ describe("PortalSessionProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("status")).toHaveTextContent("success");
     });
-    expect(screen.getByTestId("access")).toHaveTextContent("false,true,true");
+    expect(screen.getByTestId("access")).toHaveTextContent("false,false,false");
   });
 
   it("does not refresh the session from idle browser focus or connectivity events", async () => {
