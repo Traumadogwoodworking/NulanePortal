@@ -35,9 +35,12 @@ not DocuDent source material.
 
 ## Facility onboarding safety gate
 
-The target DocuDent API has not yet proven the organization-membership,
-facility-membership, role-assignment, registration-eligibility, and idempotency
-contract used by the portal-family onboarding flow. Therefore
+The target DocuDent API now deploys the additive facility schema and the
+server-owned opaque enrollment-session contract at backend revision
+`68edb8496701b4774c6c9dc763682d255fdba420`. Its global production switch is
+verified `enabled: false`, and no disposable Auth0 account has yet proven the
+organization-membership, facility-membership, role-assignment,
+registration-eligibility, and idempotency outcomes. Therefore
 `NEXT_PUBLIC_DOCUDENT_FACILITY_ONBOARDING_ENABLED` defaults to false and every
 registration service operation fails closed. Do not enable it based on an HTTP
 health response or a UI-only test. Enable it only after authenticated disposable
