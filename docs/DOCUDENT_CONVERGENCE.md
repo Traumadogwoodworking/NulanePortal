@@ -97,6 +97,12 @@ failed closed with all four Auth0 inputs reported missing. Join rendered the
 explicit unavailable state and confirmed that no facility assignment was
 created.
 
+The public download links were resolved against the current store listings.
+The prior generic Apple URL returned 404 and was replaced with canonical App
+Store ID `6756033587`; the Android package URL resolves to the published
+`com.nulanesystems.docudent` listing. These identifiers match the preserved
+DocuDent release identity.
+
 This is a deployed public-shell boundary, not authenticated acceptance. Auth0
 deployment inputs remain unset, the portal onboarding flag remains false, and
 the backend global registration switch remains false. Do not enable either
