@@ -73,7 +73,7 @@ not accepted as DocuDent product behavior and must not be reconnected. The
 built-output guard deliberately tests rendered output and routes rather than
 mistaking internal compatibility/schema identifiers for customer-facing copy.
 The previously unreferenced Chicago PDF has been removed. On deployed portal
-source revision `f7204d6`, all 169 tests, the Next.js
+source revision `85b7b08`, all 169 tests, the Next.js
 production build, and `npm run validate:docudent-build` pass.
 
 ## Isolated Vercel deployment
@@ -84,9 +84,9 @@ not linked to, promoted over, or served by an Inspection-Trac Vercel project.
 - Project: `docudent-portal`
 - Project ID: `prj_L9xCU9AdQMD3WrhH71U8PfMbU54S`
 - Production alias: `https://docudent-portal.vercel.app`
-- Verified deployment: `dpl_6THZsn2Abrm6rknfgi9EYfqe72sY`
+- Verified deployment: `dpl_4Jua65i3ujjk64Y6g6Yc9KYfCtLN`
 - Immutable deployment URL:
-  `https://docudent-portal-6gcl47dm7-traumadogwoodworkings-projects.vercel.app`
+  `https://docudent-portal-2dco610bb-traumadogwoodworkings-projects.vercel.app`
 
 The first project deployment used Vercel's generic framework preset and
 returned 404 for application routes. The project was corrected to the Next.js
