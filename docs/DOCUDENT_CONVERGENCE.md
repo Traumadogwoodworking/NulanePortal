@@ -3,11 +3,15 @@
 ## Source and preservation boundary
 
 This branch starts at the reviewed committed portal anchor
-`52ce54dfa129a4688cce6291b0299e6c32511274`. The original checkout at
-`/Users/home/Desktop/Codex/websites/dev/vercel-portal-exact` remains untouched.
-Its newer dirty state is preserved in the Gate 0 snapshot and is not silently
-treated as reviewed source. Future reliability changes from that delta must be
-selected and verified individually.
+`52ce54dfa129a4688cce6291b0299e6c32511274`. This convergence lane did not edit
+the original checkout at
+`/Users/home/Desktop/Codex/websites/dev/vercel-portal-exact`. Its dirty status
+hash changed concurrently from the Gate 0 value `d8bd8697...` to `369c6033...`
+while this lane was running, so the original cannot be described as globally
+unchanged during the run. The Gate 0 snapshot remains the frozen recovery
+authority, and newer dirty content is not silently treated as reviewed source.
+Future reliability changes from that delta must be selected and verified
+individually.
 
 The facility registration, QR, and Quick Start architecture comes from this
 portal family itself. It was not copied from Circle. The generic components,
