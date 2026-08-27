@@ -46,9 +46,8 @@ against the intended backend.
 
 Published Quick Start content must be generated from authoritative DocuDent
 facility records. No Inspection-Trac customer PDF is registered in the DocuDent
-asset catalog. The historical Chicago Heights PDF still exists as an unreferenced
-tracked donor artifact and must be removed through the repository's binary-asset
-workflow before release.
+asset catalog. Candidate `0b962bce460e4a56324400e705c8bd32bbefdf1d`
+removes the historical Chicago Heights binary donor artifact.
 
 ## Verification boundary
 
@@ -70,5 +69,9 @@ preset data, development-only fixtures, and analytics fixture labels. They are
 not accepted as DocuDent product behavior and must not be reconnected. The
 built-output guard deliberately tests rendered output and routes rather than
 mistaking internal compatibility/schema identifiers for customer-facing copy.
-The unreferenced Chicago PDF remains the sole known binary donor artifact and
-is blocked from publication by the resource catalog.
+The previously unreferenced Chicago PDF has been removed. On candidate
+`0b962bce460e4a56324400e705c8bd32bbefdf1d`, all 169 tests, the Next.js
+production build, and `npm run validate:docudent-build` pass. This is local
+candidate evidence only: the portal remains undeployed and facility onboarding
+remains disabled until a uniquely tagged disposable Auth0 identity proves the
+DocuDent membership contract against the deployed backend.
