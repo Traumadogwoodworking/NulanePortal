@@ -107,6 +107,25 @@ The public `Open Portal` actions now target the established `/home/` portal
 entry instead of looping back to the marketing root. With Auth0 deliberately
 unset, that entry fails closed and names the four missing Auth0 inputs.
 
+The isolated project applies `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: strict-origin-when-cross-origin` to every deployed route
+through versioned Vercel configuration. A content security policy is deferred
+until the exact Auth0 application/domain and any required external media
+origins are verified; inventing those allowlists would risk breaking login or
+masking an unapproved dependency.
+
+## Legal publication gate
+
+The repository's legal inventory explicitly classifies the inherited privacy,
+terms, and account-deletion documents as drafts requiring owner review. The
+currently published Nulane privacy route still contains a fictional placeholder
+postal address. The short portal `/privacy/` and `/terms/` pages therefore
+cannot be treated as approved legal policies or revenue-ready acceptance.
+Before release, the legal owner must approve the entity/contact details,
+effective dates, retention/deletion promises, subscription terms, and canonical
+public URLs. This lane will then link or render that approved content without
+editing the existing Nulane/Drupal site.
+
 This is a deployed public-shell boundary, not authenticated acceptance. Auth0
 deployment inputs remain unset, the portal onboarding flag remains false, and
 the backend global registration switch remains false. Do not enable either
