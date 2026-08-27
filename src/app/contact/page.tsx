@@ -1,7 +1,7 @@
 import { PublicRedirect } from "@/components/PublicRedirect";
 
 export const metadata = {
-  title: "Contact - Inspection-Trac",
+  title: "Contact - DocuDent",
 };
 
 export default function ContactAliasPage() {

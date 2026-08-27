@@ -260,16 +260,9 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
   },
 };
 
-export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
-  process.env.NEXT_PUBLIC_PORTAL_BRANDING === "inspectionTrac"
-    ? "inspectionTrac"
-    : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "definianInspection"
-      ? "definianInspection"
-    : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "docudent"
-      ? "docudent"
-    : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
-      ? "nulaneSystems"
-          : "docudent";
+// This repository is the DocuDent product boundary. Historical presets remain
+// compatibility data only and cannot switch the shipped portal identity.
+export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode = "docudent";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;

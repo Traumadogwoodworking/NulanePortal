@@ -263,7 +263,7 @@ function trackRequest(details: {
     update(patch) {
       Object.assign(entry, patch, { durationMs: Math.round(nowMs() - entry.startedAt) });
       if (isPerfEnabled()) {
-        console.info("[inspection-trac.perf] apiFetch.phase", cloneEntry(entry));
+        console.info("[docudent.perf] apiFetch.phase", cloneEntry(entry));
       }
     },
   };

@@ -4,7 +4,6 @@ import {
   selectDailyDamageTrendRows,
   selectDamagedToday,
   selectInspectorVolumeRows,
-  selectRsaReports,
   selectSeverityRows,
   selectTopFacilityRows,
   selectTopModelRows,
@@ -28,14 +27,6 @@ export const homeDashboardRegistry: DashboardWidgetConfig[] = [
     selector: selectDamagedToday,
     size: "sm",
     exportKey: "damagedToday",
-  },
-  {
-    id: "rsa-reports",
-    title: "RSA Reports",
-    type: "metric",
-    selector: selectRsaReports,
-    size: "sm",
-    exportKey: "rsaReports",
   },
   {
     id: "daily-damage-trend",

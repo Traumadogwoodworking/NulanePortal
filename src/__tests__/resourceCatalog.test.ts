@@ -103,7 +103,7 @@ describe("resource catalog", () => {
   it("builds a minimal facility guide from canonical facility data", () => {
     const guide = buildFacilityGuide(facility, {
       organizationId: "org-1",
-      organizationName: "Inspection-Trac",
+      organizationName: "Example Organization",
       facilityId: facility.id,
       facilityName: facility.name,
       facilityLabel: facility.name,
@@ -114,9 +114,9 @@ describe("resource catalog", () => {
       defaultRoleKey: "user",
       defaultRoleName: "User",
       registrationUrl:
-        "https://inspection-trac.com/join/?facility=test-facility",
+        "https://portal.example/join/?facility=test-facility",
       onboardingDisplayName: facility.name,
-      support: { email: "support@inspection-trac.com" },
+      support: { email: "support@nulanesystems.com" },
       stores: {},
       packetRevision: 2,
       packetUpdatedAt: null,
@@ -130,22 +130,22 @@ describe("resource catalog", () => {
     expect(guide.where).toBe("Portal → Resources → Test Facility");
     expect(resourceSearchText(guide)).toContain("Main Yard");
     expect(resourceSearchText(guide)).toContain(
-      "https://inspection-trac.com/join/?facility=test-facility",
+      "https://portal.example/join/?facility=test-facility",
     );
     expect(resourceSearchText(guide).includes("Scan the VIN")).toBe(false);
     expect(resourceSearchText(guide).includes("Review Report")).toBe(false);
   });
 
-  it("makes the approved Chicago Heights PDF the first quick-start action", () => {
+  it("does not publish an inherited customer packet for an ordinary facility", () => {
     const guide = buildFacilityGuide({
-      id: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
-      name: "Chicago Heights",
-      slug: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
+      id: "facility-example",
+      name: "Example Facility",
+      slug: "example-facility",
       active: true,
       locationCount: 1,
       yards: [
         {
-          yardId: "yard-ff39eedd-4630-467a-97f6-2149b4c6a6d3",
+          yardId: "yard-example",
           name: "Main",
           code: "MAIN",
           active: true,
@@ -153,27 +153,12 @@ describe("resource catalog", () => {
       ],
     } as FacilitySummary);
 
-    expect(guide.quickStart?.url).toBe(
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
-    expect(JSON.stringify(guide.steps)).toBe(
-      JSON.stringify([
-        "Scan the QR or open the registration link.",
-        "Enter the email address you will use with Inspection-Trac.",
-        "Create an account or sign in.",
-        "Verify the email address when prompted.",
-        "Continue until the registration page confirms Chicago Heights.",
-        "Open Inspection-Trac and select Main when a yard is requested.",
-      ]),
-    );
-    expect(guide.registrationUrl).toBe(
-      "https://inspection-trac.com/join/chicago-heights",
-    );
-    expect(guide.done).toBe(
-      "Chicago Heights appears as an available facility in Inspection-Trac.",
-    );
+    expect(guide.quickStart).toBeUndefined();
+    expect(guide.registrationUrl).toBeUndefined();
+    expect(guide.title).toBe("Example Facility Quick Start");
     expect(resourceSearchText(guide).includes("Auth0")).toBe(false);
     expect(resourceSearchText(guide)).toContain("Main");
+    expect(resourceSearchText(guide)).not.toMatch(/Inspection[- ]Trac|Chicago Heights|AWCT|JNAP|SHAP/i);
   });
 
   it("indexes task titles, terminology, facilities, and troubleshooting topics", () => {

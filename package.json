@@ -7,6 +7,7 @@
     "dev": "next dev --webpack --port 3000",
     "prebuild": "node scripts/ensure-native-deps.mjs",
     "build": "next build",
+    "validate:docudent-build": "node scripts/validate-docudent-build.mjs",
     "export:finalize": "node scripts/finalize-static-export.mjs",
     "export:validate": "node scripts/validate-static-export.mjs",
     "start": "npx serve@latest out",

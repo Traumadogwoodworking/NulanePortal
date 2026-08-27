@@ -208,7 +208,7 @@ export const generalResourceGuides: ResourceGuideDefinition[] = [
     problem:
       "If the needed value is not available, stop and ask the approved facility contact instead of choosing a substitute code.",
     referenceNote:
-      "Inspection-Trac exposes its configured code choices in the workflow. This guide is not an independently verified reproduction of an official AIAG/M-22 reference.",
+      "DocuDent exposes its configured code choices in the workflow. This guide is not an independently verified reproduction of an official AIAG/M-22 reference.",
   }),
   published({
     id: "find-and-export-reports",
@@ -220,7 +220,6 @@ export const generalResourceGuides: ResourceGuideDefinition[] = [
     access: "authenticated",
     keywords: [
       "damage reports",
-      "RSA reports",
       "submitted report",
       "VIN",
       "status",
@@ -231,7 +230,7 @@ export const generalResourceGuides: ResourceGuideDefinition[] = [
       "export",
       "download",
     ],
-    where: "Portal → Damage Reports or RSA Reports",
+    where: "Portal → Damage Reports",
     steps: [
       "Choose the report page for the workflow you need.",
       "Use the available facility, VIN, status, or date controls to narrow the list.",

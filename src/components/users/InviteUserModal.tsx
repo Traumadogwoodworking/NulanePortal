@@ -53,32 +53,6 @@ const ROLE_OPTIONS = [
   { key: "super_admin", label: "Super Admin" },
 ];
 
-const ORGANIZATION_OPTIONS = [
-  { key: "awct", label: "AWCT.inc", locationGroups: ["JNAP", "Other", "SHAP"] },
-  { key: "svl", label: "Signature Vehicle Logistics", locationGroups: ["SVL Main", "SVL Other"] },
-] as const;
-
-type OrganizationKey = (typeof ORGANIZATION_OPTIONS)[number]["key"];
-
-function normalizedFacilityText(facility: FacilitySummary): string {
-  return [facility.name, facility.slug, facility.id].filter(Boolean).join(" ").toLowerCase();
-}
-
-function getLocationGroup(organization: OrganizationKey, facility: FacilitySummary): string | null {
-  const value = normalizedFacilityText(facility);
-  const isSvl = /\bsvl\b|signature vehicle logistics/.test(value);
-
-  if (organization === "svl") {
-    if (!isSvl) return null;
-    return /\bmain\b/.test(value) ? "SVL Main" : "SVL Other";
-  }
-
-  if (isSvl) return null;
-  if (/\bjnap\b/.test(value)) return "JNAP";
-  if (/\bshap\b/.test(value)) return "SHAP";
-  return "Other";
-}
-
 export function InviteUserModal({
   facilities,
   trigger,
@@ -93,7 +67,6 @@ export function InviteUserModal({
   const [displayName, setDisplayName] = useState("");
   const [selectedRole, setSelectedRole] = useState("user");
   const [selectedFacilityIds, setSelectedFacilityIds] = useState<string[]>([]);
-  const [selectedOrganization, setSelectedOrganization] = useState<OrganizationKey>("awct");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,17 +90,8 @@ export function InviteUserModal({
     setDisplayName(initialUser?.displayName ?? "");
     setSelectedRole(initialUser?.role ?? "user");
     setSelectedFacilityIds(initialUser?.facilityIds ?? []);
-    setSelectedOrganization("awct");
     setError(null);
   };
-
-  const visibleLocationGroups = useMemo(() => {
-    const organization = ORGANIZATION_OPTIONS.find((option) => option.key === selectedOrganization)!;
-    return organization.locationGroups.map((group) => ({
-      label: group,
-      facilities: facilities.filter((facility) => getLocationGroup(selectedOrganization, facility) === group),
-    }));
-  }, [facilities, selectedOrganization]);
 
   const handleSubmit = async () => {
     const resolvedEmail = email.trim();
@@ -226,26 +190,11 @@ export function InviteUserModal({
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="invite-organization">Organization</Label>
-            <Select value={selectedOrganization} onValueChange={(value) => setSelectedOrganization(value as OrganizationKey)}>
-              <SelectTrigger id="invite-organization" className="bg-white text-slate-900 border-slate-200 shadow-sm">
-                <SelectValue placeholder="Select an organization" />
-              </SelectTrigger>
-              <SelectContent>
-                {ORGANIZATION_OPTIONS.map((organization) => (
-                  <SelectItem key={organization.key} value={organization.key}>
-                    {organization.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Label className="mt-2">Locations</Label>
+            <Label>Facilities</Label>
             <div className="grid max-h-56 gap-3 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
-              {visibleLocationGroups.map((group) => (
-                <div key={group.label} className="grid gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{group.label}</p>
-                  {group.facilities.length ? (
-                    group.facilities.map((facility) => {
+              <div className="grid gap-2">
+                  {facilities.length ? (
+                    facilities.map((facility) => {
                       const checked = selectedFacilityIds.includes(facility.id);
                       return (
                         <button
@@ -269,8 +218,7 @@ export function InviteUserModal({
                   ) : (
                     <p className="text-sm text-slate-500">No backend locations in this group.</p>
                   )}
-                </div>
-              ))}
+              </div>
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">

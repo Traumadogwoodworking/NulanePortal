@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { axe } from "vitest-axe";
 import ResourcesPage from "@/app/resources/page";
 import ResourceGuidePageClient from "@/components/resources/ResourceGuidePageClient";
@@ -7,7 +7,7 @@ import ResourceGuidePageClient from "@/components/resources/ResourceGuidePageCli
 const mocks = vi.hoisted(() => ({
   query: "",
   session: {
-    session: { organization: { name: "Inspection-Trac" } },
+    session: { organization: { name: "Example Organization" } },
     organizationId: "org-1" as string | null,
     selectedLocationLabel: null as string | null,
     isFacilityAdmin: false,
@@ -81,12 +81,7 @@ describe("Resources & Training", () => {
     expect(
       screen.queryByRole("link", { name: /Manage Facility Registration/ }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Chicago Heights Quick Start" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("No facility-specific guides are available"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Facility quick starts").querySelector("article")).toBeNull();
   });
 
   it("has no automated accessibility violations in the operator landing state", async () => {
@@ -104,167 +99,25 @@ describe("Resources & Training", () => {
     expect(screen.getByText(/Try a broader term/)).toBeInTheDocument();
   });
 
-  it("keeps the published Chicago quick start usable while directory data loads or fails", () => {
-    mocks.isLoading = true;
-    const loadingView = render(<ResourcesPage />);
-    expect(
-      screen.getByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
-    loadingView.unmount();
-
-    mocks.isLoading = false;
-    mocks.error = new Error("directory unavailable");
-    render(<ResourcesPage />);
-    expect(
-      screen.getByRole("heading", { name: "Chicago Heights Quick Start" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Open registration link" }),
-    ).toHaveAttribute(
-      "href",
-      "https://inspection-trac.com/join/chicago-heights",
-    );
-  });
-
-  it("uses facility overlays without requesting admin registration data for an operator", () => {
+  it("does not inherit directory facilities as published Quick Starts", () => {
     mocks.directory = {
       facilities: [
         {
           id: "facility-1",
-          name: "Chicago Heights",
-          slug: "chicago-heights",
+          name: "Example Facility",
+          slug: "example-facility",
           active: true,
           locationCount: 1,
           yards: [
             { yardId: "yard-1", name: "Main Yard", code: "MAIN", active: true },
           ],
         },
-        {
-          id: "facility-2",
-          name: "SHAP",
-          slug: "shap",
-          active: true,
-          locationCount: 1,
-          yards: [],
-        },
       ],
     };
     render(<ResourcesPage />);
 
-    expect(
-      screen.getByRole("heading", { name: "Chicago Heights Quick Start" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "SHAP" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Facility quick reference/ }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/guides?facility=facility-1&task=facility-start",
-    );
-    expect(
-      screen.queryByRole("link", { name: /Facility settings/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("Scan to register")).toBeInTheDocument();
-    expect(
-      screen.getByText(/receive access to Chicago Heights/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
-    const quickStartHeading = screen.getByRole("heading", {
-      name: "Chicago Heights Quick Start",
-    });
-    const handbookSearch = screen.getByLabelText("Search the handbook");
-    expect(
-      quickStartHeading.compareDocumentPosition(handbookSearch) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Facility quick starts").querySelector("article")).toBeNull();
     expect(mocks.fetchFacilityRegistration).not.toHaveBeenCalled();
-  });
-
-  it("matches the authenticated live Chicago Heights record by stable facility ID", async () => {
-    mocks.session.organizationId = null;
-    mocks.session.isSuperAdmin = true;
-    mocks.session.locations = [
-      {
-        location_id: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
-        organization_id: "org-awct",
-        location_name: "Chicago Heights",
-        location_label: "Chicago Heights",
-        display_name: "Chicago Heights",
-        is_active: true,
-        metadata: {
-          yards: [
-            {
-              yard_id: "yard-ff39eedd-4630-467a-97f6-2149b4c6a6d3",
-              yard_name: "Main",
-              yard_code: "MAIN",
-              is_active: true,
-            },
-          ],
-        },
-      },
-    ];
-    mocks.directory = { facilities: [] };
-
-    render(<ResourcesPage />);
-
-    const quickStartHeading = screen.getByRole("heading", {
-      name: "Chicago Heights Quick Start",
-    });
-    const handbookSearch = screen.getByLabelText("Search the handbook");
-    expect(
-      quickStartHeading.compareDocumentPosition(handbookSearch) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen.queryByText("No facility-specific guides are available"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
-    expect(
-      screen.getByRole("link", { name: "Open registration link" }),
-    ).toHaveAttribute(
-      "href",
-      "https://inspection-trac.com/join/chicago-heights",
-    );
-    expect(
-      screen.getByText(
-        "Open Inspection-Trac and select Main when a yard is requested.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Chicago Heights appears as an available facility in Inspection-Trac.",
-      ),
-    ).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(
-      /Auth0|short-lived session|metadata|registration slug/i,
-    );
-    await waitFor(() =>
-      expect(mocks.toDataURL).toHaveBeenCalledWith(
-        "https://inspection-trac.com/join/chicago-heights",
-        expect.any(Object),
-      ),
-    );
   });
 
   it("shows administrative access tasks to a facility administrator", () => {
@@ -290,99 +143,25 @@ describe("Resources & Training", () => {
     expect(screen.queryByText("Facility admin")).not.toBeInTheDocument();
   });
 
-  it("shows registration lookup failure only for an administrator who can request it", async () => {
+  it("does not request registration details without an authoritative published DocuDent packet", () => {
     mocks.session.isFacilityAdmin = true;
     mocks.directory = {
       facilities: [
         {
           id: "facility-1",
-          name: "Chicago Heights",
-          slug: "chicago-heights",
+          name: "Example Facility",
+          slug: "example-facility",
           active: true,
           locationCount: 1,
           yards: [],
         },
       ],
     };
-    mocks.fetchFacilityRegistration.mockRejectedValue(
-      new Error("registration unavailable"),
-    );
-    render(<ResourcesPage />);
-
-    await waitFor(() =>
-      expect(mocks.fetchFacilityRegistration).toHaveBeenCalledWith(
-        "org-1",
-        "facility-1",
-      ),
-    );
-    expect(
-      await screen.findByText(
-        /Registration details are temporarily unavailable/,
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("shows one canonical registration link, QR, and quick-start action to an administrator", async () => {
-    mocks.session.isFacilityAdmin = true;
-    mocks.directory = {
-      facilities: [
-        {
-          id: "facility-1",
-          name: "Chicago Heights",
-          slug: "chicago-heights",
-          active: true,
-          locationCount: 1,
-          yards: [],
-        },
-      ],
-    };
-    mocks.fetchFacilityRegistration.mockResolvedValue({
-      organizationId: "org-1",
-      organizationName: "Inspection-Trac",
-      facilityId: "facility-1",
-      facilityName: "Chicago Heights",
-      facilityLabel: "Chicago Heights",
-      slug: "chicago-heights",
-      enabled: true,
-      available: true,
-      defaultRoleId: "role-1",
-      defaultRoleKey: "user",
-      defaultRoleName: "User",
-      registrationUrl:
-        "https://inspection-trac.com/join/?facility=chicago-heights",
-      onboardingDisplayName: "Chicago Heights",
-      support: { email: "support@inspection-trac.com" },
-      stores: {},
-      packetRevision: 4,
-      packetUpdatedAt: null,
-      lastSuccessfulEnrollment: null,
-      recentEnrollments: [],
-      globalEnabled: true,
-      updatedAt: null,
-    });
 
     render(<ResourcesPage />);
 
-    expect(await screen.findByText("Registration enabled")).toBeInTheDocument();
-    expect(
-      await screen.findByRole("img", {
-        name: "Registration QR code for Chicago Heights",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Open registration link" }),
-    ).toHaveAttribute(
-      "href",
-      "https://inspection-trac.com/join/chicago-heights",
-    );
-    expect(
-      screen.getByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
+    expect(screen.getByLabelText("Facility quick starts").querySelector("article")).toBeNull();
+    expect(mocks.fetchFacilityRegistration).not.toHaveBeenCalled();
   });
 });
 
@@ -415,14 +194,14 @@ describe("Resource guide states", () => {
     ).toBeInTheDocument();
   });
 
-  it("puts the approved PDF first in the Chicago Heights quick reference", () => {
+  it("does not expose an unapproved facility quick reference", () => {
     mocks.query = "facility=facility-1&task=facility-start";
     mocks.directory = {
       facilities: [
         {
           id: "facility-1",
-          name: "Chicago Heights",
-          slug: "chicago-heights",
+          name: "Example Facility",
+          slug: "example-facility",
           active: true,
           locationCount: 1,
           yards: [
@@ -434,62 +213,8 @@ describe("Resource guide states", () => {
 
     render(<ResourceGuidePageClient />);
 
-    expect(
-      screen.getByRole("heading", {
-        level: 1,
-        name: "Chicago Heights Quick Start",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Scan to register")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
-    expect(
-      screen.getByText("Scan the QR or open the registration link."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Open Inspection-Trac and select Main when a yard is requested.",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("opens the Chicago quick reference from the live session record when the directory is empty", () => {
-    mocks.query =
-      "facility=6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c&task=facility-start";
-    mocks.session.locations = [
-      {
-        location_id: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
-        organization_id: "org-awct",
-        location_name: "Chicago Heights",
-        location_label: "Chicago Heights",
-        display_name: "Chicago Heights",
-        is_active: true,
-      },
-    ];
-    mocks.directory = { facilities: [] };
-
-    render(<ResourceGuidePageClient />);
-
-    expect(
-      screen.getByRole("heading", {
-        level: 1,
-        name: "Chicago Heights Quick Start",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
+    expect(screen.getByText("Facility context is unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(/Example Facility Quick Start/)).not.toBeInTheDocument();
   });
 
   it("does not expose a facility quick reference without an approved asset", () => {
@@ -498,8 +223,8 @@ describe("Resource guide states", () => {
       facilities: [
         {
           id: "facility-2",
-          name: "SHAP",
-          slug: "shap",
+          name: "Example Facility",
+          slug: "example-facility",
           active: true,
           locationCount: 1,
           yards: [],
@@ -512,7 +237,7 @@ describe("Resource guide states", () => {
     expect(
       screen.getByText("Facility context is unavailable"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("SHAP Quick Start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Example Facility Quick Start")).not.toBeInTheDocument();
   });
 
   it("renders the concise task procedure and reference boundary", () => {

@@ -4,11 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { usePortalBrandingSnapshot } from "@/lib/portalData";
 import { usePortalSession } from "@/lib/portalSession";
-import {
-  INSPECTION_TRAC_POWER_BI_EMBED_URL,
-  resolvePortalBranding,
-  resolvePowerBiEmbedUrl,
-} from "@/lib/branding";
+import { resolvePortalBranding, resolvePowerBiEmbedUrl } from "@/lib/branding";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function DashboardPage() {
@@ -26,7 +22,7 @@ export default function DashboardPage() {
       }),
     [brandingSnapshot, session]
   );
-  const rawEmbedUrl = branding.powerBiEmbedUrl || INSPECTION_TRAC_POWER_BI_EMBED_URL;
+  const rawEmbedUrl = branding.powerBiEmbedUrl;
   const embedUrl = resolvePowerBiEmbedUrl(rawEmbedUrl);
 
   useEffect(() => {
@@ -50,7 +46,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.32em] text-slate-500">Dashboard</p>
-          <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">Inspection Trac Analytics</h1>
+          <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">DocuDent Analytics</h1>
         </div>
         {embedUrl ? (
           <a
@@ -70,7 +66,7 @@ export default function DashboardPage() {
           <div className="absolute inset-0 flex items-center justify-center bg-white">
             <EmptyState
               title="Power BI unavailable"
-              description="The Inspection Trac Power BI report could not be loaded. Check the embed URL and report permissions."
+              description="No DocuDent Power BI report is configured for this organization."
               tone="danger"
             />
           </div>
@@ -85,7 +81,7 @@ export default function DashboardPage() {
               </div>
             ) : null}
             <iframe
-              title="Inspection Trac Power BI dashboard"
+              title="DocuDent Power BI dashboard"
               src={embedUrl}
               className="h-full min-h-[720px] w-full border-0"
               allowFullScreen

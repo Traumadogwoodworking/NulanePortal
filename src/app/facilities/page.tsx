@@ -25,13 +25,6 @@ import {
   formatOrganizationDisplayName,
 } from "@/lib/facilityDisplay";
 
-const facilityRecipientAliases: Record<string, string> = {
-  jn: "jnap",
-  jnap: "jnap",
-  shap: "shap",
-  other: "other",
-};
-
 function normalizeFacilityRecipientKey(value: string | null | undefined): string {
   const normalized = (value ?? "")
     .toLowerCase()
@@ -41,10 +34,7 @@ function normalizeFacilityRecipientKey(value: string | null | undefined): string
   if (!normalized) {
     return "";
   }
-  return normalized
-    .split(" ")
-    .map((token) => facilityRecipientAliases[token] || token)
-    .join(" ");
+  return normalized;
 }
 
 function canonicalFacilityKey(value: string | null | undefined): string {

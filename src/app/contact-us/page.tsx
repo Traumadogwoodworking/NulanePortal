@@ -1,7 +1,7 @@
 import { PublicFooter, PublicHeader, SectionLabel, SUPPORT_EMAIL } from "@/components/public-site";
 import { publicBranding } from "@/lib/publicBranding";
 
-const GENERAL_INQUIRIES_EMAIL = "info@inspection-trac.com";
+const GENERAL_INQUIRIES_EMAIL = "support@nulanesystems.com";
 
 const contactItems = [
   {
@@ -14,13 +14,13 @@ const contactItems = [
     label: "General Inquiries",
     value: GENERAL_INQUIRIES_EMAIL,
     href: `mailto:${GENERAL_INQUIRIES_EMAIL}`,
-    detail: "Product questions, account planning, and Inspection-Trac information.",
+    detail: "Product questions, account planning, and DocuDent information.",
   },
   {
     label: "Portal",
     value: publicBranding.openPortalButtonLabel,
     href: publicBranding.portalUrl,
-    detail: "Open the Inspection-Trac portal when you are ready to sign in.",
+    detail: "Open the DocuDent portal when you are ready to sign in.",
   },
 ];
 
@@ -30,7 +30,7 @@ export default function ContactUsPage() {
       <PublicHeader />
       <section className="mx-auto w-full max-w-5xl px-6 py-16 lg:px-8">
         <SectionLabel>Contact Us</SectionLabel>
-        <h1 className="mt-4 text-5xl font-black tracking-tight text-slate-950 sm:text-6xl">Contact Inspection-Trac</h1>
+        <h1 className="mt-4 text-5xl font-black tracking-tight text-slate-950 sm:text-6xl">Contact DocuDent</h1>
         <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600">
           Reach the portal team for support, account access, report review, and inspection workflow questions.
         </p>

@@ -19,6 +19,8 @@ not DocuDent source material.
 
 - The portal defaults to DocuDent product identity and retains the Nulane
   company mark in the powered-by position.
+- The shipped identity is fixed to DocuDent; donor branding presets remain
+  compatibility data and cannot be selected through a public environment flag.
 - The authoritative logo assets match the mobile DocuDent assets by SHA-256.
 - API URLs default to `https://api.nulanesystems.com/api` and may be overridden
   only through generic or DocuDent-specific variables.
@@ -46,15 +48,23 @@ workflow before release.
 
 ## Verification boundary
 
-The DocuDent identity/configuration/onboarding suite passes 44 tests across nine
-test files, targeted ESLint has no errors, and the Next.js production build
-succeeds with onboarding disabled. The generated route manifest contains none
-of the excluded customer routes.
+The full donor suite passes all 169 tests. The stale customer-specific assertions
+were replaced with DocuDent's generic-resource and no-published-facility-packet
+contract. The Next.js production build succeeds with onboarding disabled, and
+`npm run validate:docudent-build` checks rendered HTML/RSC plus the generated
+route manifest for customer identity and excluded routes.
 
-The full donor suite currently passes 169 of 178 tests. Its remaining nine
-failures are confined to `resourceCatalog.test.ts` and `resourcesPage.test.tsx`,
-which still assert that the removed Chicago Heights Inspection-Trac packet is
-published. Those assertions must be replaced with authoritative DocuDent
-facility fixtures when the target API contract is proven; restoring the
-customer packet merely to make those tests pass would violate this product
-boundary.
+Production-reachable public metadata, contact copy, landing/hero identity,
+analytics fallback/copy and email-domain overrides, resource guidance, user facility selection, and
+diagnostic namespaces are DocuDent-generic. The analytics page has no inherited
+Power BI URL: it renders an unavailable state unless the target organization
+supplies one.
+
+Some donor compatibility modules remain in source but have no application
+route: the RSA manager and styles, the 24-hour service, historical multi-brand
+preset data, development-only fixtures, and analytics fixture labels. They are
+not accepted as DocuDent product behavior and must not be reconnected. The
+built-output guard deliberately tests rendered output and routes rather than
+mistaking internal compatibility/schema identifiers for customer-facing copy.
+The unreferenced Chicago PDF remains the sole known binary donor artifact and
+is blocked from publication by the resource catalog.

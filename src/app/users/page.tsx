@@ -28,13 +28,6 @@ const FACILITY_ALL = "all";
 const VIEW_ACTIVE = "active";
 const VIEW_DELETED = "deleted";
 const ACTIVE_LOGIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const facilityRecipientAliases: Record<string, string> = {
-  jn: "jnap",
-  jnap: "jnap",
-  shap: "shap",
-  other: "other",
-};
-
 function normalizeFacilityRecipientKey(value: string | null | undefined): string {
   const normalized = (value ?? "")
     .toLowerCase()
@@ -44,10 +37,7 @@ function normalizeFacilityRecipientKey(value: string | null | undefined): string
   if (!normalized) {
     return "";
   }
-  return normalized
-    .split(" ")
-    .map((token) => facilityRecipientAliases[token] || token)
-    .join(" ");
+  return normalized;
 }
 
 function canonicalFacilityKey(value: string | null | undefined): string {

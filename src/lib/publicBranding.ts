@@ -129,7 +129,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
 };
 
 export function getPublicBrandingConfig(mode: PortalBrandingMode = ACTIVE_PORTAL_BRANDING): PublicBrandingConfig {
-  const config = baseConfigs[mode] ?? baseConfigs.definianInspection;
+  const config = baseConfigs[mode] ?? baseConfigs.docudent;
   return {
     ...config,
     mode,

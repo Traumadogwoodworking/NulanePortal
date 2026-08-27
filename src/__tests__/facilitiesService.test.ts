@@ -170,7 +170,7 @@ describe("facilitiesService", () => {
     });
   });
 
-  it("keeps unassigned facilities in All organizations and out of a specific suborganization", async () => {
+  it("does not apply donor-specific suborganization filtering", async () => {
     apiClientMocks.apiFetch.mockResolvedValue({
       locations: [
         {
@@ -180,19 +180,19 @@ describe("facilitiesService", () => {
           metadata: {},
         },
         {
-          location_id: "awct",
-          location_name: "Custom AWCT facility",
+          location_id: "assigned",
+          location_name: "Assigned facility",
           is_active: true,
-          metadata: { suborg: "awct" },
+          metadata: { suborg: "legacy-scope" },
         },
       ],
     });
 
     await expect(fetchFacilities("org-1", "all")).resolves.toMatchObject({
-      facilities: [{ id: "unassigned" }, { id: "awct" }],
+      facilities: [{ id: "unassigned" }, { id: "assigned" }],
     });
-    await expect(fetchFacilities("org-1", "awct")).resolves.toMatchObject({
-      facilities: [{ id: "awct" }],
+    await expect(fetchFacilities("org-1", "legacy-scope")).resolves.toMatchObject({
+      facilities: [{ id: "unassigned" }, { id: "assigned" }],
     });
   });
 });

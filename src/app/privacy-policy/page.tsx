@@ -1,7 +1,7 @@
 import { PublicRedirect } from "@/components/PublicRedirect";
 
 export const metadata = {
-  title: "Privacy Policy - Inspection-Trac",
+  title: "Privacy Policy - DocuDent",
 };
 
 export default function PrivacyPolicyAliasPage() {

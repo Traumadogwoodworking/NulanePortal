@@ -15,11 +15,9 @@ const dashboardRows: RuntimeDataRow[] = [
     "totals.noDamageReports": 583,
     "totals.damageReportsToday": 28,
     "totals.clearReportsToday": 41,
-    "totals.rsaReports": 76,
-    "totals.rsaReportsToday": 4,
   },
-  { "dailyTrend.date": "2026-07-01", "dailyTrend.facility": "JNAP", "dailyTrend.inspector_email": "ana@example.com", "dailyTrend.damageReports": 44, "dailyTrend.noDamageReports": 21 },
-  { "dailyTrend.date": "2026-07-02", "dailyTrend.facility": "JNAP", "dailyTrend.inspector_email": "mike@example.com", "dailyTrend.damageReports": 37, "dailyTrend.noDamageReports": 28 },
+  { "dailyTrend.date": "2026-07-01", "dailyTrend.facility": "Facility A", "dailyTrend.inspector_email": "ana@example.com", "dailyTrend.damageReports": 44, "dailyTrend.noDamageReports": 21 },
+  { "dailyTrend.date": "2026-07-02", "dailyTrend.facility": "Facility A", "dailyTrend.inspector_email": "mike@example.com", "dailyTrend.damageReports": 37, "dailyTrend.noDamageReports": 28 },
   { "dailyTrend.date": "2026-07-03", "dailyTrend.facility": "Conner", "dailyTrend.inspector_email": "ana@example.com", "dailyTrend.damageReports": 31, "dailyTrend.noDamageReports": 34 },
   { "bySeverity.severity": "Low", "bySeverity.count": 118 },
   { "bySeverity.severity": "Medium", "bySeverity.count": 84 },
@@ -33,9 +31,9 @@ const dashboardRows: RuntimeDataRow[] = [
 ];
 
 const reportRows: RuntimeDataRow[] = [
-  { "rows.report_id": "IT-10091", "rows.vin": "1C4RJFBG0RC10091", "rows.status": "complete", "rows.inspector_email": "ana@example.com", "rows.created_at": "2026-07-03", "rows.location.facility": "JNAP", "rows.damage_summary.count": 3 },
-  { "rows.report_id": "IT-10092", "rows.vin": "1C4RJFBG0RC10092", "rows.status": "complete", "rows.inspector_email": "mike@example.com", "rows.created_at": "2026-07-03", "rows.location.facility": "Conner", "rows.damage_summary.count": 0 },
-  { "rows.report_id": "IT-10093", "rows.vin": "1C4RJFBG0RC10093", "rows.status": "review", "rows.inspector_email": "ana@example.com", "rows.created_at": "2026-07-04", "rows.location.facility": "JNAP", "rows.damage_summary.count": 1 },
+  { "rows.report_id": "DD-10091", "rows.vin": "1C4RJFBG0RC10091", "rows.status": "complete", "rows.inspector_email": "ana@example.com", "rows.created_at": "2026-07-03", "rows.location.facility": "Facility A", "rows.damage_summary.count": 3 },
+  { "rows.report_id": "DD-10092", "rows.vin": "1C4RJFBG0RC10092", "rows.status": "complete", "rows.inspector_email": "mike@example.com", "rows.created_at": "2026-07-03", "rows.location.facility": "Facility B", "rows.damage_summary.count": 0 },
+  { "rows.report_id": "DD-10093", "rows.vin": "1C4RJFBG0RC10093", "rows.status": "review", "rows.inspector_email": "ana@example.com", "rows.created_at": "2026-07-04", "rows.location.facility": "Facility A", "rows.damage_summary.count": 1 },
 ];
 
 export const REFERENCE_HOME_DASHBOARD: RuntimeDashboardDefinition = {
@@ -66,8 +64,6 @@ export const REFERENCE_HOME_DASHBOARD: RuntimeDashboardDefinition = {
         { key: "totals.noDamageReports", label: "Clear Submissions", fieldType: "number", semanticType: "measure", aggregation: "sum", required: true },
         { key: "totals.damageReportsToday", label: "Damaged Today", fieldType: "number", semanticType: "measure", aggregation: "sum" },
         { key: "totals.clearReportsToday", label: "Clear Today", fieldType: "number", semanticType: "measure", aggregation: "sum" },
-        { key: "totals.rsaReports", label: "RSA Reports", fieldType: "number", semanticType: "measure", aggregation: "sum" },
-        { key: "totals.rsaReportsToday", label: "RSA Today", fieldType: "number", semanticType: "measure", aggregation: "sum" },
         { key: "dailyTrend.date", label: "Day", fieldType: "date", semanticType: "dimension" },
         { key: "dailyTrend.facility", label: "Facility", fieldType: "string", semanticType: "dimension" },
         { key: "dailyTrend.inspector_email", label: "Inspector", fieldType: "string", semanticType: "dimension" },
@@ -103,7 +99,6 @@ export const REFERENCE_HOME_DASHBOARD: RuntimeDashboardDefinition = {
     metric("total-damage-submissions", "Total Damage Submissions", ["totals.damageReports", "totals.noDamageReports"]),
     metric("damaged-submissions-today", "Damaged Submissions Today", ["totals.damageReportsToday", "totals.clearReportsToday"]),
     metric("damage-vs-clear", "Damage vs Clear", ["totals.damageReports", "totals.noDamageReports"]),
-    metric("rsa-reports", "RSA Reports", ["totals.rsaReports", "totals.rsaReportsToday"]),
     chart("facility-daily-trend", "Facility Daily Trend", "stacked_bar", ["dailyTrend.damageReports", "dailyTrend.noDamageReports"], ["dailyTrend.date", "dailyTrend.facility"]),
     chart("inspector-daily-trend", "Inspector Daily Trend", "stacked_bar", ["dailyTrend.damageReports", "dailyTrend.noDamageReports"], ["dailyTrend.date", "dailyTrend.inspector_email"]),
     chart("severity", "Severity", "bar", ["bySeverity.count"], ["bySeverity.severity"]),
@@ -125,7 +120,6 @@ export const REFERENCE_HOME_DASHBOARD: RuntimeDashboardDefinition = {
     { widgetId: "total-damage-submissions", section: "Scoreboard", x: 0, y: 0, w: 3, h: 1 },
     { widgetId: "damaged-submissions-today", section: "Scoreboard", x: 3, y: 0, w: 3, h: 1 },
     { widgetId: "damage-vs-clear", section: "Scoreboard", x: 6, y: 0, w: 3, h: 1 },
-    { widgetId: "rsa-reports", section: "Scoreboard", x: 9, y: 0, w: 3, h: 1 },
     { widgetId: "facility-daily-trend", section: "Daily Trends", x: 0, y: 1, w: 6, h: 3 },
     { widgetId: "inspector-daily-trend", section: "Daily Trends", x: 6, y: 1, w: 6, h: 3 },
     { widgetId: "severity", section: "Damage Profile", x: 0, y: 4, w: 4, h: 3 },
@@ -139,8 +133,7 @@ export const REFERENCE_HOME_DASHBOARD: RuntimeDashboardDefinition = {
     { visualId: "inspector-daily-trend", currentBackendStatus: "missing_inspector_daily_clear_split", requiredFields: ["dailyTrend.inspector_email", "dailyTrend.noDamageReports"] },
   ],
   integrityRules: [
-    "Do not derive damaged submissions from generic totals or RSA counts.",
-    "RSA reports stay separate from damage submissions.",
+    "Do not derive damaged submissions from generic totals.",
     "Clear and damaged values require explicit backend fields.",
   ],
 };
