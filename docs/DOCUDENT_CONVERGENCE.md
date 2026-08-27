@@ -84,9 +84,9 @@ not linked to, promoted over, or served by an Inspection-Trac Vercel project.
 - Project: `docudent-portal`
 - Project ID: `prj_L9xCU9AdQMD3WrhH71U8PfMbU54S`
 - Production alias: `https://docudent-portal.vercel.app`
-- Verified deployment: `dpl_7aguyLU42Tkp9qSvWz2JbhF5edyL`
+- Verified deployment: `dpl_6THZsn2Abrm6rknfgi9EYfqe72sY`
 - Immutable deployment URL:
-  `https://docudent-portal-ekkelcsgx-traumadogwoodworkings-projects.vercel.app`
+  `https://docudent-portal-6gcl47dm7-traumadogwoodworkings-projects.vercel.app`
 
 The first project deployment used Vercel's generic framework preset and
 returned 404 for application routes. The project was corrected to the Next.js
@@ -102,6 +102,10 @@ The prior generic Apple URL returned 404 and was replaced with canonical App
 Store ID `6756033587`; the Android package URL resolves to the published
 `com.nulanesystems.docudent` listing. These identifiers match the preserved
 DocuDent release identity.
+
+The public `Open Portal` actions now target the established `/home/` portal
+entry instead of looping back to the marketing root. With Auth0 deliberately
+unset, that entry fails closed and names the four missing Auth0 inputs.
 
 This is a deployed public-shell boundary, not authenticated acceptance. Auth0
 deployment inputs remain unset, the portal onboarding flag remains false, and
