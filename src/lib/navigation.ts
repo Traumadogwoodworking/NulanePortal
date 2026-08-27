@@ -57,24 +57,6 @@ const portalRoutes: PortalRoute[] = [
     icon: "reports",
     moduleKey: "reports",
   },
-  {
-    label: "RSA Reports",
-    href: "/reports/rsa",
-    description: "Rail Safe Audit",
-    section: "core",
-    icon: "rsa",
-    moduleKey: "reports",
-    requiresShap: true,
-  },
-  {
-    label: "24 Hour",
-    href: "/inspection/24-hour",
-    description: "24-hour inventory inspection",
-    section: "core",
-    icon: "clock",
-    moduleKey: "reports",
-  },
-
   // Apps
   {
     label: publicBranding.appName,
@@ -139,7 +121,7 @@ const portalRoutes: PortalRoute[] = [
   {
     label: "Resources",
     href: "/resources",
-    description: "Inspection-Trac resources and guidance",
+    description: "DocuDent resources and guidance",
     section: "support",
     icon: "reports",
   },

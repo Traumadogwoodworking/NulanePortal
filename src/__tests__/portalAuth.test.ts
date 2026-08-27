@@ -39,6 +39,10 @@ beforeEach(() => {
   auth0Mocks.isAuthenticated.mockResolvedValue(false);
   auth0Mocks.getTokenSilently.mockRejectedValue(new Error("No token"));
   auth0Mocks.handleRedirectCallback.mockResolvedValue({ appState: { returnTo: "/home/" } });
+  vi.stubEnv("NEXT_PUBLIC_AUTH0_DOMAIN", "nulanesystems.us.auth0.com");
+  vi.stubEnv("NEXT_PUBLIC_AUTH0_CLIENT_ID", "docudent-portal-test-client");
+  vi.stubEnv("NEXT_PUBLIC_AUTH0_ORGANIZATION_ID", "org_docudent_test");
+  vi.stubEnv("NEXT_PUBLIC_AUTH0_AUDIENCE", "https://api.nulanesystems.com");
 });
 
 afterEach(() => {
@@ -148,7 +152,7 @@ describe("completeAuth0Callback", () => {
 
 describe("startAuth0Login", () => {
   it("uses the local callback URL on localhost even when env points at the public portal", async () => {
-    vi.stubEnv("NEXT_PUBLIC_AUTH0_REDIRECT_URI", "https://inspection-trac.com/auth/callback/");
+    vi.stubEnv("NEXT_PUBLIC_AUTH0_REDIRECT_URI", "https://portal.docudent.example/auth/callback/");
     window.history.replaceState({}, "", "http://localhost:3000/login?returnTo=%2Fhome%2F");
     const { startAuth0Login, AuthRedirectError } = await importPortalAuth();
 
@@ -192,7 +196,7 @@ describe("startFacilityRegistrationAuth", () => {
       expect.objectContaining({
         appState: { returnTo: "/join/?enrollment=opaque-session-token" },
         authorizationParams: expect.objectContaining({
-          organization: "org_hgGvkUBSZuyEg9Mg",
+          organization: "org_docudent_test",
           login_hint: "person@example.com",
           screen_hint: "signup",
           prompt: "login",
@@ -238,7 +242,7 @@ describe("buildAuthRedirectUri", () => {
     expect(
       buildAuthRedirectUri(
         "https://vercel-portal-exact-g63baiqyn-traumadogwoodworkings-projects.vercel.app",
-        "https://inspection-trac.com/auth/callback/"
+        "https://portal.docudent.example/auth/callback/"
       )
     ).toBe("https://vercel-portal-exact-g63baiqyn-traumadogwoodworkings-projects.vercel.app/auth/callback/");
   });
@@ -255,20 +259,30 @@ describe("buildAuthRedirectUri", () => {
     expect(
       buildAuthRedirectUri(
         "https://preview.example.vercel.app",
-        "https://inspection-trac.com/auth/callback/",
+        "https://portal.docudent.example/auth/callback/",
         "fixed"
       )
-    ).toBe("https://inspection-trac.com/auth/callback/");
+    ).toBe("https://portal.docudent.example/auth/callback/");
   });
 });
 
 describe("portal API audience", () => {
-  it("defaults to the Auth0 API audience registered for this portal", async () => {
-    vi.stubEnv("NEXT_PUBLIC_AUTH0_AUDIENCE", "");
+  it("uses the explicitly configured DocuDent API audience", async () => {
     const { getPortalAuthDebugConfig } = await importPortalAuth();
 
     expect(getPortalAuthDebugConfig()).toEqual(
-      expect.objectContaining({ audience: "https://inspection-trac.us.auth0.com/api/v2/" })
+      expect.objectContaining({ audience: "https://api.nulanesystems.com" })
+    );
+  });
+
+  it("fails closed when the portal Auth0 client is not explicitly configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH0_CLIENT_ID", "");
+    const { getPortalAuthDebugConfig } = await importPortalAuth();
+
+    expect(getPortalAuthDebugConfig()).toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining("NEXT_PUBLIC_AUTH0_CLIENT_ID"),
+      })
     );
   });
 });

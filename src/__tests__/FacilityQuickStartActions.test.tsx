@@ -1,7 +1,27 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FacilityQuickStartActions } from "@/components/facilities/FacilityQuickStartActions";
-import { getFacilityQuickStartAsset } from "@/components/facilities/facilityQuickStartAsset";
+import type { FacilityQuickStartAsset } from "@/components/facilities/facilityQuickStartAsset";
+
+const quickStart: FacilityQuickStartAsset = {
+  title: "Example Facility Quick Start",
+  purpose: "Register for Example Facility access.",
+  registrationUrl: "https://portal.example/join/example-facility",
+  url: "/resources/example-facility/example-facility-quick-start.pdf",
+  steps: ["Scan the QR or open the registration link.", "Open DocuDent and sign in."],
+  done: "Example Facility appears as an available facility in DocuDent.",
+  support: {
+    displayName: "DocuDent Support",
+    email: "support@nulanesystems.com",
+    instruction: "Include your verified email address when contacting support.",
+  },
+  facility: {
+    name: "Example Facility",
+    registrationSlug: "example-facility",
+    ids: ["facility-example"],
+    yards: [],
+  },
+};
 
 const mocks = vi.hoisted(() => ({
   toDataURL: vi.fn(),
@@ -28,18 +48,12 @@ beforeEach(() => {
 
 describe("FacilityQuickStartActions", () => {
   it("uses the canonical join URL for the visible link and QR", async () => {
-    const quickStart = getFacilityQuickStartAsset({
-      id: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
-      slug: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
-    });
-    expect(quickStart).not.toBeNull();
-
     render(
       <FacilityQuickStartActions
-        facilityName="Chicago Heights"
-        organizationName="Inspection-Trac"
-        registrationUrl="https://inspection-trac.com/join/?facility=incorrect"
-        slug="chicago-heights"
+        facilityName="Example Facility"
+        organizationName="Example Organization"
+        registrationUrl="https://portal.example/join/?facility=incorrect"
+        slug="example-facility"
         active
         publishedQuickStart={quickStart}
         showProcedure
@@ -50,25 +64,24 @@ describe("FacilityQuickStartActions", () => {
       screen.getByRole("link", { name: "Open registration link" }),
     ).toHaveAttribute(
       "href",
-      "https://inspection-trac.com/join/chicago-heights",
+      "https://portal.example/join/example-facility",
     );
     await waitFor(() => expect(mocks.toDataURL).toHaveBeenCalled());
     expect(mocks.toDataURL.mock.calls[0]?.[0]).toBe(
-      "https://inspection-trac.com/join/chicago-heights",
+      "https://portal.example/join/example-facility",
     );
     expect(mocks.toString.mock.calls[0]?.[0]).toBe(
-      "https://inspection-trac.com/join/chicago-heights",
+      "https://portal.example/join/example-facility",
     );
   });
 
   it("makes the direct published PDF the dominant first action", () => {
-    const quickStart = getFacilityQuickStartAsset("chicago-heights");
     render(
       <FacilityQuickStartActions
-        facilityName="Chicago Heights"
-        organizationName="Inspection-Trac"
-        registrationUrl="https://inspection-trac.com/join/chicago-heights"
-        slug="chicago-heights"
+        facilityName="Example Facility"
+        organizationName="Example Organization"
+        registrationUrl="https://portal.example/join/example-facility"
+        slug="example-facility"
         active
         publishedQuickStart={quickStart}
         showProcedure
@@ -76,14 +89,14 @@ describe("FacilityQuickStartActions", () => {
     );
 
     const pdf = screen.getByRole("link", {
-      name: "Open Chicago Heights Quick Start PDF",
+      name: "Open Example Facility Quick Start PDF",
     });
     const registration = screen.getByRole("link", {
       name: "Open registration link",
     });
     expect(pdf).toHaveAttribute(
       "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
+      "/resources/example-facility/example-facility-quick-start.pdf",
     );
     expect(pdf).toHaveAttribute("target", "_blank");
     expect(
@@ -96,13 +109,12 @@ describe("FacilityQuickStartActions", () => {
   });
 
   it("renders the canonical procedure, completion state, and support request", () => {
-    const quickStart = getFacilityQuickStartAsset("chicago-heights");
     render(
       <FacilityQuickStartActions
-        facilityName="Chicago Heights"
-        organizationName="Inspection-Trac"
-        registrationUrl="https://inspection-trac.com/join/chicago-heights"
-        slug="chicago-heights"
+        facilityName="Example Facility"
+        organizationName="Example Organization"
+        registrationUrl="https://portal.example/join/example-facility"
+        slug="example-facility"
         active
         publishedQuickStart={quickStart}
         showProcedure
@@ -115,17 +127,17 @@ describe("FacilityQuickStartActions", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Open Inspection-Trac and select Main when a yard is requested.",
+        "Open DocuDent and sign in.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Chicago Heights appears as an available facility in Inspection-Trac.",
+        "Example Facility appears as an available facility in DocuDent.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /include your email address, whether you completed email verification/i,
+        /include your verified email address/i,
       ),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Auth0|short-lived session/i);
@@ -134,10 +146,10 @@ describe("FacilityQuickStartActions", () => {
   it("does not expose unusable registration material while disabled", () => {
     render(
       <FacilityQuickStartActions
-        facilityName="Chicago Heights"
-        organizationName="Inspection-Trac"
-        registrationUrl="https://inspection-trac.com/join/chicago-heights"
-        slug="chicago-heights"
+        facilityName="Example Facility"
+        organizationName="Example Organization"
+        registrationUrl="https://portal.example/join/example-facility"
+        slug="example-facility"
         active={false}
       />,
     );
@@ -152,10 +164,10 @@ describe("FacilityQuickStartActions", () => {
   it("downloads only the QR SVG from the generic action set", async () => {
     render(
       <FacilityQuickStartActions
-        facilityName="Detroit Terminal"
-        organizationName="Inspection-Trac"
-        registrationUrl="https://inspection-trac.com/join/detroit-terminal"
-        slug="detroit-terminal"
+        facilityName="Example Facility"
+        organizationName="Example Organization"
+        registrationUrl="https://portal.example/join/example-facility"
+        slug="example-facility"
         active
       />,
     );
@@ -166,10 +178,11 @@ describe("FacilityQuickStartActions", () => {
     fireEvent.click(screen.getByRole("button", { name: "QR SVG" }));
     expect(mocks.saveAs).toHaveBeenCalledWith(
       expect.any(Blob),
-      "detroit-terminal-inspection-trac-qr.svg",
+      "example-facility-docudent-qr.svg",
     );
     expect(
       screen.queryByRole("button", { name: /PDF/i }),
     ).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Inspection[- ]Trac|AWCT|JNAP|SHAP/i);
   });
 });

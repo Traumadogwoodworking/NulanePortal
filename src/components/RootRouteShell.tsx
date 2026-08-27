@@ -35,7 +35,6 @@ function isPublicBrandedPath(pathname: string | null) {
     "/contact",
     "/contact-us",
     "/workflow",
-    "/definian-signal",
     "/get-app",
     "/join",
     "/getting-started",

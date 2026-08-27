@@ -1,6 +1,5 @@
 import { withPortalBasePath } from "@/lib/config";
 import type { FacilitySummary, PortalSessionLocation } from "@/lib/types";
-import chicagoHeightsQuickStart from "@/components/facilities/chicagoHeightsQuickStart.json";
 
 export interface FacilityQuickStartContent {
   title: string;
@@ -36,9 +35,9 @@ export interface FacilityQuickStartIdentity {
   code?: string | null;
 }
 
-const quickStartContent: FacilityQuickStartContent[] = [
-  chicagoHeightsQuickStart satisfies FacilityQuickStartContent,
-];
+// Published guides must be generated from authoritative DocuDent facility
+// records. Inspection-Trac customer packets are intentionally not inherited.
+const quickStartContent: FacilityQuickStartContent[] = [];
 
 function normalizeIdentity(value?: string | null) {
   return value?.trim().toLowerCase() ?? "";

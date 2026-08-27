@@ -46,39 +46,13 @@ describe("SVL dashboard access", () => {
   });
 });
 
-describe("24-hour inspection access", () => {
-  test("shows the tab for portal users regardless of SHAP assignment", () => {
-    const shapSections = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: true }));
-    const otherFacilitySections = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: false }));
+describe("DocuDent product routes", () => {
+  test("does not register Inspection-Trac-only RSA or 24-hour routes", () => {
+    const paths = navSections.flatMap((section) => section.items.map((item) => item.href));
 
-    expect(shapSections.flatMap((section) => section.items.map((item) => item.href))).toContain("/inspection/24-hour");
-    expect(otherFacilitySections.flatMap((section) => section.items.map((item) => item.href))).toContain("/inspection/24-hour");
-  });
-
-  test("allows direct access without a SHAP facility", () => {
-    const route = getRouteByPath("/inspection/24-hour");
-
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: true }))).toBeNull();
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false }))).toBeNull();
-  });
-});
-
-describe("RSA report access", () => {
-  test("shows RSA only for users with a direct SHAP assignment", () => {
-    const shapPaths = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: true }))
-      .flatMap((section) => section.items.map((item) => item.href));
-    const otherPaths = filterNavSectionsByAccess(navSections, buildAccessInfo({ isShap: false }))
-      .flatMap((section) => section.items.map((item) => item.href));
-
-    expect(shapPaths).toContain("/reports/rsa");
-    expect(otherPaths).not.toContain("/reports/rsa");
-  });
-
-  test("blocks direct RSA access without a SHAP assignment, including super admins", () => {
-    const route = getRouteByPath("/reports/rsa");
-
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: true }))).toBeNull();
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false }))).toEqual({ type: "permission" });
-    expect(getAccessBarrier(route, buildAccessInfo({ isShap: false, isSuperAdmin: true }))).toEqual({ type: "permission" });
+    expect(paths).not.toContain("/inspection/24-hour");
+    expect(paths).not.toContain("/reports/rsa");
+    expect(getRouteByPath("/inspection/24-hour")).toBeNull();
+    expect(getRouteByPath("/reports/rsa")).toBeNull();
   });
 });

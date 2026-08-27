@@ -118,6 +118,19 @@ export class FacilityRegistrationError extends Error {
   }
 }
 
+export function isDocuDentFacilityOnboardingEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_DOCUDENT_FACILITY_ONBOARDING_ENABLED === "true";
+}
+
+function requireDocuDentFacilityOnboarding(): void {
+  if (!isDocuDentFacilityOnboardingEnabled()) {
+    throw new FacilityRegistrationError(
+      "DocuDent facility registration is unavailable until the target API membership contract is verified.",
+      { code: "DOCUDENT_REGISTRATION_UNVERIFIED" },
+    );
+  }
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -253,6 +266,7 @@ function normalizeSession(payload: unknown, knownToken = ""): FacilityEnrollment
 }
 
 async function publicRegistrationRequest(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  requireDocuDentFacilityOnboarding();
   if (isDevMockEnabled()) {
     return record(await resolveDevMockResponse(buildApiUrl(path), init));
   }
@@ -285,6 +299,7 @@ export async function fetchFacilityRegistration(
   organizationId: string,
   facilityId: string
 ): Promise<FacilityRegistrationConfiguration> {
+  requireDocuDentFacilityOnboarding();
   return normalizeConfiguration(await apiFetch(
     `/admin/organizations/${organizationId}/locations/${facilityId}/registration`,
     { portal: { callerLabel: "facility-registration.get" } }
@@ -305,6 +320,7 @@ export async function updateFacilityRegistration(
     androidStoreUrl?: string;
   }
 ): Promise<FacilityRegistrationConfiguration> {
+  requireDocuDentFacilityOnboarding();
   return normalizeConfiguration(await apiFetch(
     `/admin/organizations/${organizationId}/locations/${facilityId}/registration`,
     {
@@ -374,6 +390,7 @@ export async function recordFacilityEnrollmentEvent(
 }
 
 export async function enrollInFacility(token: string): Promise<FacilityEnrollmentResult> {
+  requireDocuDentFacilityOnboarding();
   let response: Record<string, unknown>;
   try {
     response = record(await apiFetch(`/registration/sessions/${encodeURIComponent(token)}/enroll`, {

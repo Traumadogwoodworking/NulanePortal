@@ -60,7 +60,7 @@ function slugFromPath(pathname: string | null) {
 function slugFromRegistrationUrl(value?: string | null) {
   if (!value) return "";
   try {
-    const url = new URL(value, "https://inspection-trac.com");
+    const url = new URL(value, "https://docudent.invalid");
     return (url.searchParams.get("facility") || slugFromPath(url.pathname))
       .trim()
       .toLowerCase();
@@ -426,7 +426,7 @@ export function FacilityJoinClient() {
                 <div>
                   <p className="font-bold">
                     {existingAccountConflict
-                      ? "This email already has an Inspection-Trac account."
+                      ? "This email already has a DocuDent account."
                       : error}
                   </p>
                   {existingAccountConflict ? (
@@ -448,7 +448,7 @@ export function FacilityJoinClient() {
               ) : !existingAccountConflict ? (
                 <p className="mt-2 text-xs">
                   No facility assignment was silently created. Contact{" "}
-                  {support?.displayName || "Inspection-Trac Support"}
+                  {support?.displayName || "DocuDent Support"}
                   {support?.email ? ` at ${support.email}` : ""}.
                 </p>
               ) : null}
@@ -506,7 +506,7 @@ export function FacilityJoinClient() {
             <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <h2 className="text-xl font-black">Secure your account</h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                Use the email address you will use with Inspection-Trac. Create
+                Use the email address you will use with DocuDent. Create
                 an account or sign in, then verify the address when prompted
                 before {session.facilityName} can be added.
               </p>
@@ -651,13 +651,13 @@ export function FacilityJoinClient() {
             </a>
             {enrollment ? (
               <a
-                href="inspectiontrac://"
+                href="docudent://"
                 onClick={() =>
                   recordClick("registration.app_open_clicked", "app")
                 }
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-black text-white sm:col-span-2"
               >
-                Open Inspection-Trac
+                Open DocuDent
               </a>
             ) : null}
           </section>

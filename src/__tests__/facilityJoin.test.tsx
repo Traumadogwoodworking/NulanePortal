@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FacilityJoinClient } from "@/app/join/FacilityJoinClient";
 
 const mocks = vi.hoisted(() => ({
-  query: "facility=chicago-heights",
+  query: "facility=example-facility",
   createFacilityEnrollmentSession: vi.fn(),
   fetchFacilityEnrollmentSession: vi.fn(),
   submitFacilityEnrollmentEmail: vi.fn(),
@@ -56,9 +56,9 @@ vi.mock("@/lib/portalAuth", () => ({
 vi.mock("@/lib/publicBranding", () => ({
   publicBranding: {
     logoPath: "/logo.png",
-    appName: "Inspection-Trac",
-    appStoreUrl: "https://apps.example/inspection-trac",
-    googlePlayUrl: "https://play.example/inspection-trac",
+    appName: "DocuDent",
+    appStoreUrl: "https://apps.example/docudent",
+    googlePlayUrl: "https://play.example/docudent",
   },
 }));
 
@@ -69,19 +69,19 @@ function session(overrides = {}) {
     expiresAt: "2099-01-01T00:00:00.000Z",
     completedAt: null,
     failureCode: "",
-    organizationName: "Inspection-Trac",
-    facilityName: "Chicago Heights",
+    organizationName: "Example Organization",
+    facilityName: "Example Facility",
     facilityLabel: "",
     registrationEnabled: true,
     roleName: "User",
     support: {
-      displayName: "Inspection-Trac Support",
-      email: "support@inspection-trac.com",
+      displayName: "DocuDent Support",
+      email: "support@nulanesystems.com",
     },
     stores: {},
     branding: {},
     packetRevision: 1,
-    restartUrl: "https://inspection-trac.com/join/?facility=chicago-heights",
+    restartUrl: "https://portal.example/join/?facility=example-facility",
     emailEntered: false,
     enrollmentResult: null,
     ...overrides,
@@ -90,10 +90,10 @@ function session(overrides = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.query = "facility=chicago-heights";
+  mocks.query = "facility=example-facility";
   window.localStorage.clear();
   window.sessionStorage.clear();
-  window.history.replaceState({}, "", "/join/?facility=chicago-heights");
+  window.history.replaceState({}, "", "/join/?facility=example-facility");
   mocks.hasPersistedPortalToken.mockReturnValue(false);
   mocks.createFacilityEnrollmentSession.mockResolvedValue(session());
   mocks.submitFacilityEnrollmentEmail.mockResolvedValue(
@@ -107,28 +107,24 @@ describe("FacilityJoinClient", () => {
   it("creates an opaque session, binds the email server-side, and returns Auth0 only to that session", async () => {
     render(<FacilityJoinClient />);
 
-    await screen.findByRole("heading", { name: "Join Chicago Heights" });
+    await screen.findByRole("heading", { name: "Join Example Facility" });
     expect(
       screen.getByText(
-        /Use the email address you will use with Inspection-Trac/i,
+        /Use the email address you will use with DocuDent/i,
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Open Inspection-Trac and select Main when a yard is requested.",
-      ),
-    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Inspection[- ]Trac/i);
     expect(document.body.textContent).not.toMatch(
       /Auth0|short-lived session|metadata|registration slug/i,
     );
     expect(mocks.createFacilityEnrollmentSession).toHaveBeenCalledWith(
-      "chicago-heights",
+      "example-facility",
       "facility_qr",
     );
     expect(window.location.search).toContain(
       "enrollment=opaque-enrollment-token",
     );
-    expect(window.location.search).not.toContain("facility=chicago-heights");
+    expect(window.location.search).not.toContain("facility=example-facility");
 
     const createButton = screen.getByRole("button", { name: "Create account" });
     expect(createButton).toBeDisabled();
@@ -158,8 +154,8 @@ describe("FacilityJoinClient", () => {
     );
     mocks.enrollInFacility.mockResolvedValue({
       success: true,
-      organization: { name: "Inspection-Trac" },
-      facility: { name: "Chicago Heights", slug: "chicago-heights" },
+      organization: { name: "Example Organization" },
+      facility: { name: "Example Facility", slug: "example-facility" },
       role: { name: "User", key: "user" },
       onboardingStatus: "ready",
       missingFields: [],
@@ -181,7 +177,7 @@ describe("FacilityJoinClient", () => {
       );
     });
     expect(
-      await screen.findByText("You’re set up for Chicago Heights."),
+      await screen.findByText("You’re set up for Example Facility."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Signed in as person@example.com"),
@@ -212,8 +208,8 @@ describe("FacilityJoinClient", () => {
       )
       .mockResolvedValueOnce({
         success: true,
-        organization: { name: "Inspection-Trac" },
-        facility: { name: "Chicago Heights", slug: "chicago-heights" },
+        organization: { name: "Example Organization" },
+        facility: { name: "Example Facility", slug: "example-facility" },
         role: { name: "User", key: "user" },
         onboardingStatus: "ready",
         missingFields: [],
@@ -238,7 +234,7 @@ describe("FacilityJoinClient", () => {
       expect(mocks.enrollInFacility).toHaveBeenCalledTimes(2),
     );
     expect(
-      await screen.findByText("You’re set up for Chicago Heights."),
+      await screen.findByText("You’re set up for Example Facility."),
     ).toBeInTheDocument();
   });
 
@@ -268,7 +264,7 @@ describe("FacilityJoinClient", () => {
     });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("This email already has an Inspection-Trac account."),
+      screen.queryByText("This email already has a DocuDent account."),
     ).not.toBeInTheDocument();
   });
 });

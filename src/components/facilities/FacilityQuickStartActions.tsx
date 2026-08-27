@@ -109,7 +109,7 @@ export function FacilityQuickStartActions({
     if (!qrSvg) return;
     saveAs(
       new Blob([qrSvg], { type: "image/svg+xml;charset=utf-8" }),
-      `${slug || "facility"}-inspection-trac-qr.svg`,
+      `${slug || "facility"}-docudent-qr.svg`,
     );
   };
 

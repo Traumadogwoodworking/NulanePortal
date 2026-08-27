@@ -30,23 +30,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getRoles.mockResolvedValue([]);
   mocks.fetchFacilityRegistration.mockResolvedValue({
-    organizationId: "org-awct",
-    organizationName: "Inspection-Trac",
-    facilityId: "6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c",
-    facilityName: "Chicago Heights",
-    facilityLabel: "Chicago Heights",
-    slug: "chicago-heights",
+    organizationId: "org-example",
+    organizationName: "Example Organization",
+    facilityId: "facility-example",
+    facilityName: "Example Facility",
+    facilityLabel: "Example Facility",
+    slug: "example-facility",
     enabled: true,
     available: true,
     defaultRoleId: "role-user",
     defaultRoleKey: "user",
     defaultRoleName: "User",
     registrationUrl:
-      "https://inspection-trac.com/join/?facility=chicago-heights",
-    onboardingDisplayName: "Chicago Heights",
+      "https://portal.example/join/?facility=example-facility",
+    onboardingDisplayName: "Example Facility",
     support: {
-      displayName: "Inspection-Trac Support",
-      email: "support@inspection-trac.com",
+      displayName: "DocuDent Support",
+      email: "support@nulanesystems.com",
     },
     stores: {},
     packetRevision: 2,
@@ -59,40 +59,34 @@ beforeEach(() => {
 });
 
 describe("FacilityRegistrationPanel", () => {
-  it("uses the same canonical Chicago link, QR, and published PDF as Resources", async () => {
+  it("uses the backend canonical DocuDent link without a customer packet", async () => {
     render(
       <FacilityRegistrationPanel
-        organizationId="org-awct"
-        organizationName="Inspection-Trac"
-        facilityId="6bb06327-37de-4d1c-9e7d-1c4c4e19dc1c"
-        facilityName="Chicago Heights"
+        organizationId="org-example"
+        organizationName="Example Organization"
+        facilityId="facility-example"
+        facilityName="Example Facility"
         canManage
       />,
     );
 
-    expect(
-      await screen.findByRole("link", {
-        name: "Open Chicago Heights Quick Start PDF",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/resources/chicago-heights/chicago-heights-quick-start.pdf",
-    );
+    expect(await screen.findByText("Registration enabled")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Quick Start PDF/i })).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open registration link" }),
     ).toHaveAttribute(
       "href",
-      "https://inspection-trac.com/join/chicago-heights",
+      "https://portal.example/join/?facility=example-facility",
     );
     await waitFor(() =>
       expect(mocks.toDataURL).toHaveBeenCalledWith(
-        "https://inspection-trac.com/join/chicago-heights",
+        "https://portal.example/join/?facility=example-facility",
         expect.any(Object),
       ),
     );
     expect(screen.getByText("Registration link name")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(
-      /Auth0|short-lived session|registration slug/i,
+      /Auth0|short-lived session|registration slug|Inspection[- ]Trac|AWCT|JNAP|SHAP/i,
     );
   });
 });

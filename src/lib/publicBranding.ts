@@ -124,7 +124,7 @@ const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">
     openPortalButtonLabel: "Open Portal",
     portalUrl: "/home",
     appStoreUrl: "https://apps.apple.com/app/docudent",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.docudent.app",
+    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.docudent",
   },
 };
 

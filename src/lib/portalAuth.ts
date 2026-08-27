@@ -2,7 +2,6 @@ import {
   createAuth0Client,
   type Auth0Client as Auth0SpaClient,
 } from "@auth0/auth0-spa-js";
-import { ACTIVE_PORTAL_BRANDING, getPortalBrandingPreset } from "@/lib/brandingPresets";
 import { clearPortalCachedStorage } from "@/lib/portalCacheStorage";
 
 const STORAGE_KEYS = {
@@ -11,10 +10,6 @@ const STORAGE_KEYS = {
   authenticated: "portal_authenticated",
 };
 
-const DEFAULT_AUTH0_DOMAIN = "inspection-trac.us.auth0.com";
-const DEFAULT_AUTH0_CLIENT_ID = "EQFtRgJq2t0l3LNFodIIbbs3CnI99vxE";
-const DEFAULT_AUTH0_ORGANIZATION_ID = "org_hgGvkUBSZuyEg9Mg";
-const DEFAULT_AUTH0_AUDIENCE = "https://inspection-trac.us.auth0.com/api/v2/";
 const DEV_ACCESS_TOKEN = "dev-portal-token";
 const DEV_AUTH_BYPASS_FLAG = "true";
 const DEFAULT_PORTAL_RETURN_TO = "/home/";
@@ -238,11 +233,10 @@ export function buildAuthRedirectUri(origin: string, redirectOverride = "", redi
 
 function buildAuthConfig(): AuthConfig {
   ensureBrowserEnv();
-  const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || DEFAULT_AUTH0_DOMAIN).trim();
-  const preset = getPortalBrandingPreset(ACTIVE_PORTAL_BRANDING);
-  const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || preset.auth0ClientId || DEFAULT_AUTH0_CLIENT_ID).trim();
-  const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || preset.auth0OrganizationId || DEFAULT_AUTH0_ORGANIZATION_ID).trim();
-  const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || DEFAULT_AUTH0_AUDIENCE).trim();
+  const domain = (process.env.NEXT_PUBLIC_AUTH0_DOMAIN || "").trim();
+  const clientId = (process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || "").trim();
+  const organizationId = (process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID || "").trim();
+  const audience = (process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || "").trim();
   const redirectOverride = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_URI || "").trim();
   const redirectMode = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_MODE || "").trim().toLowerCase();
   const redirectUri = buildAuthRedirectUri(window.location.origin, redirectOverride, redirectMode);

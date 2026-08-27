@@ -215,8 +215,8 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     staticLogoNormalizedKeys: ["docudent"],
     appNavLogoUrl: withPortalBasePath("/media/Docudent.png"),
     allowSnapshotLogoOverride: true,
-    footerLogoUrl: null,
-    showFooterLogo: false,
+    footerLogoUrl: withPortalBasePath("/media/powered_by_colorful.png"),
+    showFooterLogo: true,
     portalBrandColor: "#2563eb",
     portalBrandAccentColor: "#1d4ed8",
     portalBrandLightColor: "rgba(37, 99, 235, 0.08)",
@@ -269,7 +269,7 @@ export const ACTIVE_PORTAL_BRANDING: PortalBrandingMode =
       ? "docudent"
     : process.env.NEXT_PUBLIC_PORTAL_BRANDING === "nulaneSystems"
       ? "nulaneSystems"
-          : "inspectionTrac";
+          : "docudent";
 
 export function getPortalBrandingMode(_pathname: string): PortalBrandingMode {
   return ACTIVE_PORTAL_BRANDING;
