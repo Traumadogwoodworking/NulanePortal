@@ -2,8 +2,6 @@ import type { HomeFilterKey } from "./types";
 
 export const DASHBOARD_ANALYTICS_ENDPOINT = "/api/dashboard/analytics";
 
-export const HOME_VISIBLE_FACILITIES = ["JNAP", "SHAP"] as const;
-
 export const HOME_DEFAULT_TREND_DAYS = 30;
 
 export const HOME_ANALYTICS_FILTER_KEYS: HomeFilterKey[] = [

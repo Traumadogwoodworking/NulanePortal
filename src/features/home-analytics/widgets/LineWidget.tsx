@@ -11,7 +11,7 @@ export function LineWidget({ rows }: { rows: ChartDatum[] }) {
           <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
           <Tooltip />
           <Line type="monotone" dataKey="value" name="Damage Reports" stroke="#2563eb" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="secondaryValue" name="RSA Reports" stroke="#dc2626" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="secondaryValue" name="Clear Submissions" stroke="#16a34a" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>

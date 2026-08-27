@@ -63,7 +63,6 @@ import {
   DASHBOARD_ANALYTICS_ENDPOINT,
   HOME_ANALYTICS_FILTER_KEYS,
   HOME_DEFAULT_TREND_DAYS,
-  HOME_VISIBLE_FACILITIES,
 } from "@/features/home-analytics/constants";
 import {
   readAnalyticsNumber,
@@ -1389,15 +1388,11 @@ function normalizeFacilityDisplayLabel(value: string | null | undefined): string
 }
 
 function resolveHomeFacilityLabel(value: string | null | undefined): string {
-  const normalized = normalizeFacilityDisplayLabel(value);
-  const upper = normalized.toUpperCase();
-  if (/\bJNAP\b/.test(upper)) return "JNAP";
-  if (/\bSHAP\b/.test(upper)) return "SHAP";
-  return normalized;
+  return normalizeFacilityDisplayLabel(value);
 }
 
-function isHomeVisibleFacility(value: string | null | undefined): boolean {
-  return HOME_VISIBLE_FACILITIES.includes(resolveHomeFacilityLabel(value) as (typeof HOME_VISIBLE_FACILITIES)[number]);
+function isHomeVisibleFacility(_value: string | null | undefined): boolean {
+  return true;
 }
 
 function facilityDisplayKey(label: string): string {
@@ -3430,14 +3425,6 @@ export default function HomeDashboard() {
   );
   const fallbackSummary = useMemo(() => buildDashboardSummary([], [], []), []);
   const currentOrganizationLabel = selectedOrganizationScope.label;
-  const normalizedOrganizationName = normalizeOrganizationName(currentOrganizationLabel);
-  const isInspectionTracOrg =
-    normalizedOrganizationName === "american wheel & car" ||
-    normalizedOrganizationName === "awct.inc" ||
-    normalizedOrganizationName === "awc.inc" ||
-    normalizedOrganizationName === "inspection trac" ||
-    normalizedOrganizationName === "inspection track" ||
-    normalizedOrganizationName === "signature vehicle logistics";
   const hideFacilitySelector = currentOrganizationLabel.trim().toLowerCase() === "free tier organization";
   const hideInspectorSections = hideFacilitySelector;
   const sanitizeFacilityDisplay = (value: string): string => normalizeFacilityDisplayLabel(value);
@@ -3850,7 +3837,7 @@ export default function HomeDashboard() {
 	  const primaryDamageTotal = damageInspectionCount;
 	  const primaryDamageToday = summary.currentPeriod.damageToday;
 	  const primaryDamageMonthToDate = summary.currentPeriod.damageMonthToDate;
-	  const totalReportsDetail = `Damage only · clear and RSA excluded`;
+	  const totalReportsDetail = "Damage and clear submissions";
 	  const severityPieData = useMemo(
 	    () => buildSelectedSeverityPieData(chartSummary.severity as DashboardSeverityItem[], selectedSeverityLevel),
 	    [chartSummary.severity, selectedSeverityLevel]
@@ -4150,22 +4137,12 @@ export default function HomeDashboard() {
 	          route: "/reports/damage/",
 	          source: "VIN sheet preview is loaded on /home from /reports/list; full VIN exports fetch every available matching page on demand.",
 	        },
-        rsa: {
-          route: "/reports/rsa/",
-          source: "not loaded by /home dump; open /reports/rsa/ for RSA rows",
-          overview: buildRsaReportsDebugOverview([]),
-        },
       },
       cards: [
         {
           label: "Damage Reports Today",
           value: summary.currentPeriod.damageToday,
           detail: `Total reports today ${formatNumber(summary.currentPeriod.reportsToday)}`,
-        },
-        {
-          label: "Total RSA",
-          value: summary.totals.rsaReports,
-          detail: `Today ${formatNumber(summary.currentPeriod.rsaToday)}`,
         },
         {
           label: "Total Damage Reports",
@@ -4308,10 +4285,8 @@ export default function HomeDashboard() {
       summary.currentPeriod.damageMonthToDate,
       summary.currentPeriod.damageToday,
       summary.currentPeriod.reportsToday,
-      summary.currentPeriod.rsaToday,
       summary.totals.damageReports,
       summary.totals.facilities,
-      summary.totals.rsaReports,
 	      homeCountMode,
     ]
   );
@@ -4350,7 +4325,6 @@ export default function HomeDashboard() {
     ["Damaged Submissions Today", primaryDamageToday],
     ["Damaged Submissions", primaryDamageTotal],
     ["Clear Submissions", clearInspectionCount],
-    ["RSA Reports", summary.totals.rsaReports],
     ["Active Facilities", summary.totals.facilities],
     ["Unique Inspectors", inspectorChoices.length],
     [],
@@ -4458,7 +4432,7 @@ export default function HomeDashboard() {
                 type="button"
                 onClick={downloadDevStatsPayload}
                 className="inline-flex h-9 items-center rounded-lg border border-slate-900 bg-white px-3 text-xs font-black uppercase tracking-[0.18em] text-slate-950 shadow-lg transition hover:bg-slate-100"
-                title="Download a JSON dump of the local portal data behind home, damage, and RSA views."
+                title="Download a JSON dump of the local portal data behind home and damage views."
               >
                 Download data dump
               </button>
@@ -4483,7 +4457,7 @@ export default function HomeDashboard() {
           <Card className="sticky top-0 z-30 overflow-visible border-slate-200/80 bg-white/95 shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)] backdrop-blur">
             <CardHeader
               title="Filters"
-              subtitle="Filters scope the damage submissions analytics; RSA counts stay separate."
+              subtitle="Filters scope the damage submissions analytics."
 		              actions={
 		                <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -4657,7 +4631,6 @@ export default function HomeDashboard() {
                   }
                   icon={<FileText className="h-4 w-4" />}
                 />
-                <MetricCard label="RSA Reports" value={summary.totals.rsaReports} detail={`RSA today ${formatNumber(summary.currentPeriod.rsaToday)}`} icon={<FileText className="h-4 w-4" />} />
                 <MetricCard label="Active Facilities" value={summary.totals.facilities} detail="Facilities in filtered damage submissions" icon={<Filter className="h-4 w-4" />} />
                 <MetricCard label="Unique Inspectors" value={inspectorChoices.length} detail="Inspectors in filtered damage submissions" icon={<FileText className="h-4 w-4" />} />
               </div>

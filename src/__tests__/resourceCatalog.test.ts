@@ -153,12 +153,12 @@ describe("resource catalog", () => {
       ],
     } as FacilitySummary);
 
-    expect(guide.quickStart).toBeUndefined();
-    expect(guide.registrationUrl).toBeUndefined();
+    expect(guide.quickStart).toBe(undefined);
+    expect(guide.registrationUrl).toBe(undefined);
     expect(guide.title).toBe("Example Facility Quick Start");
     expect(resourceSearchText(guide).includes("Auth0")).toBe(false);
     expect(resourceSearchText(guide)).toContain("Main");
-    expect(resourceSearchText(guide)).not.toMatch(/Inspection[- ]Trac|Chicago Heights|AWCT|JNAP|SHAP/i);
+    expect(/Inspection[- ]Trac|Chicago Heights|AWCT|JNAP|SHAP/i.test(resourceSearchText(guide))).toBe(false);
   });
 
   it("indexes task titles, terminology, facilities, and troubleshooting topics", () => {

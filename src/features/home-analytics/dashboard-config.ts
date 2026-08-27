@@ -133,7 +133,6 @@ export const HOME_DASHBOARD_SECTIONS: HomeDashboardSectionConfig[] = [
       "summary-total-damage-submissions",
       "summary-damaged-today",
       "summary-damage-vs-clear",
-      "summary-rsa-reports",
     ],
   },
   {

@@ -36,7 +36,6 @@ function metricLabel(key: string): string {
   const normalized = key.toLowerCase();
   if (normalized.includes("nodamage") || normalized.includes("clear")) return "Clear";
   if (normalized.includes("today")) return "Today";
-  if (normalized.includes("rsa")) return "RSA";
   if (normalized.includes("damage")) return "Damaged";
   return "Value";
 }
