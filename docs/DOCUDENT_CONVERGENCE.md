@@ -72,9 +72,34 @@ preset data, development-only fixtures, and analytics fixture labels. They are
 not accepted as DocuDent product behavior and must not be reconnected. The
 built-output guard deliberately tests rendered output and routes rather than
 mistaking internal compatibility/schema identifiers for customer-facing copy.
-The previously unreferenced Chicago PDF has been removed. On candidate
-`0b962bce460e4a56324400e705c8bd32bbefdf1d`, all 169 tests, the Next.js
-production build, and `npm run validate:docudent-build` pass. This is local
-candidate evidence only: the portal remains undeployed and facility onboarding
-remains disabled until a uniquely tagged disposable Auth0 identity proves the
-DocuDent membership contract against the deployed backend.
+The previously unreferenced Chicago PDF has been removed. On portal revision
+`5355f37b2f6da7f07875ee417f03146d88043227`, all 169 tests, the Next.js
+production build, and `npm run validate:docudent-build` pass.
+
+## Isolated Vercel deployment
+
+The DocuDent shell is deployed through its own Vercel project and alias. It is
+not linked to, promoted over, or served by an Inspection-Trac Vercel project.
+
+- Project: `docudent-portal`
+- Project ID: `prj_L9xCU9AdQMD3WrhH71U8PfMbU54S`
+- Production alias: `https://docudent-portal.vercel.app`
+- Verified deployment: `dpl_DHWuH59CKzjyACVj8duAZAF5jJ8L`
+- Immutable deployment URL:
+  `https://docudent-portal-cm5m2wn37-traumadogwoodworkings-projects.vercel.app`
+
+The first project deployment used Vercel's generic framework preset and
+returned 404 for application routes. The project was corrected to the Next.js
+preset, rebuilt from production configuration, and redeployed. The root,
+`/login/`, and `/join/?facility=acceptance-facility` then returned HTTP 200 and
+were inspected in a real browser. The root rendered DocuDent identity. Login
+failed closed with all four Auth0 inputs reported missing. Join rendered the
+explicit unavailable state and confirmed that no facility assignment was
+created.
+
+This is a deployed public-shell boundary, not authenticated acceptance. Auth0
+deployment inputs remain unset, the portal onboarding flag remains false, and
+the backend global registration switch remains false. Do not enable either
+switch until the disposable mailbox, Auth0 organization connection, callback
+URLs, backend CORS, and authenticated new-user/existing-user/idempotency flows
+are verified end to end.
