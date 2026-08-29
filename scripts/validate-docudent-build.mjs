@@ -4,10 +4,17 @@ import path from "node:path";
 const buildRoot = path.resolve(".next/server/app");
 const manifestPath = path.resolve(".next/server/app-paths-manifest.json");
 const forbiddenRoutes = [
+  "/analytics",
+  "/branding",
+  "/dashboard",
+  "/delivery-rules",
+  "/facilities",
+  "/organizations",
+  "/people",
+  "/resources",
+  "/users",
   "/reports/rsa",
   "/inspection/24-hour",
-  "/awct/signature",
-  "/definian-signal",
 ];
 const forbiddenRenderedCopy = [
   /Inspection[- ]Trac/i,
@@ -15,6 +22,8 @@ const forbiddenRenderedCopy = [
   /\bAWCT(?:\.inc)?\b/i,
   /\bJNAP\b/i,
   /\bSHAP\b/i,
+  /\bDefinian\b/i,
+  /\bCircle Logistics\b/i,
   /\bRSA Reports?\b/i,
 ];
 

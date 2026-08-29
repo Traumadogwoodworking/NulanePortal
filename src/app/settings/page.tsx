@@ -1,88 +1,55 @@
 "use client";
 
-import { PageTitle } from "@/components/ui/PageTitle";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
-import { usePortalSession } from "@/lib/portalSession";
-import { portalConfig } from "@/lib/config";
+import { PageTitle } from "@/components/ui/PageTitle";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { isModuleEnabled, ModuleToggleKey } from "@/lib/modules";
-
-const modules: ModuleToggleKey[] = ["docudent", "reports"];
+import { portalConfig } from "@/lib/config";
+import { usePortalSession } from "@/lib/portalSession";
 
 export default function SettingsPage() {
-  const { session, organizationId, user, isAdmin, isOrgAdmin, isSuperAdmin } = usePortalSession();
-
-  const roleDescription = isSuperAdmin
-    ? "Full access to all organizations and system settings."
-    : isOrgAdmin
-    ? "Organization-level access to manage users and facilities."
-    : isAdmin
-    ? "Administrative access for your assigned scope."
-    : "Standard user access.";
-
+  const { user } = usePortalSession();
   const environmentTone = portalConfig.environment === "production" ? "positive" : "warning";
 
   return (
-    <div className="space-y-6">
-      <PageTitle
-        title="Settings"
-        subtitle="Manage your workspace and session preferences."
-      />
+    <div className="mx-auto w-full max-w-5xl space-y-6 pb-10">
+      <PageTitle title="Settings" subtitle="Review your account and DocuDent workspace." />
 
-      <Card>
-        <CardHeader title="Session Summary" />
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="font-semibold text-slate-600">User</div>
-            <div className="text-right font-medium text-slate-800">{user?.email}</div>
-            <div className="font-semibold text-slate-600">Role</div>
-            <div className="text-right"><StatusBadge label={user?.role || "N/A"} /></div>
-            <div className="col-span-2 mt-2 p-3 rounded-lg bg-slate-50 border border-slate-200/75">
-              <p className="text-xs text-slate-600 font-medium leading-relaxed">{roleDescription}</p>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Account" subtitle="Your authenticated portal session." />
+          <CardContent className="space-y-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-semibold text-slate-600">Email</span>
+              <span className="truncate font-medium text-slate-900">{user?.email || "Signed in"}</span>
             </div>
-            <div className="font-semibold text-slate-600">Organization</div>
-            <div className="text-right font-medium text-slate-800">{session?.organization?.name}</div>
-            <div className="font-semibold text-slate-600">Organization ID</div>
-            <div className="text-right font-mono text-xs text-slate-600">{organizationId}</div>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-semibold text-slate-600">Role</span>
+              <StatusBadge label={user?.role || "User"} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader title="Product" subtitle="The product enabled for this portal." />
+          <CardContent className="space-y-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-semibold text-slate-600">Application</span>
+              <StatusBadge label="DocuDent" tone="positive" />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-semibold text-slate-600">Module</span>
+              <StatusBadge label="Damage Submissions" tone="positive" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
-        <CardHeader title="Workspace" />
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="font-semibold text-slate-600">Theme</div>
-            <div className="text-right text-slate-600">Light mode locked for this portal version</div>
-            <div className="font-semibold text-slate-600">Branding</div>
-            <div className="text-right"><StatusBadge label={session?.branding_snapshot ? "Configured" : "Not Configured"} tone={session?.branding_snapshot ? "positive" : "neutral"} /></div>
-            <div className="font-semibold text-slate-600">Dashboard</div>
-            <div className="text-right"><StatusBadge label={session?.branding_snapshot?.powerBiEmbedUrl ? "Configured" : "Not Configured"} tone={session?.branding_snapshot?.powerBiEmbedUrl ? "positive" : "neutral"} /></div>
-            <div className="font-semibold text-slate-600">Support Form</div>
-            <div className="text-right"><StatusBadge label={portalConfig.supportFormUrl ? "Configured" : "Not Configured"} tone={portalConfig.supportFormUrl ? "positive" : "neutral"} /></div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader title="Enabled Modules" />
+        <CardHeader title="Environment" subtitle="Review build context without exposing service endpoints." />
         <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {modules.map((module) => (
-                <StatusBadge key={module} label={module} tone={isModuleEnabled(module) ? "positive" : "neutral"} />
-              ))}
-            </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader title="Environment" />
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="font-semibold text-slate-600">Environment</div>
-            <div className="text-right"><StatusBadge label={portalConfig.environment} tone={environmentTone} /></div>
-            <div className="font-semibold text-slate-600">API Base URL</div>
-            <div className="text-right font-mono text-xs text-slate-600">{portalConfig.apiBase}</div>
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <span className="font-semibold text-slate-600">Portal environment</span>
+            <StatusBadge label={portalConfig.environment} tone={environmentTone} />
           </div>
         </CardContent>
       </Card>

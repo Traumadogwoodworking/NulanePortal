@@ -1,8 +1,46 @@
-import { access, readFile, readdir } from "fs/promises";
-import { constants } from "fs";
-import path from "path";
+import { access, readFile, readdir } from "node:fs/promises";
+import { constants } from "node:fs";
+import path from "node:path";
 
 const outDir = path.resolve("out");
+const requiredPaths = [
+  "index.html",
+  "home/index.html",
+  "reports/damage/index.html",
+  "support/index.html",
+  "settings/index.html",
+  "login/index.html",
+  "auth/callback/index.html",
+  "media/Docudent.png",
+  "media/Nulane_Systems-removebg-preview-inv.png",
+  "_next",
+];
+const forbiddenTopLevelRoutes = [
+  "analytics",
+  "branding",
+  "contact",
+  "contact-us",
+  "dashboard",
+  "delivery-rules",
+  "facilities",
+  "get-app",
+  "getting-started",
+  "join",
+  "organizations",
+  "people",
+  "resources",
+  "users",
+  "workflow",
+];
+const forbiddenCopy = [
+  /Inspection[- ]Trac/i,
+  /inspection-trac\.com/i,
+  /\bAWCT(?:\.inc)?\b/i,
+  /\bJNAP\b/i,
+  /\bSHAP\b/i,
+  /\bDefinian\b/i,
+  /\bCircle Logistics\b/i,
+];
 
 async function exists(filePath) {
   try {
@@ -13,53 +51,40 @@ async function exists(filePath) {
   }
 }
 
-async function assertRequiredPaths() {
-  const required = ["index.html", "404.html", "join/index.html", "getting-started/index.html", "_next"];
-  const missing = [];
-  for (const entry of required) {
-    if (!(await exists(path.join(outDir, entry)))) {
-      missing.push(entry);
-    }
-  }
+const missing = [];
+for (const entry of requiredPaths) {
+  if (!(await exists(path.join(outDir, entry)))) missing.push(entry);
+}
 
-  if (missing.length > 0) {
-    throw new Error(`Static export missing required paths: ${missing.join(", ")}`);
+const leakedRoutes = [];
+for (const route of forbiddenTopLevelRoutes) {
+  if (await exists(path.join(outDir, route))) leakedRoutes.push(route);
+}
+
+const htmlFiles = [];
+async function collectHtml(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) await collectHtml(target);
+    if (entry.isFile() && entry.name.endsWith(".html")) htmlFiles.push(target);
+  }
+}
+await collectHtml(outDir);
+
+const leakedCopy = [];
+for (const file of htmlFiles) {
+  const output = await readFile(file, "utf8");
+  for (const pattern of forbiddenCopy) {
+    if (pattern.test(output)) leakedCopy.push(`${path.relative(outDir, file)}: ${pattern}`);
   }
 }
 
-async function assertPublicAssets() {
-  const assetPaths = [
-    "images/inspection-trac-logo.png",
-    "media/inspection-trac-logo.png",
-    "media/Docudent.png",
-  ];
-  const missing = [];
-  for (const asset of assetPaths) {
-    if (!(await exists(path.join(outDir, asset)))) {
-      missing.push(asset);
-    }
-  }
-  if (missing.length > 0) {
-    throw new Error(`Static export missing expected public assets: ${missing.join(", ")}`);
-  }
+if (missing.length || leakedRoutes.length || leakedCopy.length) {
+  throw new Error([
+    missing.length ? `Missing required output: ${missing.join(", ")}` : "",
+    leakedRoutes.length ? `Unexpected routes: ${leakedRoutes.join(", ")}` : "",
+    ...leakedCopy,
+  ].filter(Boolean).join("\n"));
 }
 
-async function assertFacilityRedirect() {
-  const notFoundPage = await readFile(path.join(outDir, "404.html"), "utf8");
-  const requiredMarkers = ["window.location.replace", "/join/", "?facility="];
-  const missingMarkers = requiredMarkers.filter((marker) => !notFoundPage.includes(marker));
-  if (missingMarkers.length > 0) {
-    throw new Error(`Static 404 page is missing facility redirect markers: ${missingMarkers.join(", ")}`);
-  }
-}
-
-async function listRouteFolders() {
-  const entries = await readdir(outDir, { withFileTypes: true });
-  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-}
-
-await assertRequiredPaths();
-await assertPublicAssets();
-await assertFacilityRedirect();
-const routeFolders = await listRouteFolders();
-console.log(JSON.stringify({ outDir, routeFolders }, null, 2));
+console.log("DocuDent static export boundary passed.");

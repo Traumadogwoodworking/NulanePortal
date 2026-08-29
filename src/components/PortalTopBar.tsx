@@ -1,26 +1,12 @@
-"use client";
-
-import { useMemo } from "react";
 import { resolvePortalBranding } from "@/lib/branding";
-import { usePortalSession } from "@/lib/portalSession";
-import type { PortalOrganizationScopeKey } from "@/lib/portalOrganizations";
 
 interface PortalTopBarProps {
   pageTitle: string;
   pageSubtitle?: string;
-  showOrganizationScope?: boolean;
 }
 
-export function PortalTopBar({ pageTitle, pageSubtitle, showOrganizationScope = true }: PortalTopBarProps) {
-  const {
-    organizationScopes,
-    selectedOrganizationScopeKey,
-    switchOrganizationScope,
-  } = usePortalSession();
-  const branding = useMemo(
-    () => resolvePortalBranding({ session: null }),
-    []
-  );
+export function PortalTopBar({ pageTitle, pageSubtitle }: PortalTopBarProps) {
+  const branding = resolvePortalBranding({ session: null });
   const barColor = branding.portalBrandColor;
   return (
     <header
@@ -31,7 +17,11 @@ export function PortalTopBar({ pageTitle, pageSubtitle, showOrganizationScope = 
       }}
     >
       <div className="grid w-full grid-cols-[1fr_minmax(0,1.2fr)_1fr] items-center gap-3 px-4 py-[22px]">
-        <div className="flex min-w-0 items-center gap-2 justify-self-start" />
+        <div className="flex min-w-0 items-center gap-2 justify-self-start">
+          <span className="hidden text-xs font-black uppercase tracking-[0.2em] text-slate-900 sm:inline">
+            Nulane Systems
+          </span>
+        </div>
 
         <div className="flex min-w-0 flex-col items-center gap-1 px-4 text-center justify-self-center">
           <div className="max-w-full overflow-hidden">
@@ -61,28 +51,7 @@ export function PortalTopBar({ pageTitle, pageSubtitle, showOrganizationScope = 
           </div>
         </div>
 
-        {showOrganizationScope ? (
-          <label className="flex min-w-0 max-w-56 flex-col gap-1 justify-self-end text-left">
-            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-800">
-              Organization view
-            </span>
-            <select
-              aria-label="Organization view"
-              value={selectedOrganizationScopeKey}
-              onChange={(event) =>
-                switchOrganizationScope(event.target.value as PortalOrganizationScopeKey)
-              }
-              className="h-9 max-w-full rounded-lg border border-white/80 bg-white px-2 text-xs font-bold text-slate-950 shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
-              style={{ colorScheme: "light" }}
-            >
-              {organizationScopes.map((scope) => (
-                <option key={scope.key} value={scope.key} className="bg-white text-slate-950">
-                  {scope.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : <div aria-hidden="true" className="min-h-9" />}
+        <div aria-hidden="true" className="min-h-9" />
       </div>
     </header>
   );

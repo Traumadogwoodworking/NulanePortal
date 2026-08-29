@@ -1,6 +1,6 @@
-// DocuDent mobile uses the Nulane API root and addresses application endpoints
-// below `/api`. Keep this fallback product-specific so a missing deployment
-// variable can never route DocuDent traffic into Inspection-Trac.
+// DocuDent uses the Nulane API root and addresses application endpoints below
+// `/api`. Keep this fallback product-specific so a missing deployment variable
+// cannot route traffic to an unrelated service.
 const DEFAULT_API_BASE = "https://api.nulanesystems.com/api";
 const DEFAULT_DOCUFIT_API_BASE = "/docufit";
 const DEFAULT_DOCUDENT_EMBED_URL = "https://nulanesystems.com/portal/app/index.html";

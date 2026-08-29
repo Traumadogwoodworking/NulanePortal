@@ -6,7 +6,7 @@ import { usePortalSession } from "@/lib/portalSession";
 import { PortalStatusScreen } from "./PortalStatusScreen";
 
 export function AccessGuardClient({ children }: { children: React.ReactNode }) {
-  const { hasPermission, isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isPortalAccessAllowed, isAwct, isShap, isSvl } = usePortalSession();
+  const { isPortalAccessAllowed } = usePortalSession();
   const pathname = usePathname();
   const activeRoute = getRouteByPath(pathname ?? "/");
   const isHydrated = typeof window !== "undefined";
@@ -15,7 +15,7 @@ export function AccessGuardClient({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const accessInfo = { isPortalAccessAllowed, isAdmin, isOrgAdmin, isFacilityAdmin, isSuperAdmin, isAwct, isShap, isSvl, hasPermission };
+  const accessInfo = { isPortalAccessAllowed };
   const accessBarrier = getAccessBarrier(activeRoute, accessInfo);
 
   if (accessBarrier?.type === "org-admin") {
@@ -31,11 +31,7 @@ export function AccessGuardClient({ children }: { children: React.ReactNode }) {
     return (
       <PortalStatusScreen
         title="Restricted"
-        description={
-          accessBarrier.requiredPermission
-            ? `Permission "${accessBarrier.requiredPermission}" is required to view this page.`
-            : "Your permissions currently prevent access to this page."
-        }
+        description="Your permissions currently prevent access to this page."
       />
     );
   }

@@ -31,7 +31,6 @@ import {
   logoutPortal,
   persistPortalUser,
 } from "@/lib/portalAuth";
-import { publicBranding } from "@/lib/publicBranding";
 import {
   getPortalOrganizationScope,
   normalizePortalOrganizationScope,
@@ -61,166 +60,12 @@ function isSessionFetchError(value: unknown): value is SessionFetchError {
   );
 }
 
-function normalizeHostname(hostname: string) {
-  return hostname.split(":")[0].toLowerCase();
-}
-
-function isLocalhostHost(value: string) {
-  const normalized = normalizeHostname(value);
-  return (
-    normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1" ||
-    normalized === "0.0.0.0"
-  );
-}
-
-function isBrowser() {
-  return typeof window !== "undefined";
-}
-
-function isDevSessionBypassEnabled() {
-  return (
-    process.env.NEXT_PUBLIC_PORTAL_DEV_AUTH_BYPASS === "1" ||
-    (isBrowser() && (window as DevSessionWindow).__PORTAL_DEV_SESSION_BYPASS__ === true)
-  );
-}
-
-const DEV_SESSION_BYPASS_WARNING =
-  "DEV SESSION BYPASS ACTIVE";
-let devSessionBypassWarningEmitted = false;
 const FRESH_CALLBACK_SESSION_RETRY_DELAY_MS = 750;
 const SESSION_BACKGROUND_REFRESH_MS = 30_000;
 const SESSION_EVENT_REFRESH_THROTTLE_MS = 2_000;
 
-type DevSessionWindow = Window & {
-  __PORTAL_DEV_SESSION_BYPASS__?: boolean;
-};
-
 function normalizeRoleKey(value: string | undefined | null): string {
   return value?.toString().trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "";
-}
-
-function normalizeOrganizationKey(value: string | undefined | null): string {
-  return value?.toString().trim().toLowerCase().replace(/[\s_-]+/g, " ") ?? "";
-}
-
-function buildDevSession(): PortalSessionResponse {
-  const roleOverride = typeof window !== "undefined" ? window.localStorage.getItem("portalDevSessionRole") : null;
-  const isLimited = roleOverride === "limited";
-  return {
-    user: {
-      user_id: "dev-guest-user",
-      display_name: "Guest Operator",
-      first_name: "Guest",
-      last_name: "Operator",
-      email: "guest@nulanesystems.com",
-      role: isLimited ? "member" : "super_admin",
-      organization_id: "org-awct",
-      is_active: true,
-      is_free_user: false,
-      show_ads: false,
-      permissions: isLimited
-        ? ["portal.dashboard.view", "portal.reports.view"]
-        : [
-            "portal.admin",
-            "portal.dashboard.view",
-            "portal.reports.view",
-            "portal.facilities.manage",
-            "portal.people.view",
-            "portal.notifications.manage",
-          ],
-      organization_membership: {
-        membership_id: "dev-membership",
-        user_id: "dev-guest-user",
-        organization_id: "org-awct",
-        role: isLimited ? "member" : "super_admin",
-        is_primary: true,
-        is_active: true,
-      },
-      location_memberships: [
-        {
-          location_membership_id: "dev-location-membership-west",
-          location_id: "loc-001",
-          organization_id: "org-awct",
-          user_id: "dev-guest-user",
-          role: isLimited ? "member" : "super_admin",
-          is_active: true,
-          is_primary: true,
-        },
-      ],
-      updated_at: new Date().toISOString(),
-    },
-    organization: {
-      organization_id: "org-awct",
-      name: "American Wheel & Car",
-      type: "admin",
-    },
-    plan_tier: "enterprise",
-    portal_access: true,
-    organization_type: "admin",
-    requires_ads: false,
-    locations: [
-      {
-        location_id: "loc-001",
-        organization_id: "org-awct",
-        location_name: "Sterling Heights Assembly Plant",
-        location_label: "SHAP",
-        display_name: "Sterling Heights Assembly Plant",
-        is_active: true,
-      },
-      {
-        location_id: "loc-002",
-        organization_id: "org-awct",
-        location_name: "Jefferson North Assembly Plant",
-        location_label: "JNAP",
-        display_name: "Jefferson North Assembly Plant",
-        is_active: true,
-      },
-    ],
-    selected_location: {
-      location_id: "loc-001",
-      organization_id: "org-awct",
-      location_name: "Sterling Heights Assembly Plant",
-      location_label: "SHAP",
-      display_name: "Sterling Heights Assembly Plant",
-      is_active: true,
-    },
-    facilityScope: {
-      mode: "restricted",
-      organization_id: "org-awct",
-      allowedLocationIds: ["loc-001"],
-    },
-    scope: {
-      organizationId: "org-awct",
-      location_memberships: [
-        {
-          location_membership_id: "dev-location-membership-west",
-          location_id: "loc-001",
-          organization_id: "org-awct",
-          user_id: "dev-guest-user",
-          role: isLimited ? "member" : "super_admin",
-          is_active: true,
-          is_primary: true,
-        },
-      ],
-      scope: {
-        organization_id: "org-awct",
-        is_admin: !isLimited,
-        is_org_admin: !isLimited,
-        is_location_scoped: true,
-        accessible_location_ids: ["loc-001"],
-        selected_location_id: "loc-001",
-      },
-    },
-    location_locked: false,
-    branding_snapshot: {
-      organization_name: "American Wheel & Car",
-      logo_url: publicBranding.logoPath,
-    },
-    is_admin: !isLimited,
-    timestamp: new Date().toISOString(),
-  };
 }
 
 const PortalSessionContext = createContext<PortalSessionContextValue | undefined>(undefined);
@@ -240,10 +85,6 @@ interface PortalSessionContextValue {
   organizationId: string | null;
   isPortalAccessAllowed: boolean;
   portalAccess: boolean;
-  isAwct: boolean;
-  isShap: boolean;
-  twentyFourHourFacility: PortalSessionLocation | null;
-  isSvl: boolean;
   planTier: string | null;
   requiresAds: boolean;
   locations: PortalSessionLocation[];
@@ -275,43 +116,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       reason: "start",
       tokenExists: hasPersistedPortalToken(),
     });
-
-    const sessionMode = new URLSearchParams(window.location.search).get("portalDevSession");
-    if (
-      isDevSessionBypassEnabled() &&
-      isLocalhostHost(window.location.hostname) &&
-      sessionMode === "unauthenticated"
-    ) {
-      clearPortalAuthStorage();
-      setSession(null);
-      setError(null);
-      setStatus("unauthenticated");
-      return;
-    }
-
-    if (isDevSessionBypassEnabled() && !devSessionBypassWarningEmitted) {
-      console.warn(DEV_SESSION_BYPASS_WARNING);
-      devSessionBypassWarningEmitted = true;
-    }
-
-    if (isDevSessionBypassEnabled() && isLocalhostHost(window.location.hostname)) {
-      const roleOverride = sessionMode ?? window.localStorage.getItem("portalDevSessionRole");
-      if (roleOverride === "unauthenticated") {
-        clearPortalAuthStorage();
-        setSession(null);
-        setError(null);
-        setStatus("unauthenticated");
-        return;
-      }
-      const mockSession = buildDevSession();
-      persistPortalUser(mockSession.user);
-      localStorage.removeItem("portalMockOrgId");
-      localStorage.removeItem("portalMockOrgName");
-      setSession(mockSession);
-      setError(null);
-      setStatus("success");
-      return;
-    }
 
     if (!options.background) {
       setStatus("loading");
@@ -529,7 +333,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
   }, [loadSession]);
 
   useEffect(() => {
-    if (status !== "success" || isDevSessionBypassEnabled()) return;
+    if (status !== "success") return;
     let lastRefreshAt = 0;
     const refreshSession = () => {
       if (document.visibilityState === "hidden") return;
@@ -621,38 +425,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     const portalAccess = session?.portal_access ?? true;
     const selectedOrganizationScope = getPortalOrganizationScope(selectedOrganizationScopeKey);
 
-    const normalizedOrganizationName = normalizeOrganizationKey(session?.organization?.name ?? null);
-    const isAwct =
-      normalizedOrganizationName === "american wheel & car" ||
-      normalizedOrganizationName === "awct.inc" ||
-      normalizedOrganizationName === "awc.inc" ||
-      normalizedOrganizationName === "inspection trac" ||
-      normalizedOrganizationName === "inspection track" ||
-      normalizedOrganizationName === "inspection_trac" ||
-      normalizedOrganizationName === "inspection-track" ||
-      normalizedOrganizationName === "signature vehicle logistics";
-    const normalizedLocationLabels = (location: PortalSessionLocation) =>
-      [location.location_label, location.display_name, location.location_name]
-        .filter(Boolean)
-        .map((value) => normalizeOrganizationKey(value?.toString() ?? ""));
-    const twentyFourHourFacility =
-      directlyAssignedLocations.find((location) =>
-        normalizedLocationLabels(location).some(
-          (label) => label === "shap" || /(^|\s)shap($|\s)/.test(label)
-        )
-      ) ?? null;
-    const locationLabels = assignedLocations.flatMap(normalizedLocationLabels);
-    const isShap = Boolean(twentyFourHourFacility);
-    const isSvl =
-      normalizedOrganizationName === "signature vehicle logistics" ||
-      normalizedOrganizationName === "svl" ||
-      locationLabels.some(
-        (label) =>
-          label === "svl" ||
-          label.includes("signature vehicle logistics") ||
-          /(^|\s)svl($|\s)/.test(label)
-      );
-
     const hasPermission = (key: PermissionKey) => {
       if (isAdmin || isOrgAdmin) {
         return true;
@@ -675,10 +447,6 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
       organizationId,
       isPortalAccessAllowed: portalAccess,
       portalAccess,
-      isAwct,
-      isShap,
-      twentyFourHourFacility,
-      isSvl,
       planTier,
       requiresAds,
       locations: accessibleLocations,

@@ -1,27 +1,13 @@
-import type { PermissionKey } from "./access";
-import { isModuleEnabled, ModuleToggleKey } from "@/lib/modules";
-import { publicBranding } from "@/lib/publicBranding";
+import { isModuleEnabled, type ModuleToggleKey } from "@/lib/modules";
 
-export type RouteSectionKey = "core" | "apps" | "administration" | "support";
+export type RouteSectionKey = "core";
 
 export interface PortalRoute {
   label: string;
   href: string;
   description: string;
   section: RouteSectionKey;
-  icon?: string; // SVG key or Emoji
-  badge?: string;
-  brandColor?: string;
-  brandLogo?: string;
-  connectionStatus?: "real" | "mixed" | "mocked" | "placeholder" | "scaffold";
-  requiresOrgAdmin?: boolean;
-  requiresFacilityAdmin?: boolean;
-  requiresSuperAdmin?: boolean;
-  requiredPermission?: PermissionKey;
-  requiresAwct?: boolean;
-  requiresShap?: boolean;
-  hiddenForSvl?: boolean;
-  hideFromNav?: boolean;
+  icon: "home" | "reports" | "support" | "settings";
   moduleKey?: ModuleToggleKey;
 }
 
@@ -32,215 +18,93 @@ export interface PortalNavSection {
 }
 
 const portalRoutes: PortalRoute[] = [
-  // Core
   {
     label: "Home",
     href: "/home",
-    description: "Portal overview",
+    description: "DocuDent operational overview",
     section: "core",
     icon: "home",
   },
   {
-    label: "Dashboard",
-    href: "/dashboard",
-    description: "Key metrics and system status",
-    section: "core",
-    icon: "dashboard",
-    hiddenForSvl: true,
-    hideFromNav: true,
-  },
-  {
-    label: "Damage Reports",
+    label: "Damage Submissions",
     href: "/reports/damage",
-    description: "Vehicle inspection results",
+    description: "Review DocuDent damage submissions",
     section: "core",
     icon: "reports",
     moduleKey: "reports",
   },
-  // Apps
-  {
-    label: publicBranding.appName,
-    href: "/docudent",
-    description: publicBranding.shortDescription,
-    section: "apps",
-    icon: publicBranding.logoPath,
-    brandColor: "#064e3b",
-    brandLogo: publicBranding.logoPath,
-    moduleKey: "docudent",
-  },
-  {
-    label: "Organizations", // Added Organizations
-    href: "/organizations",
-    description: "Manage tenant and subscription data",
-    section: "administration",
-    icon: "shield", // Using shield icon for now, can be changed later
-    requiresOrgAdmin: true,
-  },
-  {
-    label: "Facilities",
-    href: "/facilities",
-    description: "Manage operational locations",
-    section: "administration",
-    icon: "facility",
-    requiresFacilityAdmin: true,
-  },
-  {
-    label: "Users", // Renamed from "People"
-    href: "/users", // Changed href from /people to /users
-    description: "User and role management",
-    section: "administration",
-    icon: "people",
-    requiresFacilityAdmin: true,
-  },
-  {
-    label: "Branding",
-    href: "/branding",
-    description: "Customize portal appearance",
-    section: "administration",
-    icon: "palette",
-    requiresSuperAdmin: true,
-  },
-  {
-    label: "Email",
-    href: "/email",
-    description: "Notifications",
-    section: "administration",
-    icon: "email",
-    requiresFacilityAdmin: true,
-    badge: "black-label",
-  },
-
-  // Support
   {
     label: "Support Tickets",
     href: "/support",
-    description: "Contact platform support",
-    section: "support",
+    description: "Request Nulane Systems support",
+    section: "core",
     icon: "support",
-  },
-  {
-    label: "Resources",
-    href: "/resources",
-    description: "DocuDent resources and guidance",
-    section: "support",
-    icon: "reports",
   },
   {
     label: "Settings",
     href: "/settings",
-    description: "Workspace and session settings",
-    section: "support",
+    description: "Account and workspace settings",
+    section: "core",
     icon: "settings",
   },
 ];
 
-const sectionOrder: Array<{ key: RouteSectionKey; title: string }> = [
-  { key: "core", title: "Core" },
-  { key: "apps", title: "Apps" },
-  { key: "administration", title: "Administration" },
-  { key: "support", title: "Support" },
+export const navSections: PortalNavSection[] = [
+  { key: "core", title: "Navigation", items: portalRoutes },
 ];
 
-export const navSections: PortalNavSection[] = sectionOrder.map((section) => ({
-  ...section,
-  items: portalRoutes.filter((route) => route.section === section.key),
-}));
-
-const routeLookup = portalRoutes.reduce<Record<string, PortalRoute>>((acc, route) => {
-  acc[route.href] = route;
-  return acc;
+const routeLookup = portalRoutes.reduce<Record<string, PortalRoute>>((routes, route) => {
+  routes[route.href] = route;
+  return routes;
 }, {});
 
 export function getRouteByPath(pathname: string): PortalRoute | null {
-  if (routeLookup[pathname]) {
-    return routeLookup[pathname];
-  }
-
-  const match = portalRoutes
-    .slice()
-    .sort((a, b) => b.href.length - a.href.length)
-    .find((route) => route.href !== "/" && pathname.startsWith(route.href));
-
-  return match ?? routeLookup["/"] ?? null;
+  if (pathname === "/") return routeLookup["/home"];
+  if (routeLookup[pathname]) return routeLookup[pathname];
+  return (
+    portalRoutes
+      .slice()
+      .sort((a, b) => b.href.length - a.href.length)
+      .find((route) => pathname.startsWith(route.href)) ?? null
+  );
 }
 
 export interface SessionAccessInfo {
   isPortalAccessAllowed: boolean;
-  isAdmin: boolean;
-  isOrgAdmin: boolean;
-  isFacilityAdmin: boolean;
-  isSuperAdmin: boolean;
-  isAwct: boolean;
-  isShap: boolean;
-  isSvl: boolean;
-  hasPermission: (key: PermissionKey) => boolean;
 }
 
 export type AccessBarrierType = "org-admin" | "permission";
 
 export interface AccessBarrier {
   type: AccessBarrierType;
-  requiredPermission?: PermissionKey;
 }
 
-export function getAccessBarrier(route: PortalRoute | null, accessInfo: SessionAccessInfo): AccessBarrier | null {
-  if (!route) {
-    return null;
-  }
-  if (route.requiresShap && !accessInfo.isShap) {
-    return { type: "permission" };
-  }
-  if (route.hiddenForSvl && accessInfo.isSvl) {
-    return { type: "permission" };
-  }
-  if (accessInfo.isSuperAdmin) {
-    return null;
-  }
-  if (route.requiresOrgAdmin && !accessInfo.isOrgAdmin) {
-    return { type: "org-admin" };
-  }
-  if (route.requiresFacilityAdmin && !accessInfo.isFacilityAdmin) {
-    return { type: "org-admin" };
-  }
-  if (route.requiresSuperAdmin && !accessInfo.isSuperAdmin) {
-    return { type: "org-admin" };
-  }
-  if (route.requiresAwct && !accessInfo.isAwct) {
-    return { type: "permission" }; // Generic barrier for now
-  }
-  if (route.requiredPermission && !accessInfo.hasPermission(route.requiredPermission)) {
-    return { type: "permission", requiredPermission: route.requiredPermission };
-  }
+export function getAccessBarrier(
+  route: PortalRoute | null,
+  accessInfo: SessionAccessInfo,
+): AccessBarrier | null {
+  if (!route) return null;
+  if (!accessInfo.isPortalAccessAllowed) return { type: "permission" };
   return null;
 }
 
-export function canAccessRoute(route: PortalRoute | null, accessInfo: SessionAccessInfo): boolean {
+export function canAccessRoute(
+  route: PortalRoute | null,
+  accessInfo: SessionAccessInfo,
+): boolean {
   return getAccessBarrier(route, accessInfo) === null;
 }
 
 export function filterNavSectionsByAccess(
   sections: PortalNavSection[],
-  accessInfo: SessionAccessInfo
+  accessInfo: SessionAccessInfo,
 ): PortalNavSection[] {
-  return sections
-    .map((section) => {
-      const visibleItems = section.items.filter(
-        (route) =>
-          !route.hideFromNav &&
-          canAccessRoute(route, accessInfo) &&
-          isRouteModuleEnabled(route)
-      );
-      return {
-        ...section,
-        items: visibleItems,
-      };
-    })
-    .filter((section) => section.items.length > 0);
-}
-
-function isRouteModuleEnabled(route: PortalRoute) {
-  if (!route.moduleKey) return true;
-  return isModuleEnabled(route.moduleKey);
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.filter(
+      (route) => canAccessRoute(route, accessInfo) && (!route.moduleKey || isModuleEnabled(route.moduleKey)),
+    ),
+  }));
 }
 
 export const routeMap = routeLookup;

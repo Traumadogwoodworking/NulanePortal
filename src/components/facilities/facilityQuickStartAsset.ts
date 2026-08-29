@@ -36,7 +36,7 @@ export interface FacilityQuickStartIdentity {
 }
 
 // Published guides must be generated from authoritative DocuDent facility
-// records. Inspection-Trac customer packets are intentionally not inherited.
+// records. Customer-specific packets are intentionally not inherited.
 const quickStartContent: FacilityQuickStartContent[] = [];
 
 function normalizeIdentity(value?: string | null) {

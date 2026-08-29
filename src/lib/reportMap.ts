@@ -1,5 +1,4 @@
 import type { ReportDamageApiRow, RsaReportApiRow } from "./types";
-import { resolveDamageReportLocationName } from "./reportUtils";
 
 export type ReportMapMetadata = {
   lat: number;
@@ -10,11 +9,6 @@ export type ReportMapMetadata = {
 };
 
 type CoordinatePair = { latitude: number; longitude: number };
-
-const FACILITY_COORDINATES: Record<string, CoordinatePair> = {
-  shap: { latitude: 42.5734604, longitude: -83.0302184 },
-  jnap: { latitude: 42.3737257, longitude: -82.9613522 },
-};
 
 function parseCoordinate(value: unknown): number | null {
   if (value === null || value === undefined || value === "") {
@@ -70,21 +64,6 @@ export function resolveReportCoordinates(
     const lon = parseCoordinate(candidate.longitude ?? candidate.lon ?? candidate.lng);
     if (lat !== null && lon !== null) {
       return { latitude: lat, longitude: lon };
-    }
-  }
-
-  let locationLabel = "";
-  if ("vin" in report) {
-    locationLabel = resolveDamageReportLocationName(report as ReportDamageApiRow);
-  }
-  if (!locationLabel && (report as RsaReportApiRow).facility) {
-    locationLabel = (report as RsaReportApiRow).facility || "";
-  }
-
-  const normalizedLabel = (locationLabel || "").toLowerCase();
-  for (const [key, coords] of Object.entries(FACILITY_COORDINATES)) {
-    if (normalizedLabel.includes(key)) {
-      return coords;
     }
   }
 

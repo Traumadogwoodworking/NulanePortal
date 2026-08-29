@@ -96,7 +96,7 @@ export default function SupportPage() {
       <Card>
         <CardHeader
           title="New Ticket"
-          subtitle="Keep it short and include the report, facility, or account details that matter."
+          subtitle="Keep it short and include the report or account details that matter."
         />
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit}>

@@ -25,128 +25,39 @@ export interface PublicBrandingConfig {
   googlePlayUrl: string;
 }
 
-const envSupportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
-const envReportsEmail = process.env.NEXT_PUBLIC_REPORTS_EMAIL;
-const envPortalUrl = process.env.NEXT_PUBLIC_PORTAL_URL;
+const preset = PORTAL_BRANDING_PRESETS.docudent;
 
-function normalizePublicPortalUrl(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  if (trimmed.startsWith("http")) {
-    return trimmed;
-  }
-
-  const sanitized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return sanitized;
-}
-
-const baseConfigs: Record<PortalBrandingMode, Omit<PublicBrandingConfig, "mode">> = {
-  inspectionTrac: {
-    companyName: "Inspection-Trac",
-    appName: "Inspection-Trac",
-    shortDescription: "Vehicle inspection and condition reporting portal.",
-    landingHeadline: "THE EXPERIENCE",
-    landingSubheadline: "Built for Fast, Clear, and Consistent Inspections",
-    landingExplainer:
-      "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
-    supportEmail: "support@inspection-trac.com",
-    reportsEmail: "reports@inspection-trac.com",
-    logoPath: "/media/inspection-trac-logo.png",
-    footerLegalOwner: "Inspection-Trac",
-    primaryColor: PORTAL_BRANDING_PRESETS.inspectionTrac.portalBrandColor,
-    accentColor: PORTAL_BRANDING_PRESETS.inspectionTrac.portalBrandAccentColor,
-    loginButtonLabel: "Log In",
-    openPortalButtonLabel: "Open Portal",
-    portalUrl: "/home",
-    appStoreUrl: "https://apps.apple.com/us/app/inspection-trac/id6774376762",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.inspectiontrac",
-  },
-  definianInspection: {
-    companyName: "Definian Inspection",
-    appName: "Definian Inspection",
-    shortDescription: "Vehicle inspection and condition reporting portal.",
-    landingHeadline: "THE EXPERIENCE",
-    landingSubheadline: "Built for Fast, Clear, and Consistent Inspections",
-    landingExplainer:
-      "Access inspection reports, facility records, vehicle condition documentation, and operational review tools — all in one place.",
-    supportEmail: "support@definian.com",
-    reportsEmail: "reports@definian.com",
-    logoPath: "/media/definian-sidebar-logo-white.png",
-    footerLegalOwner: "Definian Inspection",
-    primaryColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandColor,
-    accentColor: PORTAL_BRANDING_PRESETS.definianInspection.portalBrandAccentColor,
-    loginButtonLabel: "Log In",
-    openPortalButtonLabel: "Open Portal",
-    portalUrl: "/login",
-    appStoreUrl: "https://apps.apple.com/app/definian-inspection",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.definian.inspection",
-  },
-  nulaneSystems: {
-    companyName: "Nulane Systems",
-    appName: "Nulane Systems Portal",
-    shortDescription: "Portal for inspection reporting, facility records, and operational review.",
-    landingHeadline: "Nulane Systems",
-    landingSubheadline: "Inspection reporting and operational portal.",
-    landingExplainer:
-      "Use this portal to access reports, facility records, vehicle condition documentation, and operational review tools.",
-    supportEmail: "support@nulanesystems.com",
-    reportsEmail: "reports@nulanesystems.com",
-    logoPath: "/media/Docudent.png",
-    footerLegalOwner: "Nulane Systems",
-    primaryColor: PORTAL_BRANDING_PRESETS.nulaneSystems.portalBrandColor,
-    accentColor: PORTAL_BRANDING_PRESETS.nulaneSystems.portalBrandAccentColor,
-    loginButtonLabel: "Log In",
-    openPortalButtonLabel: "Open Portal",
-    portalUrl: "/home",
-    appStoreUrl: "https://apps.apple.com/app/nulane-systems",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.app",
-  },
-  docudent: {
-    companyName: "DocuDent",
-    appName: "DocuDent",
-    shortDescription: "Damage capture and inspection reporting portal.",
-    landingHeadline: "DocuDent",
-    landingSubheadline: "Damage capture and inspection reporting portal.",
-    landingExplainer:
-      "Use this portal to access inspection reports, vehicle condition documentation, and operational review tools.",
-    supportEmail: "support@nulanesystems.com",
-    reportsEmail: "reports@nulanesystems.com",
-    logoPath: "/media/Docudent.png",
-    footerLegalOwner: "DocuDent",
-    primaryColor: PORTAL_BRANDING_PRESETS.docudent.portalBrandColor,
-    accentColor: PORTAL_BRANDING_PRESETS.docudent.portalBrandAccentColor,
-    loginButtonLabel: "Log In",
-    openPortalButtonLabel: "Open Portal",
-    portalUrl: "/home",
-    appStoreUrl: "https://apps.apple.com/app/id6756033587",
-    googlePlayUrl: "https://play.google.com/store/apps/details?id=com.nulanesystems.docudent",
-  },
+export const publicBranding: PublicBrandingConfig = {
+  mode: ACTIVE_PORTAL_BRANDING,
+  companyName: "Nulane Systems",
+  appName: "DocuDent",
+  shortDescription: "Authenticated damage submission and review workspace.",
+  landingHeadline: "DocuDent",
+  landingSubheadline: "Damage operations",
+  landingExplainer: "Authenticated damage submission and review workspace.",
+  supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@nulanesystems.com",
+  reportsEmail: "",
+  logoPath: "/media/Docudent.png",
+  footerLegalOwner: "Nulane Systems",
+  primaryColor: preset.portalBrandColor,
+  accentColor: preset.portalBrandAccentColor,
+  loginButtonLabel: "Continue to secure login",
+  openPortalButtonLabel: "Open Portal",
+  portalUrl: "/home",
+  appStoreUrl: "",
+  googlePlayUrl: "",
 };
 
-export function getPublicBrandingConfig(mode: PortalBrandingMode = ACTIVE_PORTAL_BRANDING): PublicBrandingConfig {
-  const config = baseConfigs[mode] ?? baseConfigs.docudent;
-  return {
-    ...config,
-    mode,
-    supportEmail: envSupportEmail || config.supportEmail,
-    reportsEmail: envReportsEmail || config.reportsEmail,
-    portalUrl: normalizePublicPortalUrl(envPortalUrl) || config.portalUrl,
-  };
+export function getPublicBrandingConfig(
+  _mode: PortalBrandingMode = ACTIVE_PORTAL_BRANDING,
+): PublicBrandingConfig {
+  return publicBranding;
 }
 
-export const publicBranding = getPublicBrandingConfig();
-
-export function getPublicBrandLogoUrl(config: PublicBrandingConfig = publicBranding): string {
-  if (!config.logoPath) {
-    return "";
-  }
-  if (config.logoPath.startsWith("http")) {
-    return config.logoPath;
-  }
+export function getPublicBrandLogoUrl(
+  config: PublicBrandingConfig = publicBranding,
+): string {
+  if (!config.logoPath) return "";
+  if (config.logoPath.startsWith("http")) return config.logoPath;
   return config.logoPath.startsWith("/") ? config.logoPath : `/${config.logoPath}`;
 }

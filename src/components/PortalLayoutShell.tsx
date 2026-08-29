@@ -138,7 +138,6 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
           <PortalTopBar
             pageTitle={pageMetadata.title}
             pageSubtitle={pageMetadata.subtitle}
-            showOrganizationScope={!safePathname.startsWith("/resources")}
           />
           <AlertStack />
           {session?.onboardingStatus && session.onboardingStatus !== "ready" ? (
@@ -149,9 +148,9 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
                   <p className="text-sm font-black">Your account setup needs attention.</p>
                   <p className="mt-0.5 text-xs font-semibold">
                     {session.onboardingStatus === "facility_unassigned"
-                      ? "A facility assignment is required before operational pages can show the correct data. An administrator can review the onboarding issue."
+                      ? "An operational assignment is required before this account can show the correct data. An administrator can review the onboarding issue."
                       : session.onboardingStatus === "role_unassigned"
-                        ? "An operational role is required before you can use facility workflows."
+                        ? "An operational role is required before you can use DocuDent workflows."
                         : `Missing: ${(session.missingFields || []).map((field) => field.replace(/_/g, " ")).join(", ") || session.onboardingStatus.replace(/_/g, " ")}.`}
                     {session.issues?.[0]?.reference_code ? ` Support reference: ${session.issues[0].reference_code}.` : ""}
                   </p>

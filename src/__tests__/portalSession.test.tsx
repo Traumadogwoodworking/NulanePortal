@@ -59,14 +59,13 @@ function makeSession(overrides: Partial<PortalSessionResponse> = {}): PortalSess
 }
 
 function SessionProbe() {
-  const { status, error, organizationId, isSuperAdmin, isOrgAdmin, isFacilityAdmin, isShap, locations } = usePortalSession();
+  const { status, error, organizationId, isSuperAdmin, isOrgAdmin, isFacilityAdmin, locations } = usePortalSession();
   return (
     <div>
       <div data-testid="status">{status}</div>
       <div data-testid="error">{error?.message ?? ""}</div>
       <div data-testid="organization">{organizationId ?? ""}</div>
       <div data-testid="access">{[isSuperAdmin, isOrgAdmin, isFacilityAdmin].map(String).join(",")}</div>
-      <div data-testid="shap-access">{String(isShap)}</div>
       <div data-testid="facility-list">{locations.map((location) => location.location_label).join(",")}</div>
     </div>
   );
@@ -178,106 +177,25 @@ describe("PortalSessionProvider", () => {
     expect(screen.getByTestId("access")).toHaveTextContent("true,true,true");
   });
 
-  it("enables SHAP access from an active direct facility assignment", async () => {
-    sessionServiceMocks.fetchPortalSession.mockResolvedValue(
-      makeSession({
-        organization: {
-          organization_id: "org-1",
-          name: "SHAP",
-          type: "admin",
-        },
-        locations: [
-          {
-            location_id: "location-shap",
-            organization_id: "org-1",
-            location_name: "Sterling Heights Assembly Plant",
-            location_label: "SHAP",
-            is_active: true,
-          },
-        ],
-        scope: {
-          location_memberships: [
-            {
-              location_membership_id: "membership-shap",
-              location_id: "location-shap",
-              organization_id: "org-1",
-              user_id: "user-1",
-              role: "member",
-              is_active: true,
-              is_primary: true,
-            },
-          ],
-        },
-      })
-    );
-
-    renderProvider();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("shap-access")).toHaveTextContent("true");
-    });
-  });
-
-  it("does not enable SHAP access from an accessible facility without a direct assignment", async () => {
-    sessionServiceMocks.fetchPortalSession.mockResolvedValue(
-      makeSession({
-        locations: [
-          {
-            location_id: "location-shap",
-            organization_id: "org-1",
-            location_name: "Sterling Heights Assembly Plant",
-            location_label: "SHAP",
-            is_active: true,
-          },
-        ],
-      })
-    );
-
-    renderProvider();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("shap-access")).toHaveTextContent("false");
-    });
-  });
-
-  it("does not enable SHAP access from the organization name without an accessible SHAP facility", async () => {
-    sessionServiceMocks.fetchPortalSession.mockResolvedValue(
-      makeSession({
-        organization: {
-          organization_id: "org-1",
-          name: "SHAP",
-          type: "admin",
-        },
-        locations: [],
-      })
-    );
-
-    renderProvider();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("shap-access")).toHaveTextContent("false");
-    });
-  });
-
   it("combines and deduplicates every active facility list returned by the backend", async () => {
     sessionServiceMocks.fetchPortalSession.mockResolvedValue(
       makeSession({
         locations: [
           {
-            location_id: "location-shap",
-            location_label: "SHAP",
+            location_id: "location-one",
+            location_label: "SITE ONE",
             is_active: true,
           },
         ],
         facilities: [
           {
-            location_id: "location-shap",
-            location_label: "SHAP",
+            location_id: "location-one",
+            location_label: "SITE ONE",
             is_active: true,
           },
           {
-            location_id: "location-jnap",
-            location_label: "JNAP",
+            location_id: "location-two",
+            location_label: "SITE TWO",
             is_active: true,
           },
           {
@@ -292,7 +210,7 @@ describe("PortalSessionProvider", () => {
     renderProvider();
 
     await waitFor(() => {
-      expect(screen.getByTestId("facility-list")).toHaveTextContent("SHAP,JNAP");
+      expect(screen.getByTestId("facility-list")).toHaveTextContent("SITE ONE,SITE TWO");
     });
   });
 });

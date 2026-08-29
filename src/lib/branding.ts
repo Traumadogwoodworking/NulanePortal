@@ -56,10 +56,7 @@ export interface ResolvedPortalBranding extends PortalBrandingPartial {
   staticLogoNormalizedKeys: string[];
 }
 
-function normalizeOrgKey(value?: string | null): string {
-  if (!value) {
-    return "";
-  }
+function normalizeOrgKey(value: string): string {
   return value.toLowerCase().trim().replace(/[\s_-]+/g, " ");
 }
 
@@ -176,14 +173,7 @@ export function resolvePortalBranding({
 }: ResolvePortalBrandingOptions): ResolvedPortalBranding {
   const preset = getPortalBrandingPreset(ACTIVE_PORTAL_BRANDING);
   const snapshot = (brandingSnapshot ?? (session?.branding_snapshot as BrandingSnapshot | undefined)) ?? null;
-  const fallbackOrgName = typeof snapshot?.organization_name === "string" ? snapshot.organization_name : undefined;
-  const fallbackBrandName = typeof snapshot?.brand_name === "string" ? snapshot.brand_name : undefined;
-  const rawName =
-    fallbackOrgName ??
-    fallbackBrandName ??
-    session?.organization?.name ??
-    session?.user?.organization_id ??
-    preset.defaultOrganizationName;
+  const rawName = preset.defaultOrganizationName;
   const normalizedKey = normalizeOrgKey(rawName);
   const definition = {
     organizationName: rawName,
@@ -262,16 +252,13 @@ export interface AppBranding {
   appLabel: string | null;
 }
 
-/**
- * Returns app-specific branding based on the current route.
- * This allows the shell to switch identity between branded portal modules.
- */
+/** Returns the active route label without allowing route-level brand overrides. */
 export function getAppBranding(pathname: string): AppBranding {
   const route = getRouteByPath(pathname);
 
   return {
-    brandColor: route?.brandColor ?? null,
-    brandLogo: route?.brandLogo ?? null,
+    brandColor: null,
+    brandLogo: null,
     appLabel: route?.label ?? null,
   };
 }

@@ -23,21 +23,11 @@ function normalizePathname(pathname: string | null) {
 
 function isPublicBrandedPath(pathname: string | null) {
   const path = normalizePathname(pathname);
-  if (path === "/") {
-    return true;
-  }
   return [
-    "/index.html",
     "/privacy",
     "/privacy-policy",
     "/terms",
     "/terms-of-service",
-    "/contact",
-    "/contact-us",
-    "/workflow",
-    "/get-app",
-    "/join",
-    "/getting-started",
   ].includes(path);
 }
 

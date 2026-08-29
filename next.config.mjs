@@ -17,23 +17,16 @@ if (process.env.ANALYZE === "true") {
   }
 }
 
-const isGithubPages = process.env.GITHUB_PAGES === "true";
-const githubPagesBasePath = isGithubPages ? "/inspection-trac" : undefined;
-
 const nextConfig = withAnalyzer({
   typedRoutes: false,
   output: "export",
   trailingSlash: true,
-  basePath: githubPagesBasePath,
-  assetPrefix: githubPagesBasePath,
   turbopack: {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
   allowedDevOrigins: [
     "localhost",
-    "172.17.189.65",
-    "beatles-players-immediate-marijuana.trycloudflare.com",
   ],
   typescript: {
     ignoreBuildErrors: false,
