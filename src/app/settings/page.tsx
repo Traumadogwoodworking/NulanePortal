@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
-import { PageTitle } from "@/components/ui/PageTitle";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { portalConfig } from "@/lib/config";
 import { usePortalSession } from "@/lib/portalSession";
@@ -11,9 +10,7 @@ export default function SettingsPage() {
   const environmentTone = portalConfig.environment === "production" ? "positive" : "warning";
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 pb-10">
-      <PageTitle title="Settings" subtitle="Review your account and DocuDent workspace." />
-
+    <div className="w-full space-y-6 pb-6">
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Account" subtitle="Your authenticated portal session." />

@@ -14,7 +14,7 @@ export function DetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" 
+        className="fixed inset-0 bg-black/40 transition-opacity"
         onClick={onClose} 
       />
       <div className="relative z-50 w-full max-w-xl h-full bg-slate-900 border-l border-white/10 shadow-2xl flex flex-col transform transition-transform">

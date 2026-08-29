@@ -9,7 +9,7 @@ interface PageTitleProps {
 
 export function PageTitle({ title, subtitle, eyebrow, titleClassName = "text-slate-900" }: PageTitleProps) {
   return (
-    <header className="sticky top-0 z-20 space-y-2 bg-white/90 py-3 backdrop-blur-md">
+    <header className="space-y-2 py-2">
       {eyebrow && (
         <p className="text-xs font-semibold tracking-wide text-slate-600">
           {eyebrow}

@@ -64,36 +64,34 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     topbarTextClassName: "text-slate-950",
     sidebarLogoShellClassName:
       "relative z-10 flex w-full items-center justify-center px-5 py-4",
-    sidebarLogoImageClassName: "h-auto w-full max-w-[190px] object-contain",
+    sidebarLogoImageClassName: "h-auto w-full max-w-[164px] object-contain",
     appNavLabel: "DocuDent",
     sidebarShellClassName:
-      "flex w-[286px] shrink-0 flex-col overflow-hidden rounded-[2rem] border border-[#173d85] bg-[#0d2c71] shadow-[0_28px_70px_-38px_rgba(4,14,40,0.7)]",
+      "flex w-[264px] shrink-0 flex-col overflow-hidden border-r border-[#244788] bg-[#0d2c71]",
     sidebarHeaderClassName:
       "group relative flex items-center overflow-hidden border-b border-white/10",
     sidebarHeaderStyle: {
       backgroundColor: "#0d2c71",
-      backgroundImage:
-        "radial-gradient(circle at 50% 0%, rgba(73,182,255,0.2), transparent 62%)",
     },
-    sidebarContentClassName: "flex-1 overflow-y-auto px-3 py-4 custom-scrollbar",
+    sidebarContentClassName: "flex-1 overflow-y-auto px-3 py-5 custom-scrollbar",
     sidebarSectionLabelClassName:
       "px-2 mb-2 text-[10px] font-bold uppercase tracking-wider text-blue-200",
     sidebarFooterClassName:
-      "relative flex flex-col items-center justify-center gap-3 border-t border-white/10 p-3",
+      "relative flex flex-col items-center justify-center gap-3 border-t border-[#244788] p-4",
     sidebarProfileToggleClassName:
-      "flex w-full items-center justify-start gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-[12px] font-black uppercase tracking-widest text-blue-100 transition hover:border-white/25 hover:bg-white/10 hover:text-white",
+      "flex w-full items-center justify-start gap-3 rounded-xl border border-[#315495] bg-[#08245f] px-3 py-3 text-[12px] font-black uppercase tracking-widest text-blue-100 transition hover:border-[#4f70ae] hover:bg-[#123b80] hover:text-white",
     sidebarProfileAvatarClassName:
-      "flex h-9 w-9 items-center justify-center rounded-full bg-[#49b6ff] text-[18px] font-black uppercase tracking-[0.12em] text-[#071b45]",
+      "flex h-9 w-9 items-center justify-center rounded-lg bg-[#49b6ff] text-[18px] font-black uppercase tracking-[0.12em] text-[#071b45]",
     sidebarProfileMetaLabelClassName: "text-[10px] text-blue-200",
     sidebarProfileMetaValueClassName:
       "max-w-full truncate text-[12px] normal-case tracking-normal text-white",
     sidebarProfilePopoverClassName:
-      "absolute bottom-full left-0 right-0 mb-3 rounded-2xl border border-white/10 bg-[#071b45] p-3 shadow-2xl",
+      "absolute bottom-full left-0 right-0 mb-3 rounded-xl border border-[#315495] bg-[#071b45] p-3 shadow-lg",
     sidebarProfileLogoutButtonClassName:
       "flex w-full items-center justify-between rounded-xl border border-rose-300/30 px-3 py-2.5 text-sm font-bold text-rose-100 hover:bg-rose-950/35",
     sidebarActiveLinkClassName:
-      "bg-white/14 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]",
-    sidebarInactiveLinkClassName: "text-blue-100 hover:bg-white/8 hover:text-white",
+      "bg-white text-[#0d2c71]",
+    sidebarInactiveLinkClassName: "text-blue-100 hover:bg-[#173c7e] hover:text-white",
     defaultBadgeLabel: "DocuDent",
     defaultPowerBiEmbedUrl: null,
     defaultIsPaid: false,

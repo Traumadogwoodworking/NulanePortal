@@ -62,7 +62,7 @@ export function PortalSidebar() {
       <div
         id="sidebar-header"
         className={branding.sidebarHeaderClassName}
-        style={{ ...branding.sidebarHeaderStyle, minHeight: 148, padding: "16px 24px" }}
+        style={{ ...branding.sidebarHeaderStyle, minHeight: 112, padding: "18px 24px" }}
       >
         <Image
           src={branding.staticLogoUrl ?? "/media/Nulane_Systems-removebg-preview-inv.png"}
@@ -74,24 +74,6 @@ export function PortalSidebar() {
         />
       </div>
 
-      <div className="mx-3 mt-4 rounded-2xl border border-white/15 bg-white/10 p-3" aria-label="Current product">
-        <div className="flex items-center gap-3">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white p-1 shadow-sm">
-            <Image
-              src={branding.appNavLogoUrl ?? "/media/Docudent.png"}
-              alt="DocuDent"
-              width={54}
-              height={54}
-              className="h-full w-full object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">Product</p>
-            <p className="truncate text-base font-black text-white">DocuDent</p>
-          </div>
-        </div>
-      </div>
-
       <nav id="sidebar-content" aria-label="Portal navigation" className={branding.sidebarContentClassName}>
         {visibleSections.flatMap((section) =>
           section.items.map((item) => {
@@ -100,11 +82,12 @@ export function PortalSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={`mb-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${
                   active ? branding.sidebarActiveLinkClassName : branding.sidebarInactiveLinkClassName
                 }`}
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/8">
+                <span className="flex h-8 w-8 items-center justify-center">
                   {routeIcon(item.icon)}
                 </span>
                 <span>{item.label}</span>

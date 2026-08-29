@@ -1,34 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect } from "react";
 
-export type PortalThemeMode = "branded" | "dark" | "light";
+export type PortalThemeMode = "light";
 
 export const PORTAL_THEME_KEY = "docudent-theme-mode";
 
 export function getStoredPortalThemeMode(): PortalThemeMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-  const stored = window.localStorage.getItem(PORTAL_THEME_KEY) as PortalThemeMode | null;
-  if (stored === "branded" || stored === "dark" || stored === "light") {
-    return stored;
-  }
   return "light";
 }
 
 export function usePortalThemeMode() {
-  const mode = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") {
-        return () => {};
-      }
-      window.addEventListener("storage", onStoreChange);
-      return () => window.removeEventListener("storage", onStoreChange);
-    },
-    getStoredPortalThemeMode,
-    () => "light"
-  );
+  const mode: PortalThemeMode = "light";
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -42,12 +25,7 @@ export function usePortalThemeMode() {
   }, [mode]);
 
   const cycleThemeMode = useCallback(() => {
-    const current = getStoredPortalThemeMode();
-    const next = current === "branded" ? "dark" : current === "dark" ? "light" : "branded";
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(PORTAL_THEME_KEY, next);
-      window.dispatchEvent(new StorageEvent("storage", { key: PORTAL_THEME_KEY, newValue: next }));
-    }
+    // The DocuDent review portal intentionally uses one consistent light theme.
   }, []);
 
   return { mode, cycleThemeMode };

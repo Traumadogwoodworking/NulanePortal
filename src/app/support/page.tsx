@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, type DragEvent, type FormEvent } from "react";
-import { PageTitle } from "@/components/ui/PageTitle";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { submitSupportTicket } from "@/lib/services/supportService";
@@ -87,12 +86,7 @@ export default function SupportPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 pb-10">
-      <PageTitle
-        title="Support Tickets"
-        subtitle="Submit a ticket directly from the portal."
-      />
-
+    <div className="w-full space-y-6 pb-6">
       <Card>
         <CardHeader
           title="New Ticket"

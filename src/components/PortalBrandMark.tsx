@@ -52,7 +52,7 @@ export function PortalBrandMark({
     <div
       className={[
         "flex shrink-0 items-center justify-center overflow-hidden",
-        sidebarMode ? "justify-start" : "rounded-2xl border border-[color:var(--border-subtle)] shadow-sm ring-1 ring-black/5 backdrop-blur",
+        sidebarMode ? "justify-start" : "rounded-xl border border-[color:var(--border-subtle)] bg-white shadow-sm",
         sizeClass,
         className || "",
       ].join(" ")}

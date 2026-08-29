@@ -60,8 +60,8 @@ export function LoginRedirectClient() {
   }, [embedded, returnTo, debugConfig]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 text-slate-900">
-      <div className="w-full max-w-md rounded-[2rem] border border-white/70 bg-white/90 px-8 py-8 text-center shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop-blur">
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-900">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white px-8 py-8 text-center shadow-lg">
         <div className="flex justify-center">
           <span className="inline-flex rounded-2xl bg-[#0d2c71] px-4 py-3 shadow-[0_16px_36px_rgba(4,14,40,0.2)]">
             <img src={publicBranding.logoPath} alt={publicBranding.appName} className="h-10 w-auto object-contain sm:h-12" />

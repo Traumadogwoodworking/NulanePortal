@@ -45,6 +45,36 @@ describe("DocuDent portal product contract", () => {
     expect(routeShell).not.toMatch(/path === ["']\/["']/);
   });
 
+  test("uses the edge-aligned, single-theme operational shell", () => {
+    const layout = readFileSync(
+      join(process.cwd(), "src/components/PortalLayoutShell.tsx"),
+      "utf8",
+    );
+    const sidebar = readFileSync(
+      join(process.cwd(), "src/components/PortalSidebar.tsx"),
+      "utf8",
+    );
+    const topBar = readFileSync(
+      join(process.cwd(), "src/components/PortalTopBar.tsx"),
+      "utf8",
+    );
+    const home = readFileSync(join(process.cwd(), "src/app/home/page.tsx"), "utf8");
+    const visualSources = [
+      layout,
+      sidebar,
+      topBar,
+      home,
+      readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8"),
+      readFileSync(join(process.cwd(), "src/components/ui/Card.tsx"), "utf8"),
+    ].join("\n");
+
+    expect(layout).not.toContain('className="flex h-screen overflow-hidden bg-[color:var(--bg)] p-4"');
+    expect(sidebar).not.toContain('aria-label="Current product"');
+    expect(topBar).not.toContain("Nulane Systems");
+    expect(home).toContain("<HomeDashboard />");
+    expect(visualSources).not.toMatch(/brand-glow|radial-gradient|backdrop-blur|blur-3xl/);
+  });
+
   test("active configuration has only DocuDent and Nulane service defaults", () => {
     const source = [
       "src/lib/config.ts",

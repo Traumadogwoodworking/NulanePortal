@@ -1671,7 +1671,7 @@ function ChartFooterTable({
       <div className="max-h-[260px] overflow-y-auto border-t border-slate-200">
         {items.length ? (
           <table className="w-full border-collapse text-left">
-            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+            <thead className="sticky top-0 z-10 bg-slate-50">
               <tr className="border-b border-slate-200">
                 <th className="px-6 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-500">
                   {showSeverityPills ? "Severity" : "Section"}
@@ -4416,9 +4416,9 @@ export default function HomeDashboard() {
   };
 
   return (
-    <div className="relative space-y-6">
+    <div className="relative w-full space-y-6 pb-6">
           {isApplyingHomeFilters ? (
-            <div className="absolute inset-0 z-[70] rounded-2xl bg-white/85 px-3 pt-4 backdrop-blur-sm">
+            <div className="absolute inset-0 z-[70] rounded-2xl bg-white px-3 pt-4">
               <PageLoadingScreen
                 title="Applying dashboard filters"
                 description="Updating the loaded analytics view..."
@@ -4454,7 +4454,7 @@ export default function HomeDashboard() {
             refreshing={analyticsRefreshInProgress}
             errorMessage={analyticsHasUsableData ? analyticsErrorMessage : null}
           />
-          <Card className="sticky top-0 z-30 overflow-visible border-slate-200/80 bg-white/95 shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)] backdrop-blur">
+          <Card className="sticky top-0 z-30 overflow-visible border-slate-200 bg-white">
             <CardHeader
               title="Filters"
               subtitle="Filters scope the damage submissions analytics."

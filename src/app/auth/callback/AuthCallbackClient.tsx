@@ -94,8 +94,8 @@ export function AuthCallbackClient() {
   }, []);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_42%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 text-slate-900">
-      <div className="w-full max-w-lg rounded-[2rem] border border-white/70 bg-white/85 px-8 py-10 text-center shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur">
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-900">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white px-8 py-10 text-center shadow-lg">
         <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-400">Authentication</p>
         <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
           {status === "failed" ? "Sign-in callback failed" : "Completing sign-in"}

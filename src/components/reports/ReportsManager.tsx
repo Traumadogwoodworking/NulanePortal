@@ -1750,7 +1750,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }
 
   return (
-    <div className="relative space-y-6">
+    <div className="relative w-full space-y-6 pb-6">
       {damageSaveNotice ? (
         <div
           role={damageSaveNotice.tone === "warning" ? "alert" : "status"}
@@ -1765,7 +1765,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         </div>
       ) : null}
       {isDamageFilterLoading ? (
-        <div className="absolute inset-0 z-[70] rounded-2xl bg-white/85 px-3 pt-4 backdrop-blur-sm">
+        <div className="absolute inset-0 z-[70] rounded-2xl bg-white px-3 pt-4">
           <PageLoadingScreen
             title="Applying report filters"
             description="Loading the matching damage submissions..."
@@ -1788,7 +1788,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
           <div className="grid gap-6 p-3 sm:p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(420px,0.85fr)] lg:items-start">
             <div className="min-h-[32rem] min-w-0 self-start xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)] xl:min-h-0">
               <Card className="flex h-[32rem] min-h-0 flex-col overflow-hidden border-blue-200/80 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(255,255,255,0.96)_100%)] shadow-[0_18px_60px_-34px_rgba(15,23,42,0.25)] xl:h-full">
-                <div className="sticky top-0 z-30 border-b border-blue-200/80 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(219,234,254,0.92)_100%)] px-5 py-4 backdrop-blur">
+                <div className="sticky top-0 z-30 border-b border-blue-200 bg-blue-50 px-5 py-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-slate-700">Inspection Reports</p>
@@ -1806,7 +1806,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         data-state={damageMultiSelectEnabled ? "on" : "off"}
                         className={`gap-2 ${
                           damageMultiSelectEnabled
-                            ? "border-blue-800 !bg-blue-700 !font-bold !text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25),0_4px_12px_rgba(29,78,216,0.28)] hover:!bg-blue-800 hover:!text-white"
+                            ? "border-blue-800 !bg-blue-700 !font-bold !text-white hover:!bg-blue-800 hover:!text-white"
                             : "border-black bg-white text-black hover:bg-slate-100"
                         }`}
                         onClick={toggleDamageMultiSelect}
@@ -1940,7 +1940,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                     }}
                   >
                     <Table>
-                      <TableHeader className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur">
+                      <TableHeader className="sticky top-0 z-20 bg-slate-50">
                         <TableRow className="bg-slate-50/95">
                           {[
                             "VIN",

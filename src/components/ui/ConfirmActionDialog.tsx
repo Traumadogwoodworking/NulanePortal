@@ -23,7 +23,7 @@ export function ConfirmActionDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-md" onClick={!isPending ? onClose : undefined} />
+      <div className="fixed inset-0 bg-black/60" onClick={!isPending ? onClose : undefined} />
       <div className="relative z-50 w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl p-6 shadow-2xl">
         <div className="flex items-center gap-3 mb-4">
           {isDestructive && <AlertTriangle className="h-5 w-5 text-rose-500" />}

@@ -985,7 +985,7 @@ export function RsaReportsManager() {
                                     key={car.rowId}
                                     data-row-key={car.rowId}
                                     className={`group cursor-pointer border-b border-slate-100 transition-all hover:bg-slate-50 ${
-                                      isSelected ? "bg-blue-50/80 shadow-[inset_3px_0_0_0_rgba(37,99,235,0.45)]" : ""
+                                      isSelected ? "border-l-4 border-blue-500 bg-blue-50" : ""
                                     }`}
                                     onClick={() => setSelectedRsaRailcarId(car.rowId)}
                                   >
