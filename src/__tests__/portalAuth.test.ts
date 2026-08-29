@@ -41,7 +41,7 @@ beforeEach(() => {
   auth0Mocks.handleRedirectCallback.mockResolvedValue({ appState: { returnTo: "/home/" } });
   vi.stubEnv("NEXT_PUBLIC_AUTH0_DOMAIN", "nulanesystems.us.auth0.com");
   vi.stubEnv("NEXT_PUBLIC_AUTH0_CLIENT_ID", "docudent-portal-test-client");
-  vi.stubEnv("NEXT_PUBLIC_AUTH0_ORGANIZATION_ID", "org_docudent_test");
+  vi.stubEnv("NEXT_PUBLIC_AUTH0_ORGANIZATION_ID", "");
   vi.stubEnv("NEXT_PUBLIC_AUTH0_AUDIENCE", "https://api.nulanesystems.com");
 });
 
@@ -183,7 +183,7 @@ describe("startAuth0Login", () => {
 });
 
 describe("startFacilityRegistrationAuth", () => {
-  it("binds password or SSO authentication to the Auth0 organization and entered email", async () => {
+  it("does not bind authentication to an unverified Auth0 organization", async () => {
     window.history.replaceState({}, "", "http://localhost:3000/join/?enrollment=opaque-session-token");
     const { startFacilityRegistrationAuth, AuthRedirectError } = await importPortalAuth();
 
@@ -192,16 +192,33 @@ describe("startFacilityRegistrationAuth", () => {
       { email: " Person@Example.com ", signup: true }
     )).rejects.toBeInstanceOf(AuthRedirectError);
 
-    expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledWith(
+    const loginRequest = auth0Mocks.loginWithRedirect.mock.calls[0]?.[0];
+    expect(loginRequest).toEqual(
       expect.objectContaining({
         appState: { returnTo: "/join/?enrollment=opaque-session-token" },
         authorizationParams: expect.objectContaining({
-          organization: "org_docudent_test",
           login_hint: "person@example.com",
           screen_hint: "signup",
           prompt: "login",
         }),
-      })
+      }),
+    );
+    expect(loginRequest.authorizationParams).not.toHaveProperty("organization");
+  });
+
+  it("passes an Auth0 organization only when explicitly configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH0_ORGANIZATION_ID", "org_docudent_verified");
+    window.history.replaceState({}, "", "http://localhost:3000/login?returnTo=%2Fhome%2F");
+    const { startAuth0Login, AuthRedirectError } = await importPortalAuth();
+
+    await expect(startAuth0Login("/home/")).rejects.toBeInstanceOf(AuthRedirectError);
+
+    expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorizationParams: expect.objectContaining({
+          organization: "org_docudent_verified",
+        }),
+      }),
     );
   });
 });

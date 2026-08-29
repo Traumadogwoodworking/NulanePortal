@@ -15,8 +15,6 @@ export interface PortalBrandPreset {
   portalBrandColor: string;
   portalBrandAccentColor: string;
   portalBrandLightColor: string;
-  auth0ClientId: string;
-  auth0OrganizationId: string;
   sidebarBgEnforced: string;
   sidebarTextEnforced: string;
   sidebarLinkEnforced: string;
@@ -59,8 +57,6 @@ export const PORTAL_BRANDING_PRESETS: Record<PortalBrandingMode, PortalBrandPres
     portalBrandColor: "#0d2c71",
     portalBrandAccentColor: "#49b6ff",
     portalBrandLightColor: "rgba(73, 182, 255, 0.16)",
-    auth0ClientId: "WkYT29HkNJo5rjDMPGTxAdb04QdKQsPc",
-    auth0OrganizationId: "org_cmCOV936fSunCIJB",
     sidebarBgEnforced: "#0d2c71",
     sidebarTextEnforced: "#f8fbff",
     sidebarLinkEnforced: "#d6e5ff",

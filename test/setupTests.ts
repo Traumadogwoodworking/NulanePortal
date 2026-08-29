@@ -6,7 +6,6 @@ import { server } from "./utils/mockServer";
 // receives these values from the deployment environment.
 process.env.NEXT_PUBLIC_AUTH0_DOMAIN = "nulanesystems.us.auth0.com";
 process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID = "docudent-portal-test-client";
-process.env.NEXT_PUBLIC_AUTH0_ORGANIZATION_ID = "org_docudent_test";
 process.env.NEXT_PUBLIC_AUTH0_AUDIENCE = "https://api.nulanesystems.com";
 process.env.NEXT_PUBLIC_DOCUDENT_FACILITY_ONBOARDING_ENABLED = "true";
 

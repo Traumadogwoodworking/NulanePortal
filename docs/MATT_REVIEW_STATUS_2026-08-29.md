@@ -23,6 +23,10 @@ marketing page.
   user, resource, get-app, and marketing routes from this product build.
 - Removed Inspection-Trac, AWCT, Definian, Circle, inherited tenant/facility,
   support, store-link, and endpoint defaults and assets.
+- Replaced the inherited Auth0 client identifier with the DocuDent mobile
+  authority's public client identifier and removed the hardcoded inherited
+  Auth0 organization. Organization prompting is now optional and must be backed
+  by a separately verified DocuDent-owned organization.
 - Reduced navigation and route-access logic to the DocuDent operational surface.
 - Added build and static-export checks that require the four review routes and
   reject inherited routes and brand copy.

@@ -52,6 +52,7 @@ describe("DocuDent portal product contract", () => {
       "src/lib/brandingPresets.ts",
       "src/lib/publicBranding.ts",
       "src/lib/navigation.ts",
+      ".env.docudent.example",
     ]
       .map((file) => readFileSync(join(process.cwd(), file), "utf8"))
       .join("\n");
@@ -61,5 +62,9 @@ describe("DocuDent portal product contract", () => {
     expect(source).not.toMatch(/Inspection[- ]Trac/i);
     expect(source).not.toMatch(/\b(?:AWCT|JNAP|SHAP|Definian)\b/i);
     expect(source).not.toMatch(/Circle Logistics/i);
+    expect(source).toContain(
+      "NEXT_PUBLIC_AUTH0_CLIENT_ID=eijyn4526jk7DKPnAYVh6fjKOJ3DVvSX",
+    );
+    expect(source).not.toMatch(/^NEXT_PUBLIC_AUTH0_ORGANIZATION_ID=/m);
   });
 });

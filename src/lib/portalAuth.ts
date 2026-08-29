@@ -25,7 +25,7 @@ type Auth0Client = Auth0SpaClient;
 type AuthConfig = {
   domain: string;
   clientId: string;
-  organizationId: string;
+  organizationId?: string;
   audience: string;
   redirectUri: string;
 };
@@ -98,7 +98,7 @@ function describeConfig(config: AuthConfig) {
     domain: config.domain,
     audience: config.audience,
     redirectUri: config.redirectUri,
-    organizationId: config.organizationId,
+    organizationConfigured: Boolean(config.organizationId),
     clientId: maskSecret(config.clientId, 4, 3),
   };
 }
@@ -241,14 +241,26 @@ function buildAuthConfig(): AuthConfig {
   const redirectMode = (process.env.NEXT_PUBLIC_AUTH0_REDIRECT_MODE || "").trim().toLowerCase();
   const redirectUri = buildAuthRedirectUri(window.location.origin, redirectOverride, redirectMode);
 
-  if (!domain || !clientId || !organizationId || !audience || !redirectUri) {
-    console.error("[Auth0] configuration incomplete", { domain, clientId, organizationId, audience, redirectUri });
+  if (!domain || !clientId || !audience || !redirectUri) {
+    console.error("[Auth0] configuration incomplete", {
+      domain,
+      clientId,
+      organizationConfigured: Boolean(organizationId),
+      audience,
+      redirectUri,
+    });
     throw new AuthConfigError(
-      "Auth0 configuration is missing. Provide NEXT_PUBLIC_AUTH0_DOMAIN, NEXT_PUBLIC_AUTH0_CLIENT_ID, NEXT_PUBLIC_AUTH0_ORGANIZATION_ID, and NEXT_PUBLIC_AUTH0_AUDIENCE.",
+      "Auth0 configuration is missing. Provide NEXT_PUBLIC_AUTH0_DOMAIN, NEXT_PUBLIC_AUTH0_CLIENT_ID, and NEXT_PUBLIC_AUTH0_AUDIENCE.",
     );
   }
 
-  return { domain, clientId, organizationId, audience, redirectUri };
+  return {
+    domain,
+    clientId,
+    ...(organizationId ? { organizationId } : {}),
+    audience,
+    redirectUri,
+  };
 }
 
 export function resolveSafePortalReturnTo(rawReturnTo?: string | null): string {
@@ -821,7 +833,7 @@ async function performAuth0LoginRedirect(
       authorizationParams: {
         audience: config.audience,
         redirect_uri: config.redirectUri,
-        organization: config.organizationId,
+        ...(config.organizationId ? { organization: config.organizationId } : {}),
         ...(options.signup ? { screen_hint: "signup" } : {}),
         ...(options.loginHint?.trim() ? { login_hint: options.loginHint.trim().toLowerCase() } : {}),
         prompt: "login",
