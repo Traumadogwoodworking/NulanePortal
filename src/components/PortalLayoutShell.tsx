@@ -16,6 +16,16 @@ import { usePortalThemeMode } from "@/lib/portalTheme";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
+function isIndividualDocuDentAccount(session: ReturnType<typeof usePortalSession>["session"]) {
+  const organizationName = session?.organization?.name?.trim().toLowerCase() ?? "";
+  return (
+    organizationName === "free tier organization" ||
+    session?.organization_type?.trim().toLowerCase() === "free" ||
+    session?.organization?.type?.trim().toLowerCase() === "free" ||
+    session?.user?.is_free_user === true
+  );
+}
+
 export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
   const { status, error, refetch, session } = usePortalSession();
   const pathname = usePathname();
@@ -27,6 +37,9 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
     [brandingSnapshot, safePathname, session]
   );
   const { mode: themeMode } = usePortalThemeMode();
+  const hideIndividualFacilityWarning =
+    session?.onboardingStatus === "facility_unassigned" &&
+    isIndividualDocuDentAccount(session);
 
   const pageMetadata = useMemo(() => {
     const route = getRouteByPath(safePathname);
@@ -129,7 +142,9 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
             pageSubtitle={pageMetadata.subtitle}
           />
           <AlertStack />
-          {session?.onboardingStatus && session.onboardingStatus !== "ready" ? (
+          {session?.onboardingStatus &&
+          session.onboardingStatus !== "ready" &&
+          !hideIndividualFacilityWarning ? (
             <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950" role="status">
               <div className="flex min-w-0 gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
