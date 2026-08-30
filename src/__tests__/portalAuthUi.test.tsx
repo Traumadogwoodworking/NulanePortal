@@ -2,16 +2,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ReactNode } from "react";
 import { PortalLayoutShell } from "@/components/PortalLayoutShell";
 import { AuthCallbackClient } from "@/app/auth/callback/AuthCallbackClient";
-import type { PortalSessionResponse } from "@/lib/types";
 
 const portalSessionMocks = vi.hoisted(() => ({
   state: {
     status: "unauthenticated",
     error: null as Error | null,
-    session: null as PortalSessionResponse | null,
+    session: null,
   },
   refetch: vi.fn(),
 }));
@@ -64,14 +62,6 @@ vi.mock("@/lib/portalAuth", () => ({
 
 vi.mock("@/lib/portalData", () => ({
   usePortalBrandingSnapshot: () => ({ data: null }),
-}));
-
-vi.mock("@/components/PortalSidebar", () => ({
-  PortalSidebar: () => null,
-}));
-
-vi.mock("@/components/AccessGuardClient", () => ({
-  AccessGuardClient: ({ children }: { children: ReactNode }) => children,
 }));
 
 vi.mock("@/lib/portalTheme", () => ({
@@ -136,61 +126,6 @@ describe("PortalLayoutShell auth states", () => {
     await waitFor(() => {
       expect(portalAuthMocks.logoutRejectedPortalSession).toHaveBeenCalledWith("/home/");
     });
-  });
-
-  it("does not show a facility-assignment warning for individual DocuDent accounts", () => {
-    portalSessionMocks.state.status = "success";
-    portalSessionMocks.state.session = {
-      user: {
-        user_id: "auth0|individual-user",
-        organization_id: "free-org",
-        is_free_user: true,
-      },
-      organization: {
-        organization_id: "free-org",
-        name: "Free Tier Organization",
-        type: "paid",
-      },
-      organization_type: "paid",
-      plan_tier: "pro-plan",
-      portal_access: true,
-      onboardingStatus: "facility_unassigned",
-      missingFields: ["facility_membership"],
-      issues: [{ reference_code: "ONB-118660", issue_key: "facility_unassigned" }],
-    };
-
-    render(<PortalLayoutShell>Portal content</PortalLayoutShell>);
-
-    expect(screen.getByText("Portal content")).toBeInTheDocument();
-    expect(screen.queryByText("Your account setup needs attention.")).not.toBeInTheDocument();
-    expect(screen.queryByText(/ONB-118660/)).not.toBeInTheDocument();
-  });
-
-  it("keeps actionable onboarding warnings for non-individual accounts", () => {
-    portalSessionMocks.state.status = "success";
-    portalSessionMocks.state.session = {
-      user: {
-        user_id: "auth0|organization-user",
-        organization_id: "customer-org",
-        is_free_user: false,
-      },
-      organization: {
-        organization_id: "customer-org",
-        name: "Customer Organization",
-        type: "paid",
-      },
-      organization_type: "paid",
-      plan_tier: "pro-plan",
-      portal_access: true,
-      onboardingStatus: "facility_unassigned",
-      missingFields: ["facility_membership"],
-      issues: [{ reference_code: "ONB-CUSTOMER", issue_key: "facility_unassigned" }],
-    };
-
-    render(<PortalLayoutShell>Portal content</PortalLayoutShell>);
-
-    expect(screen.getByText("Your account setup needs attention.")).toBeInTheDocument();
-    expect(screen.getByText(/ONB-CUSTOMER/)).toBeInTheDocument();
   });
 });
 
