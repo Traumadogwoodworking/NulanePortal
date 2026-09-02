@@ -1052,7 +1052,6 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   useEffect(() => {
     if (
       !selectedDamageReportId ||
-      selectedDamageIsClearScan ||
       hydratedDamageReportIdsRef.current.has(selectedDamageReportId)
     ) {
       return;
@@ -1093,7 +1092,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     return () => {
       cancelled = true;
     };
-  }, [locations, selectedDamageFullRow, selectedDamageIsClearScan, selectedDamageReportId]);
+  }, [locations, selectedDamageFullRow, selectedDamageReportId]);
   const facilityChoices = useMemo<FacilitySummary[]>(() => {
     const choices = new Map<string, { id: string; label: string; slug: string }>();
     if (fullFilterOptions.facilities.length) {

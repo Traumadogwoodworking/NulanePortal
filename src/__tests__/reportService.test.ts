@@ -38,4 +38,19 @@ describe("reportService splat normalization", () => {
     expect(gallery.galleryUrls).toContain("https://example.com/list.png");
     expect(gallery.photoUrls).toContain("https://example.com/damage-photo.png");
   });
+
+  it("renders signed S3 photo object aliases in the report side panel gallery", () => {
+    const gallery = buildReportGallery({
+      report_id: "report-s3-photo",
+      photos: [
+        {
+          signed_url: "https://inspection-photos.s3.us-east-2.amazonaws.com/report/photo.jpg?X-Amz-Signature=test",
+        },
+      ],
+    } as never);
+
+    expect(gallery.photoUrls).toEqual([
+      "https://inspection-photos.s3.us-east-2.amazonaws.com/report/photo.jpg?X-Amz-Signature=test",
+    ]);
+  });
 });

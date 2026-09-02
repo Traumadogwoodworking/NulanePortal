@@ -30,8 +30,26 @@ function collectUsableUrls(...values: unknown[]): string[] {
       if (isUsableHttpUrl(entry)) {
         urls.push(entry.trim());
       } else if (entry && typeof entry === "object") {
-        const candidate = entry as { url?: unknown; uri?: unknown; path?: unknown };
-        const resolved = firstUsableUrl(candidate.url, candidate.uri, candidate.path);
+        const candidate = entry as {
+          url?: unknown;
+          uri?: unknown;
+          path?: unknown;
+          href?: unknown;
+          photo_url?: unknown;
+          photoUrl?: unknown;
+          signed_url?: unknown;
+          signedUrl?: unknown;
+        };
+        const resolved = firstUsableUrl(
+          candidate.url,
+          candidate.uri,
+          candidate.path,
+          candidate.href,
+          candidate.photo_url,
+          candidate.photoUrl,
+          candidate.signed_url,
+          candidate.signedUrl
+        );
         if (resolved) {
           urls.push(resolved);
         }
