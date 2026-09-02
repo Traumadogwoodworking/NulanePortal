@@ -1052,6 +1052,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   useEffect(() => {
     if (
       !selectedDamageReportId ||
+      selectedDamageIsClearScan ||
       hydratedDamageReportIdsRef.current.has(selectedDamageReportId)
     ) {
       return;
@@ -1092,7 +1093,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     return () => {
       cancelled = true;
     };
-  }, [locations, selectedDamageFullRow, selectedDamageReportId]);
+  }, [locations, selectedDamageFullRow, selectedDamageIsClearScan, selectedDamageReportId]);
   const facilityChoices = useMemo<FacilitySummary[]>(() => {
     const choices = new Map<string, { id: string; label: string; slug: string }>();
     if (fullFilterOptions.facilities.length) {
@@ -2265,7 +2266,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                   }}
                 />
                   </Card>
-                  <ScrollArea className="min-h-0 flex-1">
+                  <ScrollArea className="min-h-[32rem] flex-1 xl:min-h-0">
                     <div className="space-y-4 pr-1">
                       <Card className="overflow-hidden border-slate-200/80 bg-white shadow-sm">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/80 px-5 py-4">
