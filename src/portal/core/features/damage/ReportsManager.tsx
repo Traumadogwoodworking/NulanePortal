@@ -103,6 +103,7 @@ import type {
 } from "@/lib/types";
 import { getReportSubmitterIdentity } from "@/portal/core/data/reportSubmitterIdentity";
 import { ReportSubmitterIdentity } from "@/portal/core/ui/ReportSubmitterIdentity";
+import { SharedWorkspacePeopleHub } from "@/portal/core/features/damage/SharedWorkspacePeopleHub";
 
 interface ReportsManagerProps {
   mode: string;
@@ -1843,6 +1844,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             </Badge>
           </div>
         </div>
+        <SharedWorkspacePeopleHub productLabel="Definian" />
         <CardContent className="p-0">
           <div className="grid gap-6 p-3 sm:p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(420px,0.85fr)] lg:items-start">
             <div className="min-h-[32rem] min-w-0 self-start xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)] xl:min-h-0">

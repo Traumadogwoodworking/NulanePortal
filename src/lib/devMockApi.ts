@@ -945,6 +945,20 @@ export async function resolveDevMockResponse(url: string, init: RequestInit = {}
     return buildMockSession();
   }
 
+  if (path.endsWith("/shared-workspace/people")) {
+    return {
+      shared_workspace: true,
+      total: 5,
+      people: [
+        { person_id: "dev-guest-user", display_name: "Guest Operator", masked_email: "g***@nulanesystems.com", is_current_user: true },
+        { person_id: "dev-shared-user-2", display_name: "Jordan Lee", masked_email: "j***@gmail.com", is_current_user: false },
+        { person_id: "dev-shared-user-3", display_name: "Maria Santos", masked_email: "m***@outlook.com", is_current_user: false },
+        { person_id: "dev-shared-user-4", display_name: "Chris Walker", masked_email: "c***@acme.com", is_current_user: false },
+        { person_id: "dev-shared-user-5", display_name: "Taylor Brooks", masked_email: "t***@icloud.com", is_current_user: false },
+      ],
+    };
+  }
+
   if (path.endsWith("/inspection/24-hour/portal-display")) {
     const facility = new URL(url, "http://localhost").searchParams.get("facility") ?? "";
     return buildMockTwentyFourHourResponse(facility);
