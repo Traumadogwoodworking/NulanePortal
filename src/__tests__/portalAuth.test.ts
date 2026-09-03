@@ -80,14 +80,14 @@ describe("completeAuth0Callback", () => {
     window.history.replaceState({}, "", "/auth/callback/?code=present&state=present");
     window.sessionStorage.setItem(
       "portal_facility_registration_return_to",
-      "https://www.definian.com/signal",
+      "https://www.definian.com/inspection",
     );
-    window.sessionStorage.setItem("portal_login_return_to", "https://www.definian.com/signal");
+    window.sessionStorage.setItem("portal_login_return_to", "https://www.definian.com/inspection");
     auth0Mocks.handleRedirectCallback.mockResolvedValue({ appState: { returnTo: "/home/" } });
     auth0Mocks.getTokenSilently.mockResolvedValue("callback-token");
     const { completeAuth0Callback } = await importPortalAuth();
 
-    await expect(completeAuth0Callback()).resolves.toBe("https://www.definian.com/signal");
+    await expect(completeAuth0Callback()).resolves.toBe("https://www.definian.com/inspection");
     expect(window.sessionStorage.getItem("portal_facility_registration_return_to")).toBeNull();
   });
 
@@ -300,7 +300,7 @@ describe("logoutRejectedPortalSession", () => {
 describe("logoutPortal", () => {
   it("clears the embedded SDK partition before starting top-level Auth0 logout", async () => {
     const topWindow = window.top;
-    const topLocation = { href: "https://www.definian.com/signal" };
+    const topLocation = { href: "https://www.definian.com/inspection" };
     Object.defineProperty(window, "top", { configurable: true, value: { location: topLocation } });
     window.localStorage.setItem("portal_token", "embedded-token");
     window.localStorage.setItem("@@auth0spajs@@::cached", "embedded-sdk-session");
@@ -368,13 +368,13 @@ describe("resolveSafePortalReturnTo", () => {
   it("accepts only the exact Definian Signal parent URL as a cross-origin return", async () => {
     const { resolveSafePortalReturnTo } = await importPortalAuth();
 
-    expect(resolveSafePortalReturnTo("https://www.definian.com/signal")).toBe(
-      "https://www.definian.com/signal",
+    expect(resolveSafePortalReturnTo("https://www.definian.com/inspection")).toBe(
+      "https://www.definian.com/inspection",
     );
-    expect(resolveSafePortalReturnTo("https://www.definian.com/signal/")).toBe(
-      "https://www.definian.com/signal",
+    expect(resolveSafePortalReturnTo("https://www.definian.com/inspection/")).toBe(
+      "https://www.definian.com/inspection",
     );
-    expect(resolveSafePortalReturnTo("https://www.definian.com/signal?next=https://evil.example")).toBe("/home/");
+    expect(resolveSafePortalReturnTo("https://www.definian.com/inspection?next=https://evil.example")).toBe("/home/");
     expect(resolveSafePortalReturnTo("https://www.definian.com.evil.example/signal")).toBe("/home/");
     expect(resolveSafePortalReturnTo("https://evil.example/")).toBe("/home/");
   });

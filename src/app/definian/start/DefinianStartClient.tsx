@@ -11,7 +11,7 @@ import {
   startFacilityRegistrationAuth,
 } from "@/lib/portalAuth";
 
-export const DEFINIAN_SIGNAL_RETURN_URL = "https://www.definian.com/signal";
+export const DEFINIAN_SIGNAL_RETURN_URL = "https://www.definian.com/inspection";
 export const DEFINIAN_AUTH_BOOTSTRAP_ORIGIN = "https://vercel-portal-exact.vercel.app";
 export const DEFINIAN_IOS_APP_URL = "https://apps.apple.com/us/app/definian-inspection/id6778651028";
 export const DEFINIAN_ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.nulanesystems.definian";

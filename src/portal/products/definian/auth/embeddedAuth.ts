@@ -1,5 +1,5 @@
 export const DEFINIAN_SIGNAL_PARENT_ORIGIN = "https://www.definian.com";
-export const DEFINIAN_SIGNAL_PARENT_URL = `${DEFINIAN_SIGNAL_PARENT_ORIGIN}/signal`;
+export const DEFINIAN_SIGNAL_PARENT_URL = `${DEFINIAN_SIGNAL_PARENT_ORIGIN}/inspection`;
 export const DEFINIAN_SIGNAL_EMBED_PATH = "/embed/definian-signal/";
 export const DEFINIAN_SIGNAL_PORTAL_ORIGIN = "https://signal.definian.com";
 

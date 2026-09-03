@@ -151,3 +151,24 @@ export function resolveReportMedia(report: Record<string, unknown> | null | unde
     splatUrls,
   };
 }
+
+/**
+ * Hydrated report details can omit the signed photo collection that was already
+ * returned by the list endpoint. Preserve that collection instead of letting an
+ * empty detail payload erase the photos currently shown for the selection.
+ */
+export function mergeReportDetailWithListMedia(
+  detail: Record<string, unknown>,
+  listRow: Record<string, unknown>
+): Record<string, unknown> {
+  const detailPhotoUrls = resolveReportMedia(detail).photoUrls;
+  const listPhotoUrls = resolveReportMedia(listRow).photoUrls;
+  const photoUrls = detailPhotoUrls.length > 0 ? detailPhotoUrls : listPhotoUrls;
+
+  return {
+    ...listRow,
+    ...detail,
+    photo_urls: photoUrls,
+    photoUrls,
+  };
+}

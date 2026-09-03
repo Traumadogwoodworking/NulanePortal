@@ -17,7 +17,7 @@ describe("Definian embedded authentication handoff", () => {
     expect(response.status).toBe(307);
     expect(location.origin).toBe("https://signal.definian.com");
     expect(location.pathname).toBe(path);
-    expect(location.searchParams.get("returnTo")).toBe("https://www.definian.com/signal");
+    expect(location.searchParams.get("returnTo")).toBe("https://www.definian.com/inspection");
     expect(location.toString()).not.toContain("evil.example");
   });
 
@@ -27,11 +27,11 @@ describe("Definian embedded authentication handoff", () => {
   });
 
   it("rejects parent lookalikes, query strings, and fragments", () => {
-    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com/signal")).toBe(
-      "https://www.definian.com/signal",
+    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com/inspection")).toBe(
+      "https://www.definian.com/inspection",
     );
-    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com.evil.example/signal")).toBeNull();
-    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com/signal?next=/admin")).toBeNull();
-    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com/signal#token")).toBeNull();
+    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com.evil.example/inspection")).toBeNull();
+    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com/inspection?next=/admin")).toBeNull();
+    expect(resolveDefinianSignalParentReturnTo("https://www.definian.com/inspection#token")).toBeNull();
   });
 });

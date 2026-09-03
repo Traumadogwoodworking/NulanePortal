@@ -37,7 +37,7 @@ describe("portal API proxy URL construction", () => {
     expect(headers.get("x-portal-request-id")).toBe("portal-request-id");
     expect(headers.get("x-portal-request")).toBe("1");
     expect(headers.get("x-portal-tenant")).toBe("definian");
-    expect(headers.get("referer")).toBe("https://www.definian.com/signal");
+    expect(headers.get("referer")).toBe("https://www.definian.com/inspection");
   });
 
   test("does not forward client portal identity headers for other portal tenants", () => {

@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildReportGallery } from "@/lib/reportGallery";
+import { mergeReportDetailWithListMedia } from "@/lib/reportMedia";
 import {
   ReportsAdapter,
   fetchDamageReportDetail,
@@ -960,12 +961,18 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     [listRows, sortedDamageSummaries]
   );
 
-  const selectedDamageFullRow = useMemo(
-    () => selectedDamageReportDetail?.report_id === selectedDamageReportId
+  const selectedDamageFullRow = useMemo(() => {
+    const selectedListRow = listRows.find((row) => row.report_id === selectedDamageReportId) ?? null;
+    if (selectedDamageReportDetail?.report_id === selectedDamageReportId && selectedListRow) {
+      return mergeReportDetailWithListMedia(
+        selectedDamageReportDetail as unknown as Record<string, unknown>,
+        selectedListRow as unknown as Record<string, unknown>
+      ) as unknown as ReportDamageApiRow;
+    }
+    return selectedDamageReportDetail?.report_id === selectedDamageReportId
       ? selectedDamageReportDetail
-      : (listRows.find((r) => r.report_id === selectedDamageReportId) as unknown as ReportDamageApiRow | null) ?? null,
-    [listRows, selectedDamageReportDetail, selectedDamageReportId]
-  );
+      : (selectedListRow as unknown as ReportDamageApiRow | null);
+  }, [listRows, selectedDamageReportDetail, selectedDamageReportId]);
   const selectedDamagePhotos = useMemo(
     () => getDamageReportPhotoUrls(selectedDamageFullRow),
     [selectedDamageFullRow]
@@ -2266,7 +2273,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                   }}
                 />
                   </Card>
-                  <ScrollArea className="min-h-[32rem] flex-1 xl:min-h-0">
+                  <ScrollArea className="min-h-0 flex-1">
                     <div className="space-y-4 pr-1">
                       <Card className="overflow-hidden border-slate-200/80 bg-white shadow-sm">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/80 px-5 py-4">

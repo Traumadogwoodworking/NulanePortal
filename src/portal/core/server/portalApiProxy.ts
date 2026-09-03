@@ -18,7 +18,7 @@ const HOP_BY_HOP_RESPONSE_HEADERS = [
   "access-control-allow-methods",
 ];
 
-const DEFINIAN_PORTAL_REFERRER = "https://www.definian.com/signal";
+const DEFINIAN_PORTAL_REFERRER = "https://www.definian.com/inspection";
 
 export function buildPortalUpstreamUrl(
   upstreamBase: string,

@@ -45,7 +45,7 @@ describe("AuthCallbackClient Strict Mode ownership", () => {
   it("restarts the preserved signup flow when the callback URL lost its query parameters", async () => {
     window.history.replaceState({}, "", "/auth/callback/");
     window.sessionStorage.setItem("portal_auth_login_action", "signup");
-    window.sessionStorage.setItem("portal_login_return_to", "https://www.definian.com/signal");
+    window.sessionStorage.setItem("portal_login_return_to", "https://www.definian.com/inspection");
     auth0Mocks.loginWithRedirect.mockResolvedValue(undefined);
 
     render(<AuthCallbackClient />);
@@ -53,7 +53,7 @@ describe("AuthCallbackClient Strict Mode ownership", () => {
     await waitFor(() => {
       expect(auth0Mocks.loginWithRedirect).toHaveBeenCalledWith(
         expect.objectContaining({
-          appState: { returnTo: "https://www.definian.com/signal" },
+          appState: { returnTo: "https://www.definian.com/inspection" },
           authorizationParams: expect.objectContaining({ screen_hint: "signup" }),
         }),
       );
