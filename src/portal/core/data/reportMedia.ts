@@ -41,14 +41,14 @@ function collectUsableUrls(...values: unknown[]): string[] {
           signedUrl?: unknown;
         };
         const resolved = firstUsableUrl(
+          candidate.signed_url,
+          candidate.signedUrl,
           candidate.url,
-          candidate.uri,
-          candidate.path,
-          candidate.href,
           candidate.photo_url,
           candidate.photoUrl,
-          candidate.signed_url,
-          candidate.signedUrl
+          candidate.uri,
+          candidate.href,
+          candidate.path
         );
         if (resolved) {
           urls.push(resolved);
@@ -57,6 +57,14 @@ function collectUsableUrls(...values: unknown[]): string[] {
     });
   });
   return Array.from(new Set(urls));
+}
+
+function isGeneratedMapUrl(value: string): boolean {
+  try {
+    return /\/reports\/[^/]+\/map\//i.test(new URL(value).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function splitPhotoUrls(report: Record<string, unknown>): string[] {
@@ -146,7 +154,7 @@ export function resolveReportMedia(report: Record<string, unknown> | null | unde
     )
   );
   return {
-    photoUrls: photoUrls.filter(Boolean),
+    photoUrls: photoUrls.filter((url) => Boolean(url) && !isGeneratedMapUrl(url)),
     splatImageUrl: normalizeMediaUrl(splatImageUrl),
     splatUrls,
   };

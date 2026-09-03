@@ -47,7 +47,11 @@ describe("reportService splat normalization", () => {
       report_id: "report-s3-photo",
       photos: [
         {
+          url: "https://docudent-bucket.s3.us-east-2.amazonaws.com/private/raw-photo.jpg",
           signed_url: signedPhotoUrl,
+        },
+        {
+          url: "https://docudent-bucket.s3.us-east-2.amazonaws.com/reports/report-s3-photo/map/v2/map.png",
         },
       ],
     } as never);
