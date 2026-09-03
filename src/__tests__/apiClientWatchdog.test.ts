@@ -140,4 +140,34 @@ describe("api client watchdog", () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: "no-store" });
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ cache: "reload" });
   });
+
+  it("overrides invented workspace headers and attaches only a stored backend choice", async () => {
+    const { apiFetch } = await import("@/lib/apiClient");
+    const { selectBackendWorkspace } = await import("@/lib/workspaceSelection");
+    authMocks.getPortalAccessToken.mockResolvedValue("token");
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiFetch("/reports/list", {
+      headers: { "x-portal-organization-id": "invented-org" },
+    });
+    const inventedHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(inventedHeaders.has("x-portal-organization-id")).toBe(false);
+
+    selectBackendWorkspace(
+      [
+        { organization_id: "shared-org", type: "free" },
+        { organization_id: "customer-org", type: "paid" },
+      ],
+      "customer-org"
+    );
+    await apiFetch("/reports/list");
+    const selectedHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
+    expect(selectedHeaders.get("x-portal-organization-id")).toBe("customer-org");
+  });
 });

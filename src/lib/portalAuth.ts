@@ -3,6 +3,7 @@ import {
   type Auth0Client as Auth0SpaClient,
 } from "@auth0/auth0-spa-js";
 import { clearPortalCachedStorage } from "@/lib/portalCacheStorage";
+import { clearStoredWorkspaceSelection } from "@/lib/workspaceSelection";
 
 const STORAGE_KEYS = {
   token: "portal_token",
@@ -751,6 +752,7 @@ export function clearPortalAuthStorage(options: { includeAuth0Sdk?: boolean } = 
     storage.removeItem(STORAGE_KEYS.user);
     storage.removeItem(STORAGE_KEYS.authenticated);
   }
+  clearStoredWorkspaceSelection(storage);
   clearPortalCachedStorage();
   if (options.includeAuth0Sdk) {
     clearAuth0SdkStorage();

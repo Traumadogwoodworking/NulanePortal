@@ -38,6 +38,13 @@ import {
   type PortalOrganizationScope,
   type PortalOrganizationScopeKey,
 } from "@/lib/portalOrganizations";
+import {
+  clearStoredWorkspaceSelection,
+  normalizePortalOrganizations,
+  persistBackendWorkspaceSelection,
+  readStoredWorkspaceOrganizationId,
+  selectBackendWorkspace,
+} from "@/lib/workspaceSelection";
 
 type PortalSessionStatus =
   | "loading"
@@ -93,7 +100,7 @@ interface PortalSessionContextValue {
   selectedLocationId: string | null;
   selectedLocationLabel: string | null;
   locationLocked: boolean;
-  switchOrganization: (orgId: string, orgName: string) => void;
+  switchOrganization: (orgId: string) => void;
   organizationScopes: readonly PortalOrganizationScope[];
   selectedOrganizationScopeKey: PortalOrganizationScopeKey;
   selectedOrganizationScope: PortalOrganizationScope;
@@ -125,6 +132,7 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     try {
       let payload: PortalSessionResponse;
       let rateLimitRetryCount = 0;
+      let workspaceSelectionRetryCount = 0;
       while (true) {
         try {
           payload = await fetchPortalSession();
@@ -132,12 +140,30 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
         } catch (fetchError: unknown) {
           const fetchStatusCode = isSessionFetchError(fetchError) ? fetchError.status : undefined;
           const tokenExists = hasPersistedPortalToken();
+          const shouldRetryStaleWorkspace =
+            fetchStatusCode === 403 &&
+            Boolean(readStoredWorkspaceOrganizationId()) &&
+            workspaceSelectionRetryCount < 1;
           const shouldRetryRateLimit = fetchStatusCode === 429 && rateLimitRetryCount < 2;
           const shouldRetryFreshCallback =
             fetchStatusCode === 401 &&
             tokenExists &&
             isFreshAuthCallback() &&
             freshCallbackRetryCountRef.current < 2;
+          if (shouldRetryStaleWorkspace) {
+            workspaceSelectionRetryCount += 1;
+            clearStoredWorkspaceSelection();
+            logAuthFlow("PortalSessionProvider.loadSession", {
+              reason: "stale_workspace_selection_retry",
+              httpStatus: 403,
+              status: "authenticating",
+              tokenExists,
+              redirectTarget: pathname,
+              retryCount: workspaceSelectionRetryCount,
+            });
+            if (!options.background) setStatus("authenticating");
+            continue;
+          }
           if (shouldRetryRateLimit) {
             const retryDelayMs = rateLimitRetryCount === 0 ? 1000 : 3000;
             rateLimitRetryCount += 1;
@@ -170,6 +196,12 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
           });
         }
       }
+      const organizations = normalizePortalOrganizations(payload.organizations);
+      const activeOrganizationId = (
+        payload.organization?.organization_id || payload.user?.organization_id || ""
+      ).trim();
+      payload = { ...payload, organizations };
+      persistBackendWorkspaceSelection(organizations, activeOrganizationId);
       persistPortalUser(payload.user);
       localStorage.removeItem("portalMockOrgId");
       localStorage.removeItem("portalMockOrgName");
@@ -293,9 +325,12 @@ export function PortalSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [loadSessionRequest]);
 
-  const switchOrganization = useCallback(() => {
-    // Dev session bypass uses a fixed tenant snapshot; switching is intentionally inert.
-  }, []);
+  const switchOrganization = useCallback((orgId: string) => {
+    selectBackendWorkspace(session?.organizations, orgId);
+    setStatus("loading");
+    setSession(null);
+    window.location.reload();
+  }, [session?.organizations]);
 
   const organizationScopeStorageKey = useMemo(() => {
     const userId = session?.user?.user_id?.trim();

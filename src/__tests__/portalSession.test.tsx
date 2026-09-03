@@ -2,6 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortalSessionResponse } from "@/lib/types";
 import { PortalSessionProvider, usePortalSession } from "@/lib/portalSession";
+import {
+  readStoredWorkspaceOrganizationId,
+  selectBackendWorkspace,
+} from "@/lib/workspaceSelection";
 
 const sessionServiceMocks = vi.hoisted(() => ({
   fetchPortalSession: vi.fn(),
@@ -148,6 +152,26 @@ describe("PortalSessionProvider", () => {
       expect(screen.getByTestId("status")).toHaveTextContent("success");
     });
     expect(screen.getByTestId("organization")).toHaveTextContent("org-1");
+  });
+
+  it("clears a revoked workspace selection and retries the backend session once", async () => {
+    selectBackendWorkspace(
+      [{ organization_id: "revoked-org", name: "Revoked" }],
+      "revoked-org"
+    );
+    sessionServiceMocks.fetchPortalSession
+      .mockRejectedValueOnce(makeStatusError(403))
+      .mockResolvedValueOnce(makeSession({
+        organizations: [{ organization_id: "org-1", name: "Portal Org", type: "admin" }],
+      }));
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("success");
+    });
+    expect(sessionServiceMocks.fetchPortalSession).toHaveBeenCalledTimes(2);
+    expect(readStoredWorkspaceOrganizationId()).toBe("org-1");
   });
 
   it("resolves administrative access from the active organization membership", async () => {

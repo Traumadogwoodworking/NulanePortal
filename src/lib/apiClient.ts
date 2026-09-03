@@ -1,6 +1,7 @@
 import { buildApiUrl, buildDocuFitUrl, portalConfig } from "./config";
 import { resolveDevMockResponse, isDevMockEnabled } from "./devMockApi";
 import { getPortalAccessToken, logAuthFlow, logoutRejectedPortalSession } from "./portalAuth";
+import { readStoredWorkspaceOrganizationId } from "./workspaceSelection";
 
 export type PortalApiPhase =
   | "session_start"
@@ -403,14 +404,21 @@ async function runRequest<T>(
         entry.update({ phase: "session_ready" });
       }
 
-      const headers = {
-        "Content-Type": "application/json",
-        ...(requestOptions.headers || {}),
-        "X-Portal-Request-Id": requestId,
-      } as Record<string, string>;
-      if (token) headers.Authorization = `Bearer ${token}`;
-
       const isFormDataBody = typeof FormData !== "undefined" && requestOptions.body instanceof FormData;
+      const headers = new Headers(requestOptions.headers);
+      if (isFormDataBody) {
+        headers.delete("Content-Type");
+      } else if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+      headers.set("X-Portal-Request-Id", requestId);
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const selectedOrganizationId = authMode === "portal" ? readStoredWorkspaceOrganizationId() : null;
+      if (selectedOrganizationId) {
+        headers.set("x-portal-organization-id", selectedOrganizationId);
+      } else {
+        headers.delete("x-portal-organization-id");
+      }
       entry.update({ phase: "fetch_start" });
       let response: Response;
       try {
@@ -418,7 +426,7 @@ async function runRequest<T>(
           ...requestOptions,
           cache: requestOptions.cache ?? (method === "GET" ? "no-store" : undefined),
           signal: controller?.signal ?? requestOptions.signal,
-          headers: isFormDataBody ? { ...(requestOptions.headers || {}), "X-Portal-Request-Id": requestId } : headers,
+          headers,
         });
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {

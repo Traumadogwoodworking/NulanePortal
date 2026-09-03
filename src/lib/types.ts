@@ -92,11 +92,14 @@ export interface PortalOrganization {
   name?: string;
   type?: string;
   suborg?: string;
+  role?: string;
+  is_primary?: boolean;
 }
 
 export interface PortalSessionResponse {
   user: PortalUserRecord;
   organization: PortalOrganization | null;
+  organizations?: PortalOrganization[];
   plan_tier?: string;
   portal_access?: boolean;
   organization_type?: string;
