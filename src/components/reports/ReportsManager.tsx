@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { EmptySelectionPanel } from "@/components/ui/EmptySelectionPanel";
 import { FacilitySelector } from "@/components/ui/FacilitySelector";
 import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
+import { SubmitterIdentity } from "@/components/reports/SubmitterIdentity";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +108,8 @@ type ReportListRow = {
   model?: string;
   year?: number | string | null;
   status?: string;
+  inspectorName?: string;
+  inspector_name?: string;
   inspector_email?: string;
   created_at?: string;
   updated_at?: string;
@@ -520,6 +523,7 @@ function listRowToSummary(report: ReportListRow): ReportSummary {
         : typeof report.year === "string" && report.year.trim()
           ? Number(report.year)
           : undefined,
+    inspectorName: normalized.inspectorName || report.inspectorName || report.inspector_name,
     inspectorEmail: normalized.inspectorEmail || report.inspector_email,
     locationName,
     facilityName: locationName,
@@ -1945,6 +1949,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           {[
                             "VIN",
                             ...(!hideFacilityColumn ? ["Facility"] : []),
+                            "Submitter",
                             { id: "severity", label: "Severity", sortable: true },
                             "Status",
                             { id: "created", label: "Created", sortable: true },
@@ -1960,7 +1965,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                     ? "cursor-pointer"
                                     : ""
                                 } px-2 text-center text-xs sm:px-4 ${
-                                  ["facility", "severity", "created"].includes(columnDef.id) ? "hidden sm:table-cell" : ""
+                                  ["facility", "submitter", "severity", "created"].includes(columnDef.id) ? "hidden sm:table-cell" : ""
                                 } ${columnDef.id === "created" ? "w-[1%] whitespace-nowrap pl-2 pr-4" : ""}`}
                                 onClick={() => {
                                   if (sortable) {
@@ -1984,7 +1989,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                       <TableBody>
                         {listLoading && listRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-10">
                               <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
                                 <RefreshCw className="h-4 w-4 animate-spin" />
                                 Loading reports...
@@ -1993,7 +1998,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           </TableRow>
                         ) : listError ? (
                           <TableRow>
-                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-10">
                               <div className="space-y-2 text-center">
                                 <div className="text-sm font-semibold text-rose-600">Damage reports could not be loaded.</div>
                                 <div className="break-all whitespace-normal text-xs text-rose-500">{listError}</div>
@@ -2002,7 +2007,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           </TableRow>
                         ) : sortedDamageSummaries.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-10">
                               <div className="space-y-4">
                                 <EmptyState title="No Reports Found" description="No matching reports in the rows loaded so far." />
                                 {hasNextPage ? (
@@ -2045,6 +2050,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                   </TableCell>
                                 ) : null}
                                 <TableCell className={`hidden text-center sm:table-cell ${isMultiSelected ? "bg-blue-50/80" : ""}`}>
+                                  <SubmitterIdentity
+                                    name={entry.inspectorName}
+                                    email={entry.inspectorEmail}
+                                    align="center"
+                                  />
+                                </TableCell>
+                                <TableCell className={`hidden text-center sm:table-cell ${isMultiSelected ? "bg-blue-50/80" : ""}`}>
                                   {damageCondition === "clear" ? (
                                     <span className="text-sm font-medium text-emerald-800">No damage</span>
                                   ) : (
@@ -2073,7 +2085,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           })}
                             {listLoading ? (
                               <TableRow>
-                                <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-6">
+                                <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-6">
                                   <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
                                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                                     Loading more...
@@ -2082,7 +2094,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                               </TableRow>
                             ) : hasNextPage ? (
                               <TableRow>
-                                <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-5">
+                                <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-5">
                                   <div className="flex justify-center">
                                     <Button type="button" variant="outline" size="sm" onClick={loadNextPage}>
                                       Load next rows
@@ -2176,6 +2188,12 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           {selectedDamageVehicleDescription}
                         </p>
                       ) : null}
+                      <SubmitterIdentity
+                        name={selectedDamageNormalized.inspectorName}
+                        email={selectedDamageNormalized.inspectorEmail}
+                        align="center"
+                        className="pt-1"
+                      />
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <StatusBadge label={selectedDamageFullRow.status || "open"} tone={toneForReportStatus(selectedDamageFullRow.status || "open")} />

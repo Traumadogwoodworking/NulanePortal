@@ -820,6 +820,7 @@ function reportListRowToDamageReport(row: ReportListRow): ReportDamageApiRow {
     vin: normalized?.vin || row.vin,
     inspection_type_number: normalized?.inspectionTypeNumber || raw.inspection_type_number,
     status: normalized?.status || raw.status,
+    inspector_name: normalized?.inspectorName || raw.inspector_name,
     inspector_email: normalized?.inspectorEmail || raw.inspector_email,
     created_at: normalized?.createdAt || raw.created_at,
     updated_at: normalized?.updatedAt || raw.updated_at,

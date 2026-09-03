@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { PageLoadingScreen } from "@/components/ui/PageLoadingScreen";
 import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
+import { SubmitterIdentity } from "@/components/reports/SubmitterIdentity";
 import { Separator } from "@/components/ui/Separator";
 import {
   DropdownMenu,
@@ -218,6 +219,15 @@ type DashboardSummary = {
 };
 
 type DashboardAnalyticsPayload = NonNullable<Awaited<ReturnType<typeof useDashboardAnalyticsSnapshot>>["data"]>;
+
+type RecentReportActivity = {
+  reportId: string;
+  title: string;
+  vin: string;
+  inspectorName: string;
+  inspectorEmail: string;
+  createdAt: string;
+};
 
 type AnalyticsFacilityStat = {
   key: string;
@@ -3582,8 +3592,8 @@ export default function HomeDashboard() {
     }
   }, [currentHomeAnalyticsFilters]);
 
-	  const inspectorChoices = useMemo(
-	    () => {
+  const inspectorChoices = useMemo(
+    () => {
         const choices = buildAnalyticsInspectorSummaries(dashboardAnalytics, homeCountMode);
         if (!inspectorEmailFilter) return choices;
         const selectedInspector = normalizeSearchText(inspectorEmailFilter);
@@ -3591,8 +3601,23 @@ export default function HomeDashboard() {
           [choice.email, choice.label].some((value) => normalizeSearchText(value) === selectedInspector)
         );
       },
-	    [dashboardAnalytics, homeCountMode, inspectorEmailFilter]
-	  );
+      [dashboardAnalytics, homeCountMode, inspectorEmailFilter]
+    );
+  const recentReportActivity = useMemo<RecentReportActivity[]>(
+    () =>
+      (dashboardAnalytics?.recentActivity ?? []).slice(0, 5).map((item) => {
+        const record = item as Record<string, unknown>;
+        return {
+          reportId: String(record.report_id ?? record.reportId ?? "").trim(),
+          title: String(record.title ?? "Report").trim() || "Report",
+          vin: String(record.vin ?? "").trim(),
+          inspectorName: String(record.inspector_name ?? record.inspectorName ?? "").trim(),
+          inspectorEmail: String(record.inspector_email ?? record.inspectorEmail ?? "").trim(),
+          createdAt: String(record.created_at ?? record.createdAt ?? "").trim(),
+        };
+      }),
+    [dashboardAnalytics?.recentActivity]
+  );
   const filteredFacilityStats = useMemo(
     () =>
       (dashboardAnalytics?.byFacility ?? dashboardAnalytics?.facilities ?? [])
@@ -4617,7 +4642,7 @@ export default function HomeDashboard() {
           </Card>
 
           <div className="grid gap-4 xl:items-stretch">
-	            <div className="space-y-4">
+            <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
                 <MetricCard label="Total Damage Submissions" value={totalDamageSubmissionCount} detail={totalReportsDetail} icon={<FileText className="h-4 w-4" />} />
                 <MetricCard accent label="Damaged Submissions Today" value={primaryDamageToday} detail={`Clear submissions today ${formatNumber(summary.currentPeriod.clearToday)}`} icon={<TriangleAlert className="h-4 w-4" />} />
@@ -4635,8 +4660,45 @@ export default function HomeDashboard() {
                 <MetricCard label="Unique Inspectors" value={inspectorChoices.length} detail="Inspectors in filtered damage submissions" icon={<FileText className="h-4 w-4" />} />
               </div>
 
-	              <div className="grid gap-4 xl:grid-cols-1">
-	                <Card className="relative overflow-visible hover:z-20">
+              <Card className="overflow-hidden border-slate-200/80 bg-white shadow-sm">
+                <CardHeader
+                  title="Recent reports"
+                  subtitle="Latest report activity in the selected workspace."
+                />
+                <CardContent className="p-0">
+                  {recentReportActivity.length ? (
+                    <div className="divide-y divide-slate-100">
+                      {recentReportActivity.map((report, index) => (
+                        <div
+                          key={report.reportId || `${report.title}-${index}`}
+                          className="grid gap-3 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.8fr)_auto] sm:items-center"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">
+                              {report.vin || report.title}
+                            </p>
+                            {report.reportId ? (
+                              <p className="truncate font-mono text-xs text-slate-500">{report.reportId}</p>
+                            ) : null}
+                          </div>
+                          <SubmitterIdentity
+                            name={report.inspectorName}
+                            email={report.inspectorEmail}
+                          />
+                          <span className="text-xs font-medium text-slate-500">
+                            {report.createdAt ? formatDate(report.createdAt) : "Date unavailable"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-5 py-6 text-sm text-slate-500">No recent report activity is available.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 xl:grid-cols-1">
+                <Card className="relative overflow-visible hover:z-20">
 	                  <CardHeader
 		                    title={`Daily ${inspectionCountNounTitle}`}
 		                    subtitle={`30-day inspection totals by facility ending ${formatDateKeyLabel(facilityTrend.range.to)}.`}
