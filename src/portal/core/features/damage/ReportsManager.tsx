@@ -977,8 +977,6 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     () => getDamageReportPhotoUrls(selectedDamageFullRow),
     [selectedDamageFullRow]
   );
-  const [brokenDamagePhotoUrls, setBrokenDamagePhotoUrls] = useState<Record<string, boolean>>({});
-  const [archivedDamagePhotoUrls, setArchivedDamagePhotoUrls] = useState<string[]>([]);
   const [activeDamagePhotoUrl, setActiveDamagePhotoUrl] = useState<string | null>(null);
   const selectedDamagePdfUrl = useMemo(
     () => (selectedDamageFullRow ? ReportsAdapter.resolveDamageReportPdfUrl(selectedDamageFullRow) : null),
@@ -1368,62 +1366,10 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }, [selectedDamageReportId, selectedDamageReportIds]);
 
   useEffect(() => {
-    setBrokenDamagePhotoUrls({});
-  }, [selectedDamageReportId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const objectUrls: string[] = [];
-    setArchivedDamagePhotoUrls([]);
-    if (!selectedDamageReportId || selectedDamagePhotos.length === 0) {
-      return;
-    }
-
-    void (async () => {
-      try {
-        const archive = await ReportsAdapter.fetchDamageReportPhotosArchive(selectedDamageReportId);
-        const zip = await JSZip.loadAsync(archive);
-        const imageEntries = Object.values(zip.files).filter(
-          (entry) => !entry.dir && !/(?:^|\/)__MACOSX(?:\/|$)|(?:^|\/)\.DS_Store$/i.test(entry.name)
-        );
-        for (const entry of imageEntries) {
-          const extension = entry.name.split(".").pop()?.toLowerCase();
-          const mimeType = extension === "png"
-            ? "image/png"
-            : extension === "gif"
-              ? "image/gif"
-              : extension === "webp"
-                ? "image/webp"
-                : extension === "avif"
-                  ? "image/avif"
-                  : "image/jpeg";
-          const blob = new Blob([await entry.async("arraybuffer")], { type: mimeType });
-          objectUrls.push(URL.createObjectURL(blob));
-        }
-        if (!cancelled) {
-          setArchivedDamagePhotoUrls(objectUrls);
-        }
-      } catch {
-        // Direct signed URLs remain the fallback when no archive is available.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      objectUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [selectedDamagePhotos, selectedDamageReportId]);
-
-  useEffect(() => {
     setActiveDamagePhotoUrl(null);
   }, [selectedDamageReportId]);
 
-  const selectedDamageAttachedMedia = useMemo(
-    () => archivedDamagePhotoUrls.length > 0
-      ? archivedDamagePhotoUrls
-      : selectedDamagePhotos.filter((url) => !brokenDamagePhotoUrls[url]),
-    [archivedDamagePhotoUrls, brokenDamagePhotoUrls, selectedDamagePhotos]
-  );
+  const selectedDamageAttachedMedia = selectedDamagePhotos;
   useEffect(() => {
     if (!isDamageEditOpen || !selectedDamageFullRow) {
       return;
@@ -2452,12 +2398,8 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                   <img
                                     src={url}
                                     alt={`Damage photo ${index + 1}`}
+                                    referrerPolicy="no-referrer"
                                     className="h-48 w-full bg-white object-contain"
-                                    onError={() =>
-                                      setBrokenDamagePhotoUrls((current) =>
-                                        current[url] ? current : { ...current, [url]: true }
-                                      )
-                                    }
                                   />
                                   <div className="pointer-events-none absolute inset-0 flex items-start justify-end bg-gradient-to-b from-black/20 via-transparent to-transparent p-3 opacity-0 transition group-hover:opacity-100">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/80 px-2.5 py-1 text-xs font-black uppercase tracking-[0.22em] text-white">

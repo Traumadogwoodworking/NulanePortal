@@ -41,18 +41,18 @@ describe("reportService splat normalization", () => {
   });
 
   it("renders signed S3 photo object aliases in the report side panel gallery", () => {
+    const signedPhotoUrl =
+      'https://inspection-photos.s3.us-east-2.amazonaws.com/report/photo.jpg?response-content-disposition=inline; filename="damage photo.jpg"&X-Amz-Signature=test';
     const gallery = buildReportGallery({
       report_id: "report-s3-photo",
       photos: [
         {
-          signed_url: "https://inspection-photos.s3.us-east-2.amazonaws.com/report/photo.jpg?X-Amz-Signature=test",
+          signed_url: signedPhotoUrl,
         },
       ],
     } as never);
 
-    expect(gallery.photoUrls).toEqual([
-      "https://inspection-photos.s3.us-east-2.amazonaws.com/report/photo.jpg?X-Amz-Signature=test",
-    ]);
+    expect(gallery.photoUrls).toEqual([signedPhotoUrl]);
   });
 
   it("keeps list photos when detail hydration returns an empty media collection", () => {

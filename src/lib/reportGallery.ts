@@ -13,6 +13,9 @@ function normalizeRenderableUrl(url: string): string {
   if (!trimmed) {
     return "";
   }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
   try {
     return new URL(trimmed).toString();
   } catch {

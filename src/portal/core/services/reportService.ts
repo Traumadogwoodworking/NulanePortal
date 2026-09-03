@@ -1795,15 +1795,15 @@ export class ReportsAdapter {
     return candidates.length > 0 ? normalizeMediaUrl(candidates[0]) : null;
   }
 
-  static async fetchDamageReportPhotosArchive(reportId: string): Promise<Blob> {
+  static async downloadDamageReportPhotosZip(report: ReportDamageApiRow): Promise<void> {
     if (isDevMockEnabled()) {
-      return new Blob();
+      return;
     }
-    const normalizedReportId = reportId?.toString().trim();
-    if (!normalizedReportId) {
+    const reportId = report.report_id?.toString().trim();
+    if (!reportId) {
       throw new Error("This report does not have a valid report id.");
     }
-    const response = await apiFetchResponse(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(normalizedReportId)}/photos/archive`, {
+    const response = await apiFetchResponse(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(reportId)}/photos/archive`, {
       method: "GET",
       portal: {
         callerLabel: "damageReports.photosArchive",
@@ -1822,18 +1822,7 @@ export class ReportsAdapter {
       }
       throw new Error(message);
     }
-    return response.blob();
-  }
-
-  static async downloadDamageReportPhotosZip(report: ReportDamageApiRow): Promise<void> {
-    if (isDevMockEnabled()) {
-      return;
-    }
-    const reportId = report.report_id?.toString().trim();
-    if (!reportId) {
-      throw new Error("This report does not have a valid report id.");
-    }
-    const blob = await this.fetchDamageReportPhotosArchive(reportId);
+    const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
