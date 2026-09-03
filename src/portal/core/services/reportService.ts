@@ -1798,7 +1798,7 @@ export class ReportsAdapter {
   static async fetchDamageReportPdf(report: ReportDamageApiRow): Promise<{ blob: Blob; fileName: string } | null> {
     const pdfUrl = this.resolveDamageReportPdfUrl(report);
     if (!pdfUrl) return null;
-    const response = await fetch("/api/portal/pdf-download", {
+    const response = await fetch("/api/portal/pdf-download/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: pdfUrl }),
