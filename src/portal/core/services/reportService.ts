@@ -4,6 +4,7 @@ import { buildApiUrl, normalizeMediaUrl } from "@/lib/config";
 import { getPortalAccessToken } from "@/lib/portalAuth";
 import { ACTIVE_PORTAL_BRANDING } from "@/lib/brandingPresets";
 import { normalizeReportListRows } from "@/lib/reportNormalizer";
+import { getReportSubmitterIdentity } from "@/portal/core/data/reportSubmitterIdentity";
 import type {
   ReportDamageApiRow,
   ReportFilters,
@@ -1059,13 +1060,15 @@ export async function fetchReportList(params: ReportListParams = {}): Promise<Re
 function reportListRowToDamageReport(row: ReportListRow): ReportDamageApiRow {
   const normalized = normalizeReportListRows([row])[0];
   const raw = row as Record<string, unknown>;
+  const submitter = getReportSubmitterIdentity(row);
   return normalizeDamageReportRow({
     ...raw,
     report_id: normalized?.reportId || normalized?.id || row.report_id || raw.id,
     vin: normalized?.vin || row.vin,
     inspection_type_number: normalized?.inspectionTypeNumber || raw.inspection_type_number,
     status: normalized?.status || raw.status,
-    inspector_email: normalized?.inspectorEmail || raw.inspector_email,
+    inspector_name: submitter.name,
+    inspector_email: submitter.email,
     created_at: normalized?.createdAt || raw.created_at,
     updated_at: normalized?.updatedAt || raw.updated_at,
     location_id: normalized?.facilityId || raw.location_id,

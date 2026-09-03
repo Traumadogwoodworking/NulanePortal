@@ -348,6 +348,8 @@ export interface ReportDamageApiRow {
   model?: string;
   year?: number;
   status?: ReportStatus;
+  inspector_name?: string;
+  inspectorName?: string;
   inspector_email?: string;
   location_id?: string;
   facility_id?: string;
@@ -437,6 +439,7 @@ export interface ReportSummary {
   make?: string;
   model?: string;
   year?: number;
+  inspectorName?: string;
   inspectorEmail?: string;
   locationName?: string;
   facilityName?: string;

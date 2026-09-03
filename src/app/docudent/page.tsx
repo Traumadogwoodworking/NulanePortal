@@ -44,6 +44,8 @@ import { PersistenceService, type StashedReport } from "@/lib/docudent/persisten
 import { RefreshCw } from "lucide-react";
 import { refreshPortalData, useReportListSnapshot } from "@/lib/portalData";
 import { publicBranding } from "@/lib/publicBranding";
+import { ReportSubmitterIdentity } from "@/portal/core/ui/ReportSubmitterIdentity";
+import { normalizeReportListRow } from "@/portal/core/data/reportNormalizer";
 
 const DOCUDENT_STEP_STORAGE_KEY = "docudent_current_step";
 
@@ -684,24 +686,39 @@ export default function DocuDentPage() {
             {loading ? (
               <div className="py-8 text-center text-sm text-slate-400">Loading recent scans…</div>
             ) : (
-              recentReports.slice(0, 5).map((report: ReportDamageApiRow) => (
-                <Link
-                  key={report.report_id}
-                  href={`/reports/damage?focus=${report.report_id}`}
-                  className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-sm hover:border-slate-400 transition"
-                >
-                  <div>
-                    <p className="font-black uppercase tracking-tight text-slate-900">{report.vin || "Unknown VIN"}</p>
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-                      {report.make} {report.model}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-400 uppercase tracking-[0.3em]">
-                    <History className="w-4 h-4" />
-                    <span>{new Date(report.created_at ?? report.updated_at ?? Date.now()).toLocaleDateString()}</span>
-                  </div>
-                </Link>
-              ))
+              recentReports.slice(0, 5).map((report: ReportDamageApiRow) => {
+                const normalized = normalizeReportListRow(report);
+                const reportTimestamp =
+                  normalized.createdAt ||
+                  normalized.submittedAt ||
+                  report.created_at ||
+                  report.updated_at;
+                return (
+                  <Link
+                    key={normalized.reportId || report.report_id}
+                    href={`/reports/damage?focus=${normalized.reportId || report.report_id}`}
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-sm hover:border-slate-400 transition"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-black uppercase tracking-tight text-slate-900">
+                        {normalized.vin || report.vin || "Unknown VIN"}
+                      </p>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                        {normalized.make || report.make} {normalized.model || report.model}
+                      </p>
+                      <ReportSubmitterIdentity source={report} className="mt-2" />
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400 uppercase tracking-[0.3em]">
+                      <History className="w-4 h-4" />
+                      <span>
+                        {reportTimestamp
+                          ? new Date(reportTimestamp).toLocaleDateString()
+                          : "Date unavailable"}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })
             )}
             </div>
           </div>

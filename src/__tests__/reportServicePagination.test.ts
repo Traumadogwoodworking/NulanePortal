@@ -216,6 +216,31 @@ describe("reportService paginated snapshots", () => {
     expect(requestedPages).toEqual([1]);
   });
 
+  it("preserves the backend report-safe submitter projection in snapshots", async () => {
+    apiClientMocks.apiFetch.mockResolvedValue({
+      rows: [
+        {
+          report_id: "damage-shared",
+          inspector_name: "Account A Inspector",
+          inspector_email: "a***@example.com",
+        },
+      ],
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      hasNextPage: false,
+    });
+
+    const reports = await fetchDamageReportListSnapshot();
+
+    expect(reports[0]).toEqual(
+      expect.objectContaining({
+        inspector_name: "Account A Inspector",
+        inspector_email: "a***@example.com",
+      })
+    );
+  });
+
   it("does not continue damage snapshots when hasNextPage is true without a total", async () => {
     const requestedPages: number[] = [];
     apiClientMocks.apiFetch.mockImplementation(async (url: string) => {

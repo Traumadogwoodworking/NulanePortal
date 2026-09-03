@@ -101,6 +101,8 @@ import type {
   ReportStatus,
   ReportSummary,
 } from "@/lib/types";
+import { getReportSubmitterIdentity } from "@/portal/core/data/reportSubmitterIdentity";
+import { ReportSubmitterIdentity } from "@/portal/core/ui/ReportSubmitterIdentity";
 
 interface ReportsManagerProps {
   mode: string;
@@ -114,6 +116,8 @@ type ReportListRow = {
   model?: string;
   year?: number | string | null;
   status?: string;
+  inspector_name?: string;
+  inspectorName?: string;
   inspector_email?: string;
   created_at?: string;
   updated_at?: string;
@@ -255,7 +259,8 @@ function buildFilteredReportCsvRows(reports: ReportDamageApiRow[], primaryColumn
         facility: normalized.facilityName || report.facility,
       } as ReportDamageApiRow;
       const facility = resolveDamageReportLocationName(normalizedReport);
-      const inspector = normalized.inspectorEmail || report.inspector_email || "Unassigned";
+      const submitter = getReportSubmitterIdentity(report);
+      const inspector = submitter.email || "Unassigned";
       const overview = report.overview ?? {};
       const clearMeta = getClearInspectionScanMeta(report);
       const bay =
@@ -275,7 +280,7 @@ function buildFilteredReportCsvRows(reports: ReportDamageApiRow[], primaryColumn
         normalized.year || report.year || "",
         normalized.inspectionTypeNumber || report.inspection_type_number || "",
         normalized.status || report.status || "",
-        normalized.inspectorEmail || report.inspector_email || "",
+        submitter.email,
         normalized.comments || report.comments || (typeof overview.comments === "string" ? overview.comments : ""),
         normalized.submittedAt || clearMeta.timestamp || "",
         normalized.createdAt || report.created_at || "",
@@ -366,14 +371,13 @@ function getDamageReportCondition(report: ReportDamageApiRow | null): DamageCond
 function getClearInspectionScanMeta(report: ReportDamageApiRow | null) {
   const record = (report ?? {}) as unknown as Record<string, unknown>;
   const normalized = normalizeReportListRow(report);
+  const submitter = getReportSubmitterIdentity(report);
   return {
     timestamp:
       normalized.submittedAt ||
       normalized.createdAt ||
       readRecordString(record, ["submitted_at", "submittedAt", "created_at", "createdAt", "updated_at", "updatedAt"]),
-    inspectorEmail:
-      normalized.inspectorEmail ||
-      readRecordString(record, ["submitted_by_email", "submittedByEmail", "inspector_email", "inspectorEmail"]),
+    inspectorEmail: submitter.email,
     inventoryBay: normalized.inventoryBay || readRecordString(record, ["inventory_bay", "inventoryBay"]),
     confirmedBay: normalized.confirmedBay || readRecordString(record, ["confirmed_bay", "confirmedBay"]),
     bayLocation: normalized.bayLocation || readRecordString(record, ["bay_location", "bayLocation"]),
@@ -471,6 +475,7 @@ function normalizeFacilityChoiceLabel(value: string | null | undefined): string 
 
 function listRowToSummary(report: ReportListRow): ReportSummary {
   const normalized = normalizeReportListRow(report);
+  const submitter = getReportSubmitterIdentity(report);
   const reportRecord = report as unknown as Record<string, unknown>;
   const damageSummaryRecord =
     report.damage_summary &&
@@ -486,7 +491,8 @@ function listRowToSummary(report: ReportListRow): ReportSummary {
     model: report.model,
     year: typeof report.year === "number" ? report.year : undefined,
     status: normalized.status as ReportStatus | undefined,
-    inspector_email: normalized.inspectorEmail || report.inspector_email,
+    inspector_name: submitter.name,
+    inspector_email: submitter.email,
     created_at: normalized.createdAt || normalized.submittedAt || report.created_at,
     updated_at: normalized.updatedAt || report.updated_at,
     location_id: normalized.facilityId || report.location_id || undefined,
@@ -527,7 +533,8 @@ function listRowToSummary(report: ReportListRow): ReportSummary {
         : typeof report.year === "string" && report.year.trim()
           ? Number(report.year)
           : undefined,
-    inspectorEmail: normalized.inspectorEmail || report.inspector_email,
+    inspectorName: submitter.name,
+    inspectorEmail: submitter.email,
     locationName,
     facilityName: locationName,
     createdAt: normalized.createdAt || normalized.submittedAt || report.created_at,
@@ -1997,6 +2004,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           {[
                             "VIN",
                             ...(!hideFacilityColumn ? ["Facility"] : []),
+                            "Submitted by",
                             { id: "severity", label: "Severity", sortable: true },
                             "Status",
                             { id: "created", label: "Created", sortable: true },
@@ -2036,7 +2044,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                       <TableBody>
                         {listLoading && listRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-10">
                               <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
                                 <RefreshCw className="h-4 w-4 animate-spin" />
                                 Loading reports...
@@ -2045,7 +2053,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           </TableRow>
                         ) : listError ? (
                           <TableRow>
-                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-10">
                               <div className="space-y-2 text-center">
                                 <div className="text-sm font-semibold text-rose-600">Damage reports could not be loaded.</div>
                                 <div className="break-all whitespace-normal text-xs text-rose-500">{listError}</div>
@@ -2054,7 +2062,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           </TableRow>
                         ) : sortedDamageSummaries.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-10">
+                            <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-10">
                               <div className="space-y-4">
                                 <EmptyState title="No Reports Found" description="No matching reports in the rows loaded so far." />
                                 {hasNextPage ? (
@@ -2096,6 +2104,15 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                                     {entry.locationName}
                                   </TableCell>
                                 ) : null}
+                                <TableCell className={`min-w-[12rem] text-center ${isMultiSelected ? "bg-blue-50/80" : ""}`}>
+                                  <ReportSubmitterIdentity
+                                    source={{
+                                      inspector_name: entry.inspectorName,
+                                      inspector_email: entry.inspectorEmail,
+                                    }}
+                                    align="center"
+                                  />
+                                </TableCell>
                                 <TableCell className={`hidden text-center sm:table-cell ${isMultiSelected ? "bg-blue-50/80" : ""}`}>
                                   {damageCondition === "clear" ? (
                                     <span className="text-sm font-medium text-emerald-800">No damage</span>
@@ -2125,7 +2142,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           })}
                             {listLoading ? (
                               <TableRow>
-                                <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-6">
+                                <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-6">
                                   <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
                                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                                     Loading more...
@@ -2134,7 +2151,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                               </TableRow>
                             ) : hasNextPage ? (
                               <TableRow>
-                                <TableCell colSpan={hideFacilityColumn ? 4 : 5} className="py-5">
+                                <TableCell colSpan={hideFacilityColumn ? 5 : 6} className="py-5">
                                   <div className="flex justify-center">
                                     <Button type="button" variant="outline" size="sm" onClick={loadNextPage}>
                                       Load next rows
@@ -2244,6 +2261,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                           {selectedDamageVehicleDescription}
                         </p>
                       ) : null}
+                      <ReportSubmitterIdentity
+                        source={selectedDamageFullRow}
+                        align="center"
+                        className="pt-1"
+                      />
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <StatusBadge label={selectedDamageFullRow.status || "open"} tone={toneForReportStatus(selectedDamageFullRow.status || "open")} />
