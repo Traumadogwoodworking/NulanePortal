@@ -189,7 +189,7 @@ export function PortalLayoutShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-[color:var(--border-subtle)] bg-[color:var(--surface-panel)] shadow-[var(--shadow-panel)]">
           <PortalTopBar pageTitle={pageMetadata.title} pageSubtitle={pageMetadata.subtitle} />
           <AlertStack />
-          {session?.onboardingStatus && session.onboardingStatus !== "ready" ? (
+          {branding.mode !== "definianInspection" && session?.onboardingStatus && session.onboardingStatus !== "ready" ? (
             <div className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950" role="status">
               <div className="flex min-w-0 gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />

@@ -723,7 +723,9 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   } | null>(null);
   const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
   const [isDownloadingSelectedPdf, setIsDownloadingSelectedPdf] = useState(false);
+  const [isDownloadingSelectedPhotos, setIsDownloadingSelectedPhotos] = useState(false);
   const [isDownloadingSelectedCsv, setIsDownloadingSelectedCsv] = useState(false);
+  const [selectedDownloadStatus, setSelectedDownloadStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -1530,29 +1532,60 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   const downloadSelectedDamagePdfZip = useCallback(async () => {
     if (selectedDamageReports.length === 0) return;
     setIsDownloadingSelectedPdf(true);
+    setSelectedDownloadStatus(null);
     try {
       const zip = new JSZip();
-      const fetched: Array<{ vin: string; bytes: Uint8Array } | null> = await Promise.all(
-        selectedDamageReports.map(async (report) => {
-          const pdfUrl = ReportsAdapter.resolveDamageReportPdfUrl(report as unknown as ReportDamageApiRow);
-          if (!pdfUrl) return null;
-          const response = await fetch(pdfUrl);
-          if (!response.ok) return null;
-          return {
-            vin: report.vin?.trim() || "",
-            bytes: new Uint8Array((await response.arrayBuffer()) as ArrayBuffer),
-          };
-        })
+      const fetched = await Promise.all(
+        selectedDamageReports.map((report) =>
+          ReportsAdapter.fetchDamageReportPdf(report as unknown as ReportDamageApiRow)
+        )
       );
-      const added = fetched.filter((entry): entry is { vin: string; bytes: Uint8Array } => Boolean(entry?.vin && entry?.bytes?.length));
-      if (added.length === 0) return;
+      const added = fetched.filter((entry): entry is { blob: Blob; fileName: string } => Boolean(entry));
+      if (added.length === 0) throw new Error("No PDFs are available for the selected reports.");
       added.forEach((entry) => {
-        zip.file(`${entry.vin}.pdf`, entry.bytes);
+        zip.file(entry.fileName, entry.blob);
       });
       const blob = await zip.generateAsync({ type: "blob" });
       saveAs(blob, `Docudent_damage_selected_pdfs_${new Date().toISOString().split("T")[0]}.zip`);
+      setSelectedDownloadStatus(`Downloaded ${added.length} selected report PDF${added.length === 1 ? "" : "s"}.`);
+    } catch (downloadError) {
+      setSelectedDownloadStatus(downloadError instanceof Error ? downloadError.message : "Unable to download selected report PDFs.");
     } finally {
       setIsDownloadingSelectedPdf(false);
+    }
+  }, [selectedDamageReports]);
+
+  const downloadSelectedDamagePhotoArchives = useCallback(async () => {
+    if (selectedDamageReports.length === 0) return;
+    setIsDownloadingSelectedPhotos(true);
+    setSelectedDownloadStatus(null);
+    try {
+      const results = await Promise.allSettled(
+        selectedDamageReports.map((report) =>
+          ReportsAdapter.fetchDamageReportPhotosArchive(report as unknown as ReportDamageApiRow)
+        )
+      );
+      const archives = results
+        .filter((result): result is PromiseFulfilledResult<{ blob: Blob; fileName: string }> => result.status === "fulfilled")
+        .map((result) => result.value);
+      if (archives.length === 0) {
+        const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        throw firstFailure?.reason instanceof Error ? firstFailure.reason : new Error("No photo archives are available for the selected reports.");
+      }
+      const zip = new JSZip();
+      archives.forEach((archive) => zip.file(archive.fileName, archive.blob));
+      const blob = await zip.generateAsync({ type: "blob" });
+      saveAs(blob, `Docudent_damage_selected_photos_${new Date().toISOString().split("T")[0]}.zip`);
+      const skipped = results.length - archives.length;
+      setSelectedDownloadStatus(
+        skipped > 0
+          ? `Downloaded photos for ${archives.length} reports; ${skipped} report${skipped === 1 ? "" : "s"} had no available archive.`
+          : `Downloaded photos for ${archives.length} selected report${archives.length === 1 ? "" : "s"}.`
+      );
+    } catch (downloadError) {
+      setSelectedDownloadStatus(downloadError instanceof Error ? downloadError.message : "Unable to download selected report photos.");
+    } finally {
+      setIsDownloadingSelectedPhotos(false);
     }
   }, [selectedDamageReports]);
 
@@ -2154,6 +2187,17 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         variant="outline"
                         size="lg"
                         className="h-11 gap-2 px-4 mx-auto flex"
+                        disabled={isDownloadingSelectedPhotos || selectedDamageReportsCount === 0}
+                        onClick={() => void downloadSelectedDamagePhotoArchives()}
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        {isDownloadingSelectedPhotos ? "Preparing Photos..." : "Download Photos"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        className="h-11 gap-2 px-4 mx-auto flex"
                         disabled={isDownloadingSelectedCsv || selectedDamageReportsCount === 0}
                         onClick={() => {
                           setIsDownloadingSelectedCsv(true);
@@ -2167,6 +2211,11 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
                         <FileText className="h-4 w-4" />
                         Download CSV
                       </Button>
+                      {selectedDownloadStatus ? (
+                        <p className="text-center text-sm font-semibold text-slate-700" role="status">
+                          {selectedDownloadStatus}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-sm font-semibold text-slate-700">Selection limit</p>

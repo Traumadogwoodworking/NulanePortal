@@ -10,6 +10,7 @@ describe("portal product structure", () => {
     expect(definianProduct.branding.auth0Domain).toBe("definian-inspection.us.auth0.com");
     expect(definianProduct.branding.auth0ClientId).toBe("YRnnNwl2hEYbYIe4jSIYNiE457nEWek4");
     expect(definianProduct.branding.auth0OrganizationId).toBe("org_Da9cTbhrMc9e5tdw");
+    expect(definianProduct.branding.sidebarSectionLabelClassName).toContain("text-white");
     expect(definianProduct.publicBranding.portalUrl).toBe("/login");
   });
 

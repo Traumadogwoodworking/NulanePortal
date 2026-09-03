@@ -1795,13 +1795,32 @@ export class ReportsAdapter {
     return candidates.length > 0 ? normalizeMediaUrl(candidates[0]) : null;
   }
 
-  static async downloadDamageReportPhotosZip(report: ReportDamageApiRow): Promise<void> {
-    if (isDevMockEnabled()) {
-      return;
+  static async fetchDamageReportPdf(report: ReportDamageApiRow): Promise<{ blob: Blob; fileName: string } | null> {
+    const pdfUrl = this.resolveDamageReportPdfUrl(report);
+    if (!pdfUrl) return null;
+    const response = await fetch("/api/portal/pdf-download", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: pdfUrl }),
+    });
+    if (!response.ok) {
+      throw new Error(`Unable to download report PDF (${response.status}).`);
     }
+    const reportLabel = `${report.vin || report.report_id || "report"}`.trim().replace(/[^a-z0-9_-]+/gi, "_");
+    return {
+      blob: await response.blob(),
+      fileName: `${reportLabel}_${report.report_id.slice(0, 8)}.pdf`,
+    };
+  }
+
+  static async fetchDamageReportPhotosArchive(report: ReportDamageApiRow): Promise<{ blob: Blob; fileName: string }> {
     const reportId = report.report_id?.toString().trim();
     if (!reportId) {
       throw new Error("This report does not have a valid report id.");
+    }
+    const reportLabel = `${report.vin || report.report_id || "report"}`.trim().replace(/[^a-z0-9_-]+/gi, "_");
+    if (isDevMockEnabled()) {
+      return { blob: new Blob(), fileName: `${reportLabel}_photos.zip` };
     }
     const response = await apiFetchResponse(`${REPORT_MUTATIONS_ENDPOINT}/${encodeURIComponent(reportId)}/photos/archive`, {
       method: "GET",
@@ -1822,12 +1841,16 @@ export class ReportsAdapter {
       }
       throw new Error(message);
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    return { blob: await response.blob(), fileName: `${reportLabel}_photos.zip` };
+  }
+
+  static async downloadDamageReportPhotosZip(report: ReportDamageApiRow): Promise<void> {
+    const archive = await this.fetchDamageReportPhotosArchive(report);
+    if (isDevMockEnabled()) return;
+    const url = URL.createObjectURL(archive.blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    const reportLabel = `${report.vin || report.report_id || "report"}`.trim().replace(/[^a-z0-9_-]+/gi, "_");
-    anchor.download = `${reportLabel}_photos.zip`;
+    anchor.download = archive.fileName;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

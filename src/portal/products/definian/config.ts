@@ -31,6 +31,8 @@ export const definianProduct = {
     sidebarHeaderClassName:
       "group relative flex items-center overflow-hidden border-b border-white/10 transition-colors duration-500",
     sidebarHeaderStyle: { backgroundColor: "#0d2c71", backgroundImage: "none" },
+    sidebarSectionLabelClassName:
+      "px-2 mb-2 text-[10px] font-bold uppercase tracking-wider text-white",
     sidebarProfileToggleClassName:
       "flex w-full items-center justify-start gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-[12px] font-black uppercase tracking-widest text-slate-200 hover:border-white/20 hover:text-white transition-all group",
     sidebarProfileAvatarClassName:
