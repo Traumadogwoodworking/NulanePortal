@@ -1384,7 +1384,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
         const archive = await ReportsAdapter.fetchDamageReportPhotosArchive(selectedDamageReportId);
         const zip = await JSZip.loadAsync(archive);
         const imageEntries = Object.values(zip.files).filter(
-          (entry) => !entry.dir && /\.(?:avif|gif|jpe?g|png|webp)$/i.test(entry.name)
+          (entry) => !entry.dir && !/(?:^|\/)__MACOSX(?:\/|$)|(?:^|\/)\.DS_Store$/i.test(entry.name)
         );
         for (const entry of imageEntries) {
           const extension = entry.name.split(".").pop()?.toLowerCase();
