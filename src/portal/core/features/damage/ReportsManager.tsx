@@ -1087,7 +1087,13 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             }
             return current.map((row, index) =>
               index === matchingIndex
-                ? ({ ...row, ...match, report_id: match.report_id || row.report_id } as ReportListRow)
+                ? ({
+                    ...mergeReportDetailWithListMedia(
+                      match as unknown as Record<string, unknown>,
+                      row as unknown as Record<string, unknown>
+                    ),
+                    report_id: match.report_id || row.report_id,
+                  } as ReportListRow)
                 : row
             );
           });
