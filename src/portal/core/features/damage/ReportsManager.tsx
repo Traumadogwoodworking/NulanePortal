@@ -978,6 +978,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
     [selectedDamageFullRow]
   );
   const [brokenDamagePhotoUrls, setBrokenDamagePhotoUrls] = useState<Record<string, boolean>>({});
+  const [archivedDamagePhotoUrls, setArchivedDamagePhotoUrls] = useState<string[]>([]);
   const [activeDamagePhotoUrl, setActiveDamagePhotoUrl] = useState<string | null>(null);
   const selectedDamagePdfUrl = useMemo(
     () => (selectedDamageFullRow ? ReportsAdapter.resolveDamageReportPdfUrl(selectedDamageFullRow) : null),
@@ -1371,12 +1372,57 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
   }, [selectedDamageReportId]);
 
   useEffect(() => {
+    let cancelled = false;
+    const objectUrls: string[] = [];
+    setArchivedDamagePhotoUrls([]);
+    if (!selectedDamageReportId || selectedDamagePhotos.length === 0) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const archive = await ReportsAdapter.fetchDamageReportPhotosArchive(selectedDamageReportId);
+        const zip = await JSZip.loadAsync(archive);
+        const imageEntries = Object.values(zip.files).filter(
+          (entry) => !entry.dir && /\.(?:avif|gif|jpe?g|png|webp)$/i.test(entry.name)
+        );
+        for (const entry of imageEntries) {
+          const extension = entry.name.split(".").pop()?.toLowerCase();
+          const mimeType = extension === "png"
+            ? "image/png"
+            : extension === "gif"
+              ? "image/gif"
+              : extension === "webp"
+                ? "image/webp"
+                : extension === "avif"
+                  ? "image/avif"
+                  : "image/jpeg";
+          const blob = new Blob([await entry.async("arraybuffer")], { type: mimeType });
+          objectUrls.push(URL.createObjectURL(blob));
+        }
+        if (!cancelled) {
+          setArchivedDamagePhotoUrls(objectUrls);
+        }
+      } catch {
+        // Direct signed URLs remain the fallback when no archive is available.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [selectedDamagePhotos, selectedDamageReportId]);
+
+  useEffect(() => {
     setActiveDamagePhotoUrl(null);
   }, [selectedDamageReportId]);
 
   const selectedDamageAttachedMedia = useMemo(
-    () => selectedDamagePhotos.filter((url) => !brokenDamagePhotoUrls[url]),
-    [brokenDamagePhotoUrls, selectedDamagePhotos]
+    () => archivedDamagePhotoUrls.length > 0
+      ? archivedDamagePhotoUrls
+      : selectedDamagePhotos.filter((url) => !brokenDamagePhotoUrls[url]),
+    [archivedDamagePhotoUrls, brokenDamagePhotoUrls, selectedDamagePhotos]
   );
   useEffect(() => {
     if (!isDamageEditOpen || !selectedDamageFullRow) {
