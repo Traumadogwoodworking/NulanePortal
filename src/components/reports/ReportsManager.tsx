@@ -9,6 +9,7 @@ import { EmptySelectionPanel } from "@/components/ui/EmptySelectionPanel";
 import { FacilitySelector } from "@/components/ui/FacilitySelector";
 import { ReportDateRangeFilter } from "@/components/reports/ReportDateRangeFilter";
 import { SubmitterIdentity } from "@/components/reports/SubmitterIdentity";
+import { SharedWorkspacePeopleHub } from "@/components/reports/SharedWorkspacePeopleHub";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1788,6 +1789,7 @@ export function ReportsManager({ mode }: ReportsManagerProps) {
             </Badge>
           </div>
         </div>
+        <SharedWorkspacePeopleHub productLabel="DocuDent" />
         <CardContent className="p-0">
           <div className="grid gap-6 p-3 sm:p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(420px,0.85fr)] lg:items-start">
             <div className="min-h-[32rem] min-w-0 self-start xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)] xl:min-h-0">
